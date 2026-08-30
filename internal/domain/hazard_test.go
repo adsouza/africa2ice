@@ -3,8 +3,8 @@ package domain
 import "testing"
 
 func TestViabilityCalibrationConstants(t *testing.T) {
-	if PopulationGrowthRate != 0.002 || SeasonalMortalityScale != 0.05 ||
-		ChronicMortalityScale != 0.05 || AcuteProbabilityScale != 0.10 ||
+	if PopulationGrowthRate != 0.010 || SeasonalMortalityScale != 0.10 ||
+		ChronicMortalityScale != 0.10 || AcuteProbabilityScale != 0.10 ||
 		SplitStressThreshold != 0.5 || MaxCrowdingDeclineFraction != 0.25 {
 		t.Fatalf("viability calibration drifted: growth=%v seasonal=%v chronic=%v acute=%v split=%v crowdingDecline=%v",
 			PopulationGrowthRate, SeasonalMortalityScale, ChronicMortalityScale, AcuteProbabilityScale,

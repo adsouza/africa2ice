@@ -7,8 +7,8 @@ const (
 	CampSecurityScale             = 0.75
 	CampHygieneScale              = 0.40
 	MaxChronicRate                = 0.25
-	SeasonalMortalityScale        = 0.05
-	ChronicMortalityScale         = 0.05
+	SeasonalMortalityScale        = 0.10
+	ChronicMortalityScale         = 0.10
 	AcuteProbabilityScale         = 0.10
 )
 
