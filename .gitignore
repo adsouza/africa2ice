@@ -27,6 +27,14 @@ go.work.sum
 # env file
 .env
 
+# Generated web release files
+web/main.wasm
+web/main.unoptimized.wasm
+web/wasm_exec.js
+
 # Editor/IDE
 # .idea/
-# .vscode/
+.vscode/
+
+/africa2ice
+/dist

@@ -1,0 +1,150 @@
+package application
+
+import (
+	"github.com/adsouza/africa2ice/internal/domain"
+	"github.com/adsouza/africa2ice/pkg/gameapi"
+)
+
+func (service *GameService) projectFrame() (*gameapi.Frame, error) {
+	date, err := domain.CampaignDate(service.world.Turn())
+	if err != nil {
+		return nil, err
+	}
+	season, err := domain.SeasonForTurn(service.world.Turn())
+	if err != nil {
+		return nil, err
+	}
+	climate := service.world.Climate()
+	frame := &gameapi.Frame{
+		WorldRevision: service.worldRevision, TerrainRevision: service.terrainRevision,
+		Turn: date.Turn, YearBP: date.YearBP, Era: mapEra(date.Era), CalendarProgress: date.CalendarProgress,
+		Season: mapSeason(season), CampaignResult: mapResult(service.world.Result()),
+		Climate: gameapi.ClimateSummary{
+			LongTermTempOffset: climate.LongTermTempOffset, SeasonalTempOffset: climate.SeasonalTempOffset,
+			ClimateNoise: climate.ClimateNoise, GlobalTempOffset: climate.GlobalTempOffset,
+			MoistureOffset: climate.LongTermMoistureOffset, AridityIndex: climate.AridityIndex, Epoch: mapEpoch(climate.Epoch),
+		},
+	}
+	frame.MacroEpisodes = append(frame.MacroEpisodes, gameapi.MacroEpisodeSummary{
+		Episode: gameapi.CampanianIgnimbrite,
+		Warned:  domain.MacroEpisodeWarned(date.Turn), Current: domain.MacroEpisodeActive(date.Turn),
+		Elapsed: date.YearBP < domain.CampanianYearBP && !domain.MacroEpisodeActive(date.Turn),
+	})
+	for region := domain.Region(0); region < domain.RegionCount; region++ {
+		frame.Climate.RegionalAbrupt[mapRegion(region)] = climate.RegionalAbrupt[region]
+	}
+	habitat, tileStates, grid := service.world.Habitat(), service.world.TileStates(), service.world.Grid()
+	frame.Tiles = make([]gameapi.Tile, domain.TileCount)
+	for id := range domain.TileCount {
+		geography, _ := grid.Tile(domain.TileID(id))
+		publicTile := gameapi.Tile{
+			ID: gameapi.TileID(id), X: geography.X, Y: geography.Y, Latitude: geography.Latitude, Longitude: geography.Longitude,
+			Land: geography.Land, ElevationKm: geography.ElevationKm, Explored: service.world.IsExplored(domain.TileID(id)),
+			NaturalShelter: geography.NaturalShelter, BaseMoisture: geography.BaseMoisture,
+		}
+		if geography.Land {
+			macroImpact := domain.MacroImpactAt(geography, date.Turn)
+			publicTile.Region, publicTile.Biome = mapRegion(geography.Region), mapBiome(habitat[id].Biome)
+			publicTile.VegetationIndex, publicTile.BaselineK = habitat[id].VegetationIndex, habitat[id].BaselineK
+			publicTile.Degradation = tileStates[id].Degradation
+			publicTile.EcologicalK = habitat[id].BaselineK * (1 - tileStates[id].Degradation) * macroImpact.HabitatFactor
+			caps := domain.ResourceCaps(habitat[id].Biome, season, tileStates[id].Degradation, habitat[id].BaselineK)
+			caps.Flora *= macroImpact.FloraFactor
+			caps.Fauna *= macroImpact.FaunaFactor
+			caps.Water *= macroImpact.WaterFactor
+			publicTile.FloraStock, publicTile.FloraCap = tileStates[id].Stock.Flora, caps.Flora
+			publicTile.FaunaStock, publicTile.FaunaCap = tileStates[id].Stock.Fauna, caps.Fauna
+			publicTile.WaterStock, publicTile.WaterCap = tileStates[id].Stock.Water, caps.Water
+			profile, _ := domain.FaunaFor(geography.Region, habitat[id].Biome, habitat[id].BaselineK > 0)
+			for group := domain.FaunaGroup(0); group < domain.FaunaGroupCount; group++ {
+				publicTile.Fauna.Weights[mapFaunaGroup(group)] = profile.Weights[group]
+			}
+			publicTile.Fauna.HuntingSupported, publicTile.Fauna.MegafaunaSupported = profile.HuntingSupported, profile.MegafaunaSupported
+			if publicTile.Explored && macroImpact.Active && macroImpact.Zone != domain.MacroUnaffected {
+				publicTile.VisibleMacroImpact = gameapi.MacroImpactSummary{Visible: true, Episode: gameapi.CampanianIgnimbrite, ResourceFactor: macroImpact.FloraFactor, HabitatFactor: macroImpact.HabitatFactor}
+			}
+		}
+		frame.Tiles[id] = publicTile
+	}
+
+	for region := domain.Region(0); region < domain.RegionCount; region++ {
+		if service.world.EstablishedRegions()&(1<<region) != 0 {
+			frame.SapiensEstablishedRegions = append(frame.SapiensEstablishedRegions, mapRegion(region))
+		}
+	}
+	for _, passage := range domain.Passages() {
+		status := gameapi.PassageOpen
+		if passage.ClimateGated && !domain.BeringiaOpen(climate.LongTermTempOffset) {
+			status = gameapi.PassageLocked
+		}
+		frame.Passages = append(frame.Passages, gameapi.Passage{
+			ID: gameapi.PassageID(passage.ID), From: gameapi.TileID(passage.From), To: gameapi.TileID(passage.To),
+			Cost: passage.Cost, Status: status, Explored: service.world.IsExplored(passage.From) || service.world.IsExplored(passage.To),
+		})
+	}
+	allBands := service.world.Bands()
+	for _, band := range allBands {
+		publicBand := gameapi.Band{
+			ID: gameapi.BandID(band.ID), Species: mapSpecies(band.Species), TileID: gameapi.TileID(band.TileID),
+			Population: uint32(band.Population), Health: float64(band.Health), StoredFood: float64(band.StoredFood),
+			AcquiredTech: band.Technology.Acquired, HasResearchTarget: band.Technology.HasTarget,
+			SpatialActionUsed: band.SpatialActionUsed, QueuedMigration: gameapi.TileID(band.QueuedMigration), HasQueuedMigration: band.HasQueuedMigration,
+			Stress:         service.world.BandStress(band.ID),
+			LastFoodReport: gameapi.FoodTurnReport{Turn: band.LastFoodReport.Turn, RequiredFU: band.LastFoodReport.RequiredFU, DeficitFU: band.LastFoodReport.DeficitFU},
+			LastMortality:  gameapi.MortalityReport{Starvation: band.LastMortality.Starvation, Seasonal: band.LastMortality.Seasonal, Chronic: band.LastMortality.Chronic, Macro: band.LastMortality.Macro, Acute: band.LastMortality.Acute},
+			LastOutcomeReport: gameapi.OutcomeReport{
+				Turn: band.LastOutcomeReport.Turn, StartingPopulation: uint32(band.LastOutcomeReport.StartingPopulation), EndingPopulation: uint32(band.LastOutcomeReport.EndingPopulation), Growth: band.LastOutcomeReport.Growth,
+				StartingHealth: float64(band.LastOutcomeReport.StartingHealth), EndingHealth: float64(band.LastOutcomeReport.EndingHealth), NutritionDelta: band.LastOutcomeReport.NutritionDelta,
+				WaterHealthLoss: band.LastOutcomeReport.WaterHealthLoss, DiseaseHealthLoss: band.LastOutcomeReport.DiseaseHealthLoss, GeneticBurdenHealthLoss: band.LastOutcomeReport.GeneticBurdenHealthLoss,
+				MacroHealthLoss: band.LastOutcomeReport.MacroHealthLoss, AcuteDiseaseHealthLoss: band.LastOutcomeReport.AcuteDiseaseHealthLoss,
+			},
+		}
+		for index := range publicBand.AllocationBP {
+			publicBand.AllocationBP[index] = uint16(band.Allocation[index])
+		}
+		for technology := domain.Technology(0); technology < domain.TechCount; technology++ {
+			publicTechnology := mapTech(technology)
+			publicBand.ResearchProgress[publicTechnology] = band.Technology.Progress[technology]
+			acquired := band.Technology.Has(technology)
+			publicBand.ResearchOptions[publicTechnology] = gameapi.ResearchOption{
+				Available: !acquired && band.Technology.PrerequisitesMet(technology),
+				Acquired:  acquired,
+				Current:   band.Technology.HasTarget && band.Technology.Target == technology,
+			}
+		}
+		if band.Technology.HasTarget {
+			publicBand.ResearchTarget = mapTech(band.Technology.Target)
+			publicBand.OriginalResearchGainPreview = domain.ResearchGain(band.Workers(domain.Toolcraft))
+		}
+		for trait := domain.HeritableTrait(0); trait < domain.HeritableTraitCount; trait++ {
+			publicBand.HeritableState[mapTrait(trait)] = float64(band.Heritable[trait])
+		}
+		for passageID := domain.PassageID(0); passageID < domain.PassageCount; passageID++ {
+			status := service.world.PassageStatus(band.ID, passageID)
+			switch status {
+			case domain.PassageAvailable:
+				publicBand.PassageStatuses[passageID] = gameapi.PassageOpen
+			case domain.PassageNotAtEndpoint, domain.PassageDestinationUninhabitable:
+				publicBand.PassageStatuses[passageID] = gameapi.PassageUnavailable
+			default:
+				publicBand.PassageStatuses[passageID] = gameapi.PassageLocked
+			}
+		}
+		for _, candidate := range service.world.MigrationCandidates(band.ID) {
+			publicBand.MigrationCandidates = append(publicBand.MigrationCandidates, gameapi.MigrationCandidate{
+				TileID: gameapi.TileID(candidate.TileID), Cost: candidate.Cost, Attraction: candidate.Attraction,
+				EcologicalK: candidate.EcologicalK, UsableFoodEquivalent: candidate.UsableFoodEquivalent,
+				WaterSurvivalEquivalent: candidate.WaterSurvivalEquivalent, DestinationPopulation: candidate.DestinationPopulation,
+				WarningSuitability: candidate.WarningSuitability, Passage: gameapi.PassageID(candidate.Passage),
+				RequiresPassage: candidate.RequiresPassage,
+			})
+		}
+		for _, other := range allBands {
+			if other.ID != band.ID && other.TileID == band.TileID && other.Species != band.Species {
+				publicBand.InterbreedCandidateIDs = append(publicBand.InterbreedCandidateIDs, gameapi.BandID(other.ID))
+			}
+		}
+		frame.Bands = append(frame.Bands, publicBand)
+	}
+	return frame, nil
+}

@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            arch: amd64
+          - os: macos-15
+            arch: arm64
+          - os: windows-2025
+            arch: amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.26.4
+          cache: true
+      - name: Verify architecture
+        shell: bash
+        run: test "$(go env GOARCH)" = "${{ matrix.arch }}"
+      - name: Install Linux graphics headers
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev
+      - name: Install pinned golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+      - run: golangci-lint config verify
+      - run: golangci-lint run
+      - run: go vet ./...
+      - run: go test ./...
+      - run: go build ./...
+
+  web-release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.26.4
+          cache: true
+      - name: Install pinned Binaryen and Brotli
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y brotli
+          curl -L --fail --output binaryen.tar.gz https://github.com/WebAssembly/binaryen/releases/download/version_131/binaryen-version_131-x86_64-linux.tar.gz
+          echo "b5bf1f0eaf17c63ee588ff7a5954dc8f6ce2c26989051c66f24dfe9ece3e46db  binaryen.tar.gz" | sha256sum --check
+          tar -xzf binaryen.tar.gz
+          echo "$PWD/binaryen-version_131/bin" >> "$GITHUB_PATH"
+      - run: ./build_web.sh --release
+      - name: Validate and measure deploy root
+        shell: bash
+        run: |
+          test -s web/index.html
+          test -s web/main.wasm
+          test -s web/wasm_exec.js
+          test ! -e web/main.wasm.gz
+          test ! -e web/main.wasm.br
+          grep -q 'fetch("main.wasm")' web/index.html
+          brotli_bytes="$(brotli -q 11 -c web/main.wasm | wc -c | tr -d ' ')"
+          gzip_bytes="$(gzip -9 -c web/main.wasm | wc -c | tr -d ' ')"
+          raw_bytes="$(wc -c < web/main.wasm | tr -d ' ')"
+          echo "WASM bytes: raw=$raw_bytes brotli=$brotli_bytes gzip=$gzip_bytes"
+          test "$brotli_bytes" -le 5500000
+      - uses: actions/configure-pages@v5
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - uses: actions/upload-pages-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          path: web
+
+  deploy-pages:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [native, web-release]
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

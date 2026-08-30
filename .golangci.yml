@@ -1,0 +1,123 @@
+version: "2"
+
+formatters:
+  enable:
+    - goimports
+
+linters:
+  default: none
+  enable:
+    - depguard
+    - forbidigo
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gocritic
+  settings:
+    depguard:
+      rules:
+        gameapi-must-stay-dependency-free:
+          list-mode: strict
+          files: ["**/pkg/gameapi/**/*.go"]
+          allow: ["$gostd"]
+        domain-is-the-dependency-center:
+          list-mode: strict
+          files: ["**/internal/domain/**/*.go"]
+          allow: ["$gostd"]
+        application-points-inward:
+          list-mode: strict
+          files: ["**/internal/application/**/*.go"]
+          allow:
+            - "$gostd"
+            - "github.com/adsouza/africa2ice/internal/domain"
+            - "github.com/adsouza/africa2ice/pkg/gameapi"
+        only-application-may-import-domain:
+          list-mode: lax
+          files:
+            - "**/pkg/**/*.go"
+            - "**/internal/adapters/**/*.go"
+            - "**/internal/verification/**/*.go"
+            - "**/main*.go"
+          deny:
+            - pkg: "github.com/adsouza/africa2ice/internal/domain"
+              desc: "only application use cases may touch the domain"
+        only-observability-adapter-may-import-log:
+          list-mode: lax
+          files:
+            - "**/pkg/**/*.go"
+            - "**/internal/application/**/*.go"
+            - "**/internal/domain/**/*.go"
+            - "**/internal/adapters/storage/**/*.go"
+            - "**/internal/verification/**/*.go"
+            - "**/main*.go"
+          deny:
+            - pkg: "log$"
+              desc: "route operational events through the observability adapter"
+            - pkg: "log/slog$"
+              desc: "route operational events through the observability adapter"
+        storage-adapters-implement-inward-ports:
+          list-mode: strict
+          files: ["**/internal/adapters/storage/**/*.go"]
+          allow:
+            [
+              "$gostd",
+              "github.com/adsouza/africa2ice/internal/application",
+              "golang.org/x/sys/windows",
+            ]
+        logging-adapter-observes-ports-not-domain:
+          list-mode: strict
+          files: ["**/internal/adapters/logging/**/*.go"]
+          allow:
+            - "$gostd"
+            - "github.com/adsouza/africa2ice/internal/application"
+            - "github.com/adsouza/africa2ice/pkg/gameapi"
+            - "github.com/adsouza/africa2ice/pkg/ui"
+        domain-randomness-goes-through-world-rng:
+          list-mode: lax
+          files: ["**/internal/domain/**/*.go", "!**/internal/domain/rng.go"]
+          deny:
+            - pkg: "math/rand"
+              desc: "domain randomness must go through WorldRNG"
+        render-adapter-dependencies:
+          list-mode: strict
+          files: ["**/pkg/render/**/*.go"]
+          allow:
+            - "$gostd"
+            - "github.com/adsouza/africa2ice/pkg/gameapi"
+            - "github.com/hajimehoshi/ebiten/v2"
+            - "github.com/solarlune/tetra3d"
+            - "golang.org/x/image"
+        ui-adapter-dependencies:
+          list-mode: strict
+          files: ["**/pkg/ui/**/*.go"]
+          allow:
+            - "$gostd"
+            - "github.com/adsouza/africa2ice/pkg/gameapi"
+            - "github.com/adsouza/africa2ice/pkg/render"
+            - "github.com/adsouza/africa2ice/pkg/audio"
+            - "github.com/hajimehoshi/ebiten/v2"
+        audio-is-a-leaf:
+          list-mode: strict
+          files: ["**/pkg/audio/**/*.go"]
+          allow: ["$gostd", "github.com/hajimehoshi/ebiten/v2"]
+        ebitengine-host-is-the-composition-root:
+          list-mode: strict
+          files: ["**/pkg/app/**/*.go"]
+          allow:
+            - "$gostd"
+            - "github.com/adsouza/africa2ice/internal/application"
+            - "github.com/adsouza/africa2ice/internal/adapters/logging"
+            - "github.com/adsouza/africa2ice/internal/adapters/storage"
+            - "github.com/adsouza/africa2ice/pkg/gameapi"
+            - "github.com/adsouza/africa2ice/pkg/render"
+            - "github.com/adsouza/africa2ice/pkg/ui"
+            - "github.com/adsouza/africa2ice/pkg/audio"
+            - "github.com/hajimehoshi/ebiten/v2"
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: '^rand\.(Int|Int31|Int31n|Int63|Int63n|Intn|Int32|Int32N|Int64|Int64N|IntN|Uint|Uint32|Uint32N|Uint64|Uint64N|UintN|Float32|Float64|N|Perm|Shuffle|Read|ExpFloat64|NormFloat64)$'
+          msg: "use domain.WorldRNG"
+        - pattern: '^rand\.New$'
+          msg: "WorldRNG owns a *rand.PCG directly"

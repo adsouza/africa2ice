@@ -1,0 +1,182 @@
+package archtest
+
+import (
+	"bufio"
+	"fmt"
+	"go/parser"
+	"go/token"
+	"os"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strconv"
+	"strings"
+	"testing"
+)
+
+const module = "github.com/adsouza/africa2ice"
+
+func TestSourceDependencyBoundaries(t *testing.T) {
+	root := repositoryRoot(t)
+	var violations []string
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			if entry.Name() == ".git" || entry.Name() == "vendor" || entry.Name() == "node_modules" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".go" {
+			return nil
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			return fmt.Errorf("parse %s: %w", relative, err)
+		}
+		for _, imported := range file.Imports {
+			pathValue, err := strconv.Unquote(imported.Path.Value)
+			if err != nil {
+				return err
+			}
+			if reason := importViolation(filepath.ToSlash(relative), pathValue); reason != "" {
+				violations = append(violations, relative+": import "+pathValue+": "+reason)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(violations)
+	if len(violations) != 0 {
+		t.Fatalf("architecture violations:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+func importViolation(file, imported string) string {
+	category := packageCategory(file)
+	if (imported == "log" || imported == "log/slog") && category != "logging" {
+		return "operational logging is confined to internal/adapters/logging"
+	}
+	if strings.HasPrefix(imported, module+"/internal/domain") && category != "domain" && category != "application" {
+		return "only application may import the domain"
+	}
+	if strings.HasPrefix(imported, "math/rand") && category == "domain" && !strings.HasSuffix(file, "/rng.go") {
+		return "domain randomness is confined to rng.go"
+	}
+	allowed, strict := allowedImports(category)
+	if !strict || isStandardLibrary(imported) {
+		return ""
+	}
+	for _, prefix := range allowed {
+		if imported == prefix || strings.HasPrefix(imported, prefix+"/") {
+			return ""
+		}
+	}
+	return "not in the package's strict dependency allowlist"
+}
+
+func packageCategory(file string) string {
+	switch {
+	case strings.HasPrefix(file, "pkg/gameapi/"):
+		return "gameapi"
+	case strings.HasPrefix(file, "internal/domain/"):
+		return "domain"
+	case strings.HasPrefix(file, "internal/application/"):
+		return "application"
+	case strings.HasPrefix(file, "internal/adapters/storage/"):
+		return "storage"
+	case strings.HasPrefix(file, "internal/adapters/logging/"):
+		return "logging"
+	case strings.HasPrefix(file, "pkg/render/"):
+		return "render"
+	case strings.HasPrefix(file, "pkg/ui/"):
+		return "ui"
+	case strings.HasPrefix(file, "pkg/audio/"):
+		return "audio"
+	case strings.HasPrefix(file, "pkg/app/"):
+		return "app"
+	default:
+		return "other"
+	}
+}
+
+func allowedImports(category string) ([]string, bool) {
+	switch category {
+	case "gameapi", "domain":
+		return nil, true
+	case "application":
+		return []string{module + "/internal/domain", module + "/pkg/gameapi"}, true
+	case "storage":
+		return []string{module + "/internal/application", "golang.org/x/sys/windows"}, true
+	case "logging":
+		return []string{module + "/internal/application", module + "/pkg/gameapi", module + "/pkg/ui"}, true
+	case "render":
+		return []string{module + "/pkg/gameapi", "github.com/hajimehoshi/ebiten/v2", "github.com/solarlune/tetra3d", "golang.org/x/image"}, true
+	case "ui":
+		return []string{module + "/pkg/gameapi", module + "/pkg/render", module + "/pkg/audio", "github.com/hajimehoshi/ebiten/v2"}, true
+	case "audio":
+		return []string{"github.com/hajimehoshi/ebiten/v2"}, true
+	case "app":
+		return []string{module + "/internal/application", module + "/internal/adapters/logging", module + "/internal/adapters/storage", module + "/pkg/gameapi", module + "/pkg/render", module + "/pkg/ui", module + "/pkg/audio", "github.com/hajimehoshi/ebiten/v2"}, true
+	default:
+		return nil, false
+	}
+}
+
+func isStandardLibrary(imported string) bool {
+	first, _, _ := strings.Cut(imported, "/")
+	return !strings.Contains(first, ".")
+}
+
+func repositoryRoot(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot locate architecture test")
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+}
+
+func TestDomainHasNoBuildTags(t *testing.T) {
+	root := filepath.Join(repositoryRoot(t), "internal", "domain")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
+			continue
+		}
+		file, err := os.Open(filepath.Join(root, entry.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if strings.HasPrefix(line, "//go:build") || strings.HasPrefix(line, "// +build") {
+				violations := entry.Name()
+				_ = file.Close()
+				t.Fatalf("domain file has a build tag: %s", violations)
+			}
+			if line != "" && !strings.HasPrefix(line, "//") {
+				break
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			_ = file.Close()
+			t.Fatal(err)
+		}
+		if err := file.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

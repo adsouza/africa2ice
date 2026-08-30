@@ -125,7 +125,7 @@ Capitalized lifecycle terms in this register — **Locked**, **Initial**, **Poli
 | Campaign length and terminal conditions are undefined                                                                                                   | **A 400-turn campaign from 80,000 BP to 20,000 BP in four 100-turn campaign eras:** turns advance 300, 150, 100, then 50 years, with explicit victory and loss states                                                                                                                                                                                                                                                                                                                                                | A finite campaign needs a clock and terminal invariant before it can be implemented or balanced. Progressively shorter turn spans provide finer late-game decisions while preserving the 400-turn play length.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Web release requirements                                                                                                                                | **Stripped, trimmed, `wasm-opt -O3` release build; Brotli compressed-size gate that ratchets down to the measured build; native CI matrix; automated Chromium boot/action/save smoke; measured performance gate; step 2a measures size and frame rate on the dependency skeleton**                                                                                                                                                                                                                                                                                                                                                      | Compilation and static artifact checks cannot detect a loader, console-panic, IndexedDB, or unusably slow runtime failure. The browser test toolchain is development-only: the game and deployed site remain Go/WASM plus the required static loader. Transfer size and frame rate are properties of the pinned dependency set and the release geometry rather than of game code, so both are measured at the walking skeleton where the answer is free, and `wasm-opt -O3` is not the size lever it looks like — it optimizes decompressed size and startup.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Desktop is a target but has no distribution contract                                                                                                    | **SemVer-tagged GitHub Releases contain unsigned portable archives for Linux amd64, Windows amd64, and macOS amd64/arm64 plus `SHA256SUMS`; the web build remains the recommended friction-free release**                                                                                                                                                                                                                                                                                                              | A native target should produce something users can run, not merely prove that `go build` succeeds. Signing, notarization, installers, and automatic updates remain outside v1, so the release notes must state the resulting OS trust prompts rather than implying a signed desktop package.                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Determinism was asserted without naming a portability scope                                                                                             | **Release cross-target determinism:** §5's three archtest arithmetic rules require every floating-point product chain in `internal/domain` to end at an explicit rounding conversion, reject `math.FMA` plus every unapproved production `math` call, and ban float-to-integer conversion outright; `ClimateAlgorithm` and `TemperatureAlgorithm` use four checked-in exact trigonometric tables; `RNGAlgorithm` owns the seed expansion and the unit-draw mapping so no step from seed to draw lives in `math/rand/v2`; `internal/verification.ReferenceRun` produces all three canonical checkpoint records, which CI compares across amd64, arm64, and js/wasm, and supported saves are portable | Go may fuse `a*b + c` even when the product and sum occur in different statements, so a rule that inspects only direct expression nesting is insufficient; the gate must also visit `x *= y`, which contains no multiplication expression at all. Requiring each product-chain end itself to be written inside an explicit conversion such as `float64(a*b)` defeats both direct and cross-statement fusion while keeping `float64`'s range; the source gate makes that discipline mechanical. Fixed-point remains reserved for quantities with exact conservation invariants, the reason `AllocationBP` is basis points; quantizing after float arithmetic would make divergence rare rather than absent. Two smaller holes close for the same reason the big one does: Go leaves an out-of-range float-to-integer conversion implementation-dependent, and Go's compatibility promise covers `math/rand/v2`'s API rather than the numeric output of `Rand.Float64`, so both are named and closed rather than left to the fact that no current call site trips them. |
+| Determinism was asserted without naming a portability scope                                                                                             | **Release cross-target determinism:** §5's three archtest arithmetic rules require every floating-point product chain in `internal/domain` to end at an explicit rounding conversion, reject `math.FMA` plus every unapproved production `math` call, and permit only the audited `RoundPopulation` float-to-integer conversion after finite/range validation; `ClimateAlgorithm` and `TemperatureAlgorithm` use four checked-in exact trigonometric tables; `RNGAlgorithm` owns the seed expansion and the unit-draw mapping so no step from seed to draw lives in `math/rand/v2`; `internal/verification.ReferenceRun` produces all three canonical checkpoint records, which CI compares across amd64, arm64, and js/wasm, and supported saves are portable | Go may fuse `a*b + c` on one architecture and not another, and Go leaves out-of-range float-to-integer conversion implementation-dependent. Requiring each product-chain end itself to be written inside an explicit conversion defeats fusion, while the single named population conversion first proves that its input is finite and within `uint32`; the source gates make both disciplines mechanical. `AllocationBP` remains fixed-point because its five entries have an exact sum invariant. `RNGAlgorithm` also owns its unit-draw mapping because Go guarantees `math/rand/v2`'s API, not a particular `Rand.Float64` output sequence. |
 | Logistic growth read only the acting band's population against a shared tile's capacity                                                                 | **The crowding factor uses the origin's total population across both species:** `BaseGrowth = r · P · (1 − P_total_origin / K_eff)`, and `Stress` uses the same whole-tile denominator                                                                                                                                                                                                                                                                                                                               | Two bands of 50 on a `K_eff` of 100 previously each read the tile as half-empty and jointly overshot toward 200. Total population already drives degradation and migration scoring; growth was the one demographic term that did not see co-location. `K_eff` stays band-specific because `T_tech` is the acting band's own multiplier.                                                                                                                                                                                                                                                                                                                                                                    |
 | `MaxBands = 256` is global, but only the archaic side splits automatically                                                                              | **`MaxArchaicBands = 96` caps the computer policy's split branch**, reserving at least 160 places that only sapiens can occupy                                                                                                                                                                                                                                                                                                                                                                                       | Player-first ordering decides one turn's last slot and says nothing about the balance accumulated over 400. Without a floor, the archaic policy can consume the budget by mid-campaign and structurally remove the player's dispersal verb. The sub-cap constrains the policy only: it never kills, merges, or invalidates an archaic band.                                                                                                                                                                                                                                                                                                                                                                |
 | Absolute local temperature was a recurring "calibration remains open" note with no owner                                                                | **`TemperatureAlgorithm: "lat-elev-offset-v1"`:** a versioned latitude/elevation/offset function with a checked-in 64-row latitude table and locked `28.0°C`, `-12.0°C`, and `6.5°C/km` coefficients                                                                                                                                                                                                                                                                                                                 | `ClassifyBiome`, water demand, the endemic-disease table, and cold-exposure genetics all need degrees Celsius rather than a signed offset. Build step 4 implements and verifies this already-selected contract before those consumers; the balance pass validates it without retuning it. The table converts the map's degree-valued latitude to the sine-squared factor without runtime trigonometry. Changing the table, function, or coefficients reclassifies every tile in an existing save, so any such change requires a new algorithm version.                                                                                                                                                     |
@@ -276,17 +276,19 @@ docs/PERFORMANCE.md      step-2a skeleton size/FPS baseline, release-candidate m
 THIRD_PARTY_NOTICES.md   reviewed runtime/tooling license notices shipped with native archives
 
 pkg/gameapi/             DRIVING PORT + DTO CONTRACT — stdlib only, no dependencies
+  doc.go                 package contract and architectural role
   enums.go               Biome, Season, Tech, HeritableTrait, Species, Region, FaunaGroup, MacroEpisode + String()
-  frame.go               Frame, climate/macro summaries, passages/achievements, Tile incl. ElevationKm/Band/FoodTurnReport/Event/MigrationCandidate values — no pointers
+  frame.go               Frame, climate/macro summaries, passages/achievements, Tile incl. ElevationKm/Band/FoodTurnReport/OutcomeReport/Event/MigrationCandidate values — no pointers
   command.go             Command iface + SetAssignment, QueueMigration, SplitBand, ResearchTech, Interbreed
   errors.go              stable ErrorCode/GameError boundary values; no domain types
-  game.go                Game inbound port: Snapshot, Apply, EndTurn, and storage use cases
+  game.go                Game inbound port: Snapshot, NewCampaign, Apply, EndTurn, and storage use cases
   storage.go             operations/results, slot constants/kinds, SlotMetadata
 
 internal/domain/         CORE DOMAIN — one package, stdlib only; no gameapi, application, JSON, or frameworks
+  doc.go                 package contract and architectural role
   identifiers.go         BandID, TileID, RegionID, PassageID and stable ordering
   concepts.go            domain Species, Biome, Season, Technology, traits, events, and count sentinels
-  quantities.go          validated Population, Health, FU, WU, AssignmentBP, Probability, trait values
+  quantities.go          uint32 Population + audited rounding boundary; validated Health, FU, WU, AssignmentBP, Probability, trait values
   errors.go              typed invariant and domain-rule failures; no presentation strings
   geo.go                 lat/lon <-> tile projection
   geodata.go             real-coordinate landmasses, height-valued highlands, rivers, natural-shelter regions
@@ -563,12 +565,17 @@ into the `World`.
 Each band value carries three groups of fields. **Identity and position:** `BandID`, `Species`, and
 current `TileID`. These are not optional presentation details — §7 restricts every player command to
 a `HomoSapiens` actor, and §8 requires species-distinct markers, the “Computer controlled” label, and
-a top-bar population sum over sapiens bands only. **Persisted state:** current population, normalized
+a top-bar population sum over sapiens bands only. **Persisted state:** current whole-person
+`Population uint32`, normalized
 `Health float64` in `[0, 1]`, `StoredFood`, fixed five-role basis-point allocation, acquired-tech
 bitset, research target/progress, the fixed six-value heritable state, the value-typed
 `LastFoodReport FoodTurnReport`, last completed turn's starvation, seasonal, chronic, macro-event, and
-acute mortality breakdown, and the `SpatialActionUsed` marker. **Derived previews:**
-`OriginalResearchGainPreview`, the ranked `MigrationCandidates`, the freshly allocated co-located
+acute mortality breakdown, and the bounded `LastOutcomeReport` containing that turn's population
+and health endpoints plus causal components, the `SpatialActionUsed` marker, and the queued-migration destination plus
+presence flag. The projection exposes that already-persisted intent so presentation can show what
+the player selected; it adds no second queue or simulation authority. **Derived previews:**
+`OriginalResearchGainPreview`, the fixed nine-entry projected `ResearchOptions`
+availability/acquired/current-target view, the ranked `MigrationCandidates`, the freshly allocated co-located
 archaic `InterbreedCandidateIDs`, a fixed three-entry `PassageStatuses` array, and `Stress`. Together these let the HUD explain the band's
 capabilities, food outcome, and population change.
 
@@ -589,10 +596,10 @@ renderer reads `ElevationKm` directly rather than importing or rerasterizing geo
 not band-specific yield predictions or animal
 counts. The inspector explains shelter efficiency and local prey opportunities from the frame,
 without importing domain tables or deriving its own geography/ecology rules. The stats layout in
-§8 places these values in the top bar and band/tile inspectors. `LastFoodReport` is the bounded,
-persisted display record specified in §7, not a future-turn preview or an input to simulation.
-Frame projection copies it without recomputing consumption or inferring history from current
-population/reserves; UI and rendering only format its values. Projection requires
+§8 places these values in the top bar and band/tile inspectors. `LastFoodReport` and
+`LastOutcomeReport` are bounded, persisted display records specified in §7, not future-turn previews
+or simulation inputs. Frame projection copies them without recomputing consumption, demographics,
+health, or history from current state; UI and rendering only format their values. Projection requires
 `0 <= Turn <= 400` and derives the campaign year, era, and calendar progress through
 `CampaignDate` before publication; an invariant
 failure returns an error rather than exposing a clamped or internally inconsistent frame.
@@ -761,8 +768,8 @@ candidate plus research-progress and heritable values to
 `256 * (10 + 9 + 6 + 3) = 7_168`, and assignment entries to `256 * 5 = 1_280`. The sapiens-only
 co-located interbreeding-candidate lists contain at most
 `floor(MaxBands^2 / 4) = 16_384` cross-species pairs. Renderer caches key off snapshot revisions; tile
-fauna summaries contain at most `6_144 * FaunaGroupCount` copied weights. Food reporting adds at most
-256 fixed-size value copies, not a growing turn history. Terrain colors update only when tile/biome
+fauna summaries contain at most `6_144 * FaunaGroupCount` copied weights. Food and outcome reporting
+each add at most 256 fixed-size value copies, not a growing turn history. Terrain colors update only when tile/biome
 state changed; assignment/research-only snapshots update band/HUD data without rebuilding terrain
 colors.
 
@@ -964,7 +971,7 @@ the source-level test is the cross-target hard gate.
 
 **Every floating-point product chain in the domain is explicitly rounded where it ends.** `arch_test.go` carries three rules
 about arithmetic rather than imports — the product-rounding rule, the closed `math` allowlist, and
-the float-to-integer conversion ban — of which the first exists for the reason §7 gives: Go may fuse `a*b + c` into a single
+the float-to-integer conversion gate — of which the first exists for the reason §7 gives: Go may fuse `a*b + c` into a single
 operation, and may do so even across statements such as `p := a*b; r := p+c`. A rule that inspects
 only multiplication directly nested under addition would miss a form the language explicitly permits
 the compiler to fuse.
@@ -1049,9 +1056,10 @@ admitted by arguing that they are accurate; accuracy is not the test, specified 
 Domain `_test.go` files may call `Sin`/`Cos` only to compare the checked-in tables within tolerance;
 those calls cannot enter a production simulation path.
 
-**A third rule: no floating-point value is converted to an integer type in `internal/domain`.** The
-same typed source walk rejects any conversion whose operand type underlies to `float32` or `float64`
-and whose target type underlies to any integer kind, in production and test files alike.
+**A third rule: no floating-point value is converted to an integer type in `internal/domain` except
+by `RoundPopulation`.** The same typed source walk rejects any conversion whose operand type
+underlies to `float32` or `float64` and whose target type underlies to any integer kind, in production
+and test files alike, unless it is the return conversion inside the named helper in `quantities.go`.
 
 This closes the last cross-target divergence class the other two rules leave open. Go specifies that
 in a non-constant conversion, "if the result type cannot represent the value the conversion succeeds
@@ -1061,23 +1069,32 @@ without any of the rounding discipline above applying. It is a narrower hazard t
 because it needs an out-of-range operand to fire, and a sharper one because when it does fire the
 two targets do not differ by an ULP; they differ by an arbitrary amount.
 
-The rule is cheap because §7 has already chosen not to need it. Population, mortality, worker counts,
-food, and water are all continuous quantities — §7 says so explicitly where it keeps "fractional
-people rather than rounding small losses away", and that same choice is why a `50/50` split
-conserves population exactly, since halving a finite `float64` is exact and the two halves re-add to
-the original. Discrete simulation state — tile IDs, band IDs, the turn, the exploration bitset,
-`AllocationBP` — is integer end to end and never arrives from a float. So the domain already
-contains no such conversion; the rule records that as an invariant instead of an accident, and stops
-a later display-shaped edit such as `int(workers)` from introducing one where no fixture would catch
-it.
+Mortality estimates, worker counts, food, and water remain continuous quantities. Actual population
+is `type Population uint32`, bounded by `MaxPopulation = 2^32 - 1`; `gameapi.Band.Population` and
+`BandSave.Population` are also `uint32`. Per-tile, save-metadata, and top-bar population totals use
+`uint64`, whose capacity exceeds `MaxBands * MaxPopulation`. A migration candidate's destination
+population is likewise a `uint64` count; scoring converts that already-bounded total to `float64`
+only at the formula call.
 
-A conversion genuinely needed at the boundary belongs above the domain: `internal/application`
-projects into `gameapi.Frame`, and `pkg/render` and `pkg/ui` format for display, all outside this
-rule's scope, and none of them feeds the campaign-state hash. If a future domain rule needs a
-discrete count from a continuous quantity, it must add one audited helper in `quantities.go` that
-validates finiteness and range before converting, take the archtest exemption by name, and carry its
-own cross-target fixture — the same admission discipline the `math` allowlist uses, for the same
-reason.
+`RoundPopulation(value)` first rejects NaN, infinity, negative values, and values greater than
+`float64(MaxPopulation)`. Only then does its single `Population(value + 0.5)` conversion execute.
+Because `value` is non-negative and every possible truncated integer part is representable by
+`uint32`, Go's otherwise implementation-dependent out-of-range case is unreachable; adding the exact
+binary fraction `0.5` implements nearest-integer rounding with ties upward. The helper returns
+`(Population, error)`, and phase-3 demographics, macro-event loss, and acute loss must propagate the
+error before publication. Raw demographic terms retain fractional precision, so the model rounds
+once at each population-changing checkpoint rather than inside each formula.
+
+Discrete simulation state — population, tile IDs, band IDs, the turn, the exploration bitset, and
+`AllocationBP` — remains integer end to end outside the named demographic checkpoint. Odd-population
+splits use integer `P/2` for the new descendant and give the one-person remainder to the source,
+conserving the total without any conversion. The rule stops a later display-shaped edit such as
+`int(workers)` from introducing another unchecked conversion where no fixture would catch it.
+
+No second helper or inline cast may turn a continuous quantity into discrete state. A future domain
+rule needing another such conversion must add a separately audited helper that validates finiteness
+and range before converting, take an archtest exemption by name, and carry its own cross-target
+fixture — the same admission discipline the `math` allowlist uses, for the same reason.
 
 Two properties make this cheap here rather than a research project. First, the rule needs types, and
 `internal/domain` imports only the standard library — enforced by `domain-is-the-dependency-center`
@@ -1298,8 +1315,8 @@ consume no `WorldRNG`.
 **Complete new-world initializer.** `domain.NewWorld(seed)` is a total constructor, not a collection
 of defaults spread across callers. It resolves the checked-in scenario tile IDs in the stable order
 above and creates band IDs `1` through `8`; `NextBandID` is `9`. Every band starts with population
-`100`, `Health = 1`, `StoredFood = 0`, an unavailable all-zero `LastFoodReport`, an all-zero last-
-mortality breakdown, no acquired technologies, nine zero progress values, no research target, no
+`100`, `Health = 1`, `StoredFood = 0`, unavailable all-zero `LastFoodReport` and
+`LastOutcomeReport` values, an all-zero last-mortality breakdown, no acquired technologies, nine zero progress values, no research target, no
 queued spatial or interbreeding intent, and `SpatialActionUsed = false`. The four sapiens bands use
 the exact initial assignment vector `3500 / 3000 / 1500 / 500 / 1500` in assignment-enum order;
 each archaic band uses `ArchaicAssignmentPreset[resolved region, turn-0 biome]`. Every band receives
@@ -2402,6 +2419,47 @@ start-of-turn requirement, so a renderer that reconstructs the report from curre
 Reject non-finite, negative, over-required, and wrong-turn reports, and an unavailable report
 carrying a nonzero FU field.
 
+### Last completed-turn outcome report
+
+Population and health can move independently, and current values alone cannot explain either
+change. Each domain and projected band therefore carries one fixed-size display-only record:
+
+```go
+type OutcomeReport struct {
+    Turn                    int // 0 means unavailable
+    StartingPopulation      uint32
+    EndingPopulation        uint32
+    Growth                  float64
+    StartingHealth          float64
+    EndingHealth            float64
+    NutritionDelta          float64 // signed: recovery is positive
+    WaterHealthLoss         float64
+    DiseaseHealthLoss       float64
+    GeneticBurdenHealthLoss float64
+    MacroHealthLoss         float64
+    AcuteDiseaseHealthLoss  float64
+}
+```
+
+The domain representation uses its corresponding `Population` and `Health` value types. Population
+endpoints are the exact whole-person values before phase 3 and after phase 5; their subtraction is
+the displayed net change. `Growth` is the signed food-adjusted logistic term before combined
+mortality and whole-person rounding. The separate existing `LastMortality` record remains the source
+for applied starvation, seasonal, chronic, macro, and acute population-loss causes, avoiding a
+duplicate mortality vector here. Health endpoints bracket the full turn. Phase 3 records the signed
+nutrition contribution and raw non-negative water, endemic-disease, and genetic-burden losses;
+phase 5 records actual macro and outbreak losses after the health floor. Clamping can make the net
+health change differ from a naive sum, so presentation always uses endpoints for the delta and
+components only to explain causes.
+
+`Turn == 0` requires every field to be zero and means unavailable. Otherwise the turn equals
+`World.Turn`, both starting endpoints are valid and the ending endpoints equal the band's current
+population and health. Growth and nutrition are finite signed values; health-loss components are
+finite and non-negative. New-game bands start unavailable, every completed turn replaces the
+report, extinct bands leave no report archive, and a split clears both descendants. Planning,
+snapshotting, and save/load preserve but never recalculate it. No simulation, computer-policy,
+migration-ranking, or balance rule may read the report.
+
 ### Persistent health and combined response
 
 `Health` is the band's persistent condition score, stored as a validated value over Go `float64` in domain band state
@@ -2413,7 +2471,7 @@ value using the selected `1 + (1 - Health)` mapping below.
 
 Carry health from one completed turn to the next, rather than recalculating it from this turn's
 food ratio. Preserve fractional precision through simulation, snapshots, and saves; display
-`100 * Health` as a percentage in §8 without rounding or quantizing the authoritative value.
+`100 * Health` as a percentage in §8 and keep any presentation rounding out of the authoritative value.
 For example, `0.375` represents 37.5% health, independent of population.
 
 **New-game health is `1.0`.** During `domain.NewWorld(seed)`, initialize every scenario band of both
@@ -2854,7 +2912,8 @@ loss after all causes share the population available after growth.
 Apply this curve directly whenever food needs remain unmet. There is no health threshold,
 minimum delay, minimum shortfall, hunger-streak requirement, or
 extra health multiplier. With a positive coefficient, even a first shortage at full health
-contributes the curve's raw loss; keep fractional people rather than rounding small losses away.
+contributes the curve's fractional raw loss; do not round the curve itself. The shared population
+checkpoint rounds survivors only after all phase-3 growth and mortality terms have been combined.
 Zero deficit gives zero raw starvation even at poor health.
 
 For identical starting population, coefficient, and deficit fraction, changing health cannot change
@@ -2912,8 +2971,9 @@ population, or a population cached when the reserve was collected. With the sele
 `FoodStorageTurns = 3`, populations 50 and 100 have capacities 150 and 300 FU respectively.
 Zero population has zero capacity;
 normal extinction cleanup still removes the band rather than creating an abandoned food cache.
-Population and the derived capacity must be finite and non-negative; configuration/state validation
-must reject an unrepresentable capacity rather than letting the product become infinity.
+The `uint32` population is intrinsically non-negative and exactly convertible to `float64`;
+configuration validation must still reject an invalid `FoodStorageTurns` or unrepresentable derived
+capacity.
 
 Capacity is a ceiling, not food production. Growth increases carrying room without filling it;
 population loss lowers carrying room without changing this turn's already-established food
@@ -2927,10 +2987,10 @@ changes, and the selected 10% spoilage rate, 300 FU leaves 170 after the first m
 the second. The third turn has only 47.7 FU after spoilage, leaving a 52.3-FU shortfall and zero
 reserve. This is food accounting at fixed population, not a prediction of demographic outcomes.
 
-A split divides `StoredFood` in the same fixed `50/50` proportion as population, conserving the total reserve
-rather than copying it. Since capacity is linear, the descendants' mathematical capacities sum
-to the parent's; splitting a within-cap reserve therefore leaves both descendants within their
-own caps, subject to conservative floating-point handling. The source must satisfy the separate
+A split divides `StoredFood` exactly `50/50`, conserving the total reserve rather than copying it.
+Population divides as evenly as whole people allow; for an odd parent the source's one-person
+remainder gives it three additional FU of capacity at the selected `FoodStorageTurns = 3`. Therefore
+splitting a within-cap reserve leaves both descendants within their own caps. The source must satisfy the separate
 `MinSplitSourcePopulation = 40` eligibility rule. Stored food remains an absolute FU amount, not a saved
 percentage or a number of food-turns. Capacity is derived again from each resulting population.
 
@@ -4628,13 +4688,14 @@ stable boundary codes, and `pkg/ui` owns their player-facing copy, including “
 “band ID space exhausted,” and the three new eligibility explanations. All six failures cause no
 mutation or RNG consumption and do not consume an ID. An accepted split allocates
 exactly one new monotonic band ID. The original/source band keeps its ID and remains at the origin;
-the newly allocated ID is the descendant placed at the selected destination. It gives each
-descendant exactly half the source population and half
-its stored FU, increases the count by one, copies the exact allocation, health, technology, research,
+the newly allocated ID is the descendant placed at the selected destination. It gives the new
+descendant `source population / 2` people using `uint32` integer division and leaves the source with the remainder, while
+giving each descendant exactly half its stored FU. Thus an even count splits evenly and an odd count
+gives the source one extra person. It increases the count by one, copies the exact allocation, health, technology, research,
 and heritable-state values, and marks both descendants' spatial actions used for this planning
 period. The source has no queued intent by precondition and neither descendant receives a new queue.
-Because both quantities are finite `float64` values, multiplying each by `0.5` assigns exact
-matching proportions and conserves their mathematical total without a remainder branch. Each
+Population conservation is exact for every valid whole-person count; stored FU remains continuous
+and is conserved by exact halving. Each
 descendant begins with at least `MinEstablishedBand = 20` people.
 Before publishing the accepted planning frame, it runs `RevealFromSapiens` for the two surviving
 descendants and unions any newly exposed frontier into the world bitset; this is part of the split's
@@ -5384,8 +5445,9 @@ During phase 5, before the ordinary acute-event distribution, apply the eruption
 `macro_loss_fraction` once to every surviving band on its final tile, record the result in the
 separate macro-event field of the mortality breakdown, and subtract `macro_health_loss` once from
 survivors' health with a zero floor. For each active episode in stable order, compute
-`M_macro = P_before_macro * macro_loss_fraction` and
-`P_after_macro = P_before_macro * (1 - macro_loss_fraction)`; the ordinary acute formula then uses
+`M_macro_raw = P_before_macro * macro_loss_fraction` and
+`P_after_macro = RoundPopulation(P_before_macro - M_macro_raw)`; the persisted applied macro loss is
+`P_before_macro - P_after_macro`, and the ordinary acute formula then uses
 `P_after_macro`. This deterministic impact consumes no hazard draw and does not
 compete under `MaxAcuteProbability`; the following ordinary acute event acts on the remaining
 population, so the two percentage losses compose rather than add into a hidden 100% kill. One typed
@@ -5424,9 +5486,17 @@ Reaching a destination early records the achievement but does not end or skip th
 campaign. The epilogue reports one established destination as successful dispersal, two through four
 as broad dispersal, and all five as complete destination coverage. These labels measure geographic
 breadth rather than the number of routes taken and do not change the terminal result enum.
+
 Once a terminal result is set, `AdvanceTurn()` rejects further turns, the result is persisted in saves, and
 `pkg/app` opens `end_scene.go` by reading `Frame.CampaignResult`; the UI never infers a result from
-turn or population. Tests assert exact clock endpoints, the exact long-term turn-400
+turn or population. The modal end scene names the outcome, exact turn/date, final sapiens and
+archaic populations and band counts, all established campaign destinations, and the corresponding
+one/two-to-four/five-destination breadth label. It blocks every planning command while leaving
+Ctrl/Cmd+S available for preserving the final state. A prominent **New Campaign** button and the
+terminal-only `N` shortcut invoke the application `NewCampaign` use case. That use case replaces the
+aggregate with a turn-0 world using the next deterministic seed derived from the completed world's
+seed, resets `WorldRevision` to `1`, advances the long-lived `TerrainRevision`, and leaves existing
+save slots untouched. Tests assert exact clock endpoints, the exact long-term turn-400
 climate target, the bounded instantaneous climate envelope including abrupt pulses, 12-turn
 periodicity, deterministic seeded noise, deterministic episode activation and capped regional
 impact, sorted/idempotent species-specific achievement latching for each destination, the
@@ -5465,8 +5535,15 @@ raw_mortality  = raw_starvation + raw_seasonal + raw_chronic
 mortality_scale = 1                                      if raw_mortality = 0
                   min(1, P_grown / raw_mortality)        otherwise
 M_x             = raw_x · mortality_scale                for each phase-3 cause x
-P_demographic   = P_grown − M_starvation − M_seasonal − M_chronic
+P_demographic_raw = P_grown − M_starvation − M_seasonal − M_chronic
+P_demographic   = RoundPopulation(P_demographic_raw)
 ```
+
+`RoundPopulation` selects the nearest whole person with exact halves rounded upward. It is applied
+once after the complete phase-3 expression; it does not separately round growth or any cause's raw
+or capped mortality estimate. The persisted mortality breakdown therefore preserves those analytic
+fractional estimates, while current population is always an integer-valued count. Validation rejects
+fractional JSON populations and values above `MaxPopulation = 2^32 - 1` during decoding.
 
 The approved initial logistic coefficient is **`r = 0.04` per game turn** for both species. At
 negligible crowding and full feeding it requests growth of approximately 4% of the band's
@@ -5504,15 +5581,16 @@ Use the existing post-reserve fraction, not health, gross harvest, final populat
 food calculation. Do not charge food again for growth, change the frozen food requirement, turn
 foregone growth into a mortality cause, or multiply negative crowding-driven decline by the fed
 fraction. Starvation remains a separate direct loss based on `P_start`, not `P_grown`.
-`BaseGrowth` and the scaled result are transient, finite signed population changes; validate
+`BaseGrowth` and the scaled result are transient simulation values copied only into the completed
+turn's display-only `LastOutcomeReport`; validate
 inputs and arithmetic before `P_grown` or mortality caps. The growth coefficient `r` and carrying-
 capacity balance still need tuning together; this rule selects `r` but not the biome carrying
 capacities. `HazardAlgorithm: "split-v1"`
-owns this demographic coupling, with no new saved field, RNG draw, or algorithm identifier.
+owns this demographic coupling, with no new simulation input, RNG draw, or algorithm identifier.
 
 Fixtures lock `r = 0.04` and cover positive, zero, and negative `BaseGrowth` at deficit fractions `0`, `0.50`, and `1`,
 including zero growth at carrying capacity, a zero logistic coefficient, and valid tiny fractional
-growth without intentional rounding. Co-location fixtures place two bands of 50 on a tile whose
+growth whose combined phase-3 survivor result receives exactly one whole-person rounding. Co-location fixtures place two bands of 50 on a tile whose
 `K_eff` is 100 and assert that both compute zero `BaseGrowth`, not the positive growth a band-local
 crowding term would produce; a mixed-species pair with the same total must behave identically, and
 the same total split across one, two, and four bands must give the same crowding factor. A third
@@ -5755,8 +5833,9 @@ draw selects its severity:
 loss_fraction = clamp(lerp(MinAcuteLoss[k], MaxAcuteLoss[k], v)
                       · (1 − SeverityMitigation(b, k))
                       · (1 − GeneticSeverityMitigation(b, k)), 0, 1)
-M_acute       = min(P_after_macro, P_after_macro · loss_fraction)
-P_final       = P_after_macro − M_acute
+M_acute_raw   = min(P_after_macro, P_after_macro · loss_fraction)
+P_final       = RoundPopulation(P_after_macro − M_acute_raw)
+M_acute       = P_after_macro − P_final
 ```
 
 When no macro episode affects the band, `P_after_macro = P_demographic`.
@@ -5822,11 +5901,12 @@ for a band whose previous snapshot has `Stress > SplitStressThreshold`, when
 its population is at least `MinSplitSourcePopulation = 40`, `len(Bands) < MaxBands`, and
 `NextBandID` can allocate another positive ID without wrapping; it
 targets one currently eligible ordinary cardinal or diagonal edge to a habitable land tile and
-divides population and stored food exactly `50/50` without loss and copies the exact
+divides population as evenly as whole people allow, divides stored food exactly `50/50` without
+loss, and copies the exact
 proportional allocation and heritable state to both results before the next turn begins. Both
 descendants' spatial actions are spent. Because neither result is the exact band that experienced the
-previous turn, the command clears the display-only last-mortality breakdown and `LastFoodReport`
-on both resulting bands. The food report remains unavailable until each completes a turn.
+previous turn, the command clears the display-only last-mortality breakdown, `LastFoodReport`, and
+`LastOutcomeReport` on both resulting bands. The reports remain unavailable until each completes a turn.
 `QueueMigration` and `Interbreed` record intents for resolution during the next turn and consume
 only the sapiens actor's spatial action. Attraction rank never constrains a command. Invalid split,
 migration, interbreeding, assignment, or research commands, including a
@@ -5898,7 +5978,11 @@ turn requests or failed computer planning do not reach the spoilage checkpoint.
    Derive `1 + (1 - Health)` from the combined value for chronic components only, then calculate
    logistic `BaseGrowth`, scale only positive growth by `1 - FoodDeficitFraction`, and calculate
    the three phase-3 mortality causes above on the origin tile → assign
-   `P_demographic` once. Retain
+   `P_demographic` once. Capture the starting and rounded demographic population, signed logistic
+   growth, starting and ending health, signed nutrition contribution, and non-negative water,
+   endemic-disease, and genetic-burden health losses in the pending fixed-size
+   `LastOutcomeReport`. These are completed-turn explanatory actuals and no later calculation reads
+   them. Retain
    remaining food without capacity clipping here; phase 5 enforces the final-population cap. A band
    reduced to zero cannot migrate and its queued intent is discarded during revalidation. Population
    changes leave `AllocationBP` untouched for the next planning period. The
@@ -5933,7 +6017,9 @@ turn requests or failed computer planning do not reach the spoilage checkpoint.
    terminal-state publication, or autosave, without repeating spoilage, consumption, or demographics. Remove
    zero-population bands, freeing capacity below `MaxBands` for the next planning period, and discard
    extinct bands' transient research gains and food-report candidates. Publish each survivor's
-   captured `LastFoodReport` for this completed turn, without changing its pre-demographic inputs.
+   captured `LastFoodReport` and `LastOutcomeReport` for this completed turn, updating only the
+   latter's final population/health endpoints and actual macro/outbreak health losses after phase 5,
+   without changing either report's phase-3 inputs.
    From the remaining bands' final positions and pre-gain technology state, capture the frozen
    local-contact snapshot, apply
    `co-located-cross-species-v1`, count each distinct eligible knowledgeable source once per
@@ -6001,26 +6087,28 @@ many passages here worry about products or totals exceeding what `float64` can r
 a small loss of readability and a negligible loss of speed. It is a discipline no reviewer can hold
 by hand, so §5 makes it a build failure rather than a convention.
 
-**Fixed-point is not the general alternative.** `AllocationBP` is a basis-point vector because it has
+**Integer state is not the general alternative.** `AllocationBP` is a basis-point vector because it has
 an **exact invariant** — five entries summing to exactly 10,000 — that drift would destroy. That is
 the test for when fixed-point earns its cost, and most simulation state fails it: `Health`,
 `Degradation`, and the heritable vector are continuous scalars with clamps and stated tolerances, and
-nothing conserves them. The genuine candidates are the quantities with conservation claims — resource
-stocks and their allocations, `StoredFood`, and population — and those are exactly where this
-document already writes "conservative roundoff" to soften an invariant it wants to be exact. Should
-those conservation tests start failing, converting _those_ allocators to integer apportionment with a
-deterministic largest-remainder rule is the right response, because there the exactness is the point.
+nothing conserves them. Population is the deliberate second exception: it is a count, so durable
+state is `uint32`, splitting is integer-conservative, and the explicitly rounded output of each
+continuous demographic checkpoint returns to that count type. Resource stocks, their allocations,
+and `StoredFood` remain genuine candidates only if their conservative-roundoff tests begin failing;
+converting those allocators to integer apportionment with a deterministic largest-remainder rule
+would then be appropriate because exactness would be the point.
 
-**Quantizing after floating-point arithmetic is worse than either.** Computing an allocation in
-`float64` and rounding the result into a fixed-point stock does not remove the divergence; it makes it
+**Quantizing after floating-point arithmetic is not a determinism mechanism.** Computing an allocation in
+`float64` and rounding the result into a fixed-point stock does not by itself remove divergence; it makes it
 discrete and rare. Two targets differ by roughly one ULP, so the rounded values differ only when the
 true result lands within one ULP of a quantization boundary — a probability on the order of the
 ULP divided by the quantum, which across a 400-turn campaign's operation count yields something that
 happens in a small fraction of campaigns rather than never. A determinism defect that reproduces once
 in a thousand runs is harder to diagnose than one that always reproduces, and harder to trust than one
-that cannot happen. Fixed-point buys determinism only when the arithmetic producing the value is
-integer end to end; a half-converted subsystem is a trap, and one `* HealthVulnerability` added to a
-food path silently reintroduces the problem with no failing test.
+that cannot happen. Population rounding is safe only because the product-rounding and cross-target
+checkpoint gates first require its entire floating demographic input to be bit-identical; conversion
+then supplies the separate gameplay invariant that a person count is discrete. It is not evidence
+that partially converting food or resource arithmetic would make those systems deterministic.
 
 Everything below preserves that cross-target contract whether or not the run is interrupted by save
 and reload.
@@ -6060,8 +6148,8 @@ and reload.
   second subtraction. The remainder is carried through the turn without
   an early capacity clamp.
   Source order, saving, loading, and UI actions cannot change this accounting or cause another meal.
-  `LastFoodReport` copies the phase-3 actuals only at completed-turn publication, remains fixed
-  during ordinary planning, and survives save/load. Splits clear both descendants' reports;
+  `LastFoodReport` and `LastOutcomeReport` copy phase-3/final actuals only at completed-turn
+  publication, remain fixed during ordinary planning, and survive save/load. Splits clear both descendants' reports;
   new-game and cleared reports are unavailable rather than zero. It adds no RNG draw or future
   simulation input, and extinct bands leave no report archive.
   `FoodStorageAlgorithm` discards overflow once after consumption and all population changes,
@@ -6244,8 +6332,8 @@ and reload.
   63 more turns → identical hash; the fixture exercises bounded integers, floats, chronic attrition,
   both the no-acute-event and triggered-event RNG paths, regional achievement latching, passage
   eligibility/queues, eight-way ordinary-edge queues, and shuffles so cached or partially consumed
-  RNG state cannot hide. It also compares every population, `Health` value, `LastFoodReport`
-  (including availability and turn), and mortality breakdown,
+  RNG state cannot hide. It also compares every population, `Health` value, `LastFoodReport` and
+  `LastOutcomeReport` (including availability, turn, endpoints, and causal components), and mortality breakdown,
   acute and macro events and eviction, RNG state, every climate component, active/announced macro
   episode summaries, reconstructed natural-shelter ratings and phase-specific
   mitigation, directed ordinary-edge costs/candidates, passage view,
@@ -6307,6 +6395,12 @@ Desktop and web use one automatic DPI-aware viewport contract. `pkg/app.Game` im
 `ebiten.LayoutFer`; Ebitengine v2.9 supplies `LayoutF`'s `outsideWidth` and `outsideHeight` in
 device-independent pixels (DIPs). `LayoutF` reads `ebiten.Monitor().DeviceScaleFactor()` after game
 startup, never from `init`, and returns a physical-resolution game screen:
+
+The desktop host enables OS window resizing and maximization. Its initial window is the largest
+16:9 rectangle that fits within 90% of the current monitor's DIP width and height, preserving room
+for desktop chrome; if the monitor dimensions are unavailable, it falls back to `1280 × 720` DIPs.
+The initial-size policy affects presentation only and does not constrain subsequent user resizing,
+fullscreen behavior, simulation state, saves, hashes, or RNG.
 
 ```text
 rawScale = Monitor().DeviceScaleFactor()
@@ -6523,10 +6617,51 @@ The same 2D HUD layout applies on desktop and web, over the 3D map:
 - **Selected-band inspector header:** the selected band's population and current health.
   Health is per band, not a global average. Both species are inspectable; archaic bands retain
   the “Computer controlled” label and expose no player commands.
+- **Band-selection keys:** `Tab` and `Shift+Tab` select the next and previous sapiens band,
+  respectively, wrapping at either end. Both clear any UI-local keyboard migration preview before
+  changing selection, and the persistent controls legend names both directions.
+- **Reachability overlay:** when the selected sapiens band still has its spatial action, every tile
+  in its authoritative `MigrationCandidates` list receives a cyan outline and the first-ranked
+  candidate receives a gold outline. A persistent legend explains both colors, and turn-0 Field
+  Notes call out the outlines explicitly. The overlay disappears after the spatial action is spent;
+  it never marks merely adjacent but currently ineligible tiles.
+- **Queued-migration marker:** after a sapiens migration is accepted and before the next turn
+  resolves it, draw a thin red arrow from the band's current tile center to the queued destination
+  center. The arrow shape and persistent “red arrow: queued” legend make the meaning non-color-only.
+  It is driven exclusively by the frame's queued-destination presence/value pair, remains visible
+  when another band is selected, and disappears from the replacement frame when the move resolves
+  or is canceled. Never infer an intent from `SpatialActionUsed` or the candidate ranking, and never
+  expose a computer-controlled archaic intent through this player-planning overlay.
+- **Keyboard migration:** arrow keys move a UI-local destination cursor inside the selected band's
+  one-turn `3 × 3` neighborhood; successive cardinal presses can therefore select any corner without
+  requiring a diagonal key. The cursor may pass through a currently ineligible cardinal tile so the
+  player can reach a valid corner behind it, but `Enter` emits `QueueMigration` only when the final
+  tile is in the authoritative projected candidate list. `Esc` clears the cursor, returning it to
+  the band's origin also clears it, and ending the turn is blocked until the player confirms or
+  clears an outstanding choice. The preview is UI-local and never enters `World`, `Frame`, or a save;
+  the existing red arrow remains frame-driven after confirmation. Pointer clicks still queue an
+  eligible destination immediately, and non-adjacent named passages remain clickable. The persistent
+  controls legend names the arrow, `Enter`, and `Esc` bindings.
+- **Rejected-destination feedback:** clicking any tile absent from that authoritative candidate list
+  produces a short, player-facing explanation instead of silently doing nothing or repeating a
+  generic “choose an outlined tile” message. `pkg/ui` classifies the frame projection into spent
+  spatial action, current tile, unexplored area, open water, currently uninhabitable land, named
+  passage technology/climate lock, blocked diagonal, too-distant tile, or no traversable route.
+  The unexplored check precedes terrain inspection so this feedback never reveals whether hidden
+  geography is land or water. Bands cannot occupy water tiles: Coastal Navigation unlocks only the
+  eligible named land-to-land Wallacea passages, so its water message directs the player to a named
+  passage endpoint rather than implying arbitrary sea movement. Beringia's message instead explains
+  its climate gate. These diagnostics explain the current accepted frame; the candidate list remains
+  the sole authority for whether `QueueMigration` may be sent.
 - **Band details below the header:** current food reserves and the “Last turn” food report,
   the last completed turn's starvation/seasonal/chronic/macro/acute mortality breakdown, workforce
   assignments, and research.
   For sapiens, keep the five-role editor and research controls alongside the stats they help explain.
+- **Persistent research-key legend:** list all nine numbered technologies by name. For the selected
+  sapiens band, color available targets normally, the current target gold, acquired technologies
+  green, and prerequisite-locked technologies grey. These states come from the frame's projected
+  `ResearchOptions`, not a prerequisite table duplicated in presentation code. The legend remains
+  visible even when Field Notes are hidden, so pressing `1`–`9` is never an unexplained action.
 - **Tile inspector:** local flora, fauna, and water stocks; carrying capacity; degradation;
   natural shelter; the current regional abrupt-climate anomaly; current visible macro-impact factors;
   and the already-specified regional prey summary. Distinguish undegraded
@@ -6542,6 +6677,22 @@ score back to state, and never reinterpret it as a mortality rate. Food reserves
 explanations must distinguish missing FU, the fraction of needs unmet, and
 applied starvation deaths. Show the saved last-mortality breakdown, not the uncapped starvation
 base; splitting clears that breakdown under the existing split rule.
+
+Population labels use no fractional digits because the frame contract permits only whole-person
+values; this is direct formatting, not presentation rounding that conceals fractional state.
+
+Each visible band row appends the exact signed last-turn population change and the health change in
+percentage points when `LastOutcomeReport.Turn != 0`; current health uses one fractional percentage
+digit so a small real decline is not rounded back to an unexplained `100%`. For the selected band,
+show a persistent explanation for each negative net change. Population causes rank negative
+logistic growth as **crowding / habitat limits** alongside the saved starvation, seasonal, chronic,
+macro-event, and acute mortality actuals. Health causes rank negative nutrition as **food shortage**
+alongside water shortage, endemic disease, adaptation trade-offs, macro-event, and outbreak health
+losses. Display the two largest positive cause magnitudes in stable order and append “+N more” when
+needed. The signed net changes come only from the report's endpoints; never sum rounded cause labels
+to reconstruct them. Omit a cause line when that metric did not decline. Population mortality and
+health are independent channels, so `Health = 1` must not hide or contradict seasonal, chronic,
+macro, or acute population loss.
 
 For an available `LastFoodReport` in the frame — one whose `Turn` is nonzero — label the food
 subsection **“Last turn · Turn N”** using its recorded turn. Show **Required**, **Consumed**, and
@@ -6628,13 +6779,24 @@ simulation inspector.
 The displayed entry follows a stable context priority:
 
 1. a focused heritable trait, technology, passage, or available interbreeding action;
-2. a regional achievement newly latched by the most recently completed turn and not yet
+2. a technology newly acquired by a sapiens band in the most recently completed turn and not yet
+   acknowledged;
+3. a regional achievement newly latched by the most recently completed turn and not yet
    acknowledged by subsequent user focus/selection/action;
-3. a current abrupt-climate pulse or current/warned macro episode affecting the selected band/tile;
-4. the selected band;
-5. the selected tile's named region and current biome;
-6. the newest completed-turn event when there is no selection; otherwise
-7. the campaign overview.
+4. a current abrupt-climate pulse or current/warned macro episode affecting the selected band/tile;
+5. the selected band;
+6. the selected tile's named region and current biome;
+7. the newest completed-turn event when there is no selection; otherwise
+8. the campaign overview.
+
+`pkg/app` detects newly acquired sapiens technology bits only across an accepted `EndTurn` frame
+transition, considering the selected band first and then stable band/technology order. A loaded
+frame and technology inherited by a newly introduced split descendant do not replay a discovery.
+The first discovery becomes the Field Notes focus, a toast reports it and any additional count, and
+the panel or its hidden restore tab receives a gold breakthrough treatment for 600 UI update ticks.
+This treatment does not force open a panel the player explicitly hid. After the accent expires, the
+latest technology entry remains available as ordinary Field Notes context; all of this state is
+UI-local and absent from saves.
 
 `pkg/ui` sets one `AchievementFocusPending` value from the newest newly latched achievement event in
 the accepted frame, choosing stable region order when several latch together. It persists for at
@@ -6761,8 +6923,18 @@ The valid slot IDs are closed constants, not arbitrary integers:
 - `Auto1`–`Auto3`: IDs `101`, `102`, `103`. The application chooses the target; the player may load
   or explicitly delete these rows but cannot save to them manually.
 
+On desktop startup, `pkg/app` first lists slots asynchronously and loads the record with the highest
+`CommitSequence` among Quick and Auto 1–3 before accepting gameplay input. Manual slots are
+explicit checkpoints and never selected by auto-resume. When no Quick or Auto record exists, startup
+keeps the new campaign; a list/load failure likewise leaves it playable and reports the storage
+error. Browser startup does not auto-load because an origin can host multiple independent sessions
+and retains the explicit load flow. The desktop host handles the OS close request: if a player has
+begun a quick-save whose completion has not yet been polled, it keeps updating storage with gameplay
+input disabled and returns `ebiten.Termination` only after that operation succeeds or fails. Thus
+Ctrl/Cmd+S followed immediately by Cmd+Q/window close cannot truncate the requested write.
+
 `SlotMetadata` includes `SlotKind`, `WorldRevision`, `CampaignClockAlgorithm`, turn/year/era,
-population summary by species,
+`uint64` population totals by species,
 `CommitSequence`, and the integrity fields below. The save/load browser displays Manual, Quick, and
 Auto groups even when rows are empty. Overwriting is always non-modal. Deletion requires the
 selected row plus an explicit DEL/BACKSPACE action, but opens no confirmation modal.
@@ -6840,7 +7012,7 @@ world. No JSON tag, slot ID, schema version, or migration branch appears in `int
 bitset, research target, fixed research-progress vector, fixed
 `HeritableState[HeritableTraitCount]`, the fixed
 `AllocationBP[AssignmentCount]` vector, `StoredFood` in FU, current `Health`, `LastFoodReport`,
-the fixed last-mortality breakdown, and `SpatialActionUsed`, the monotonic `uint64 NextBandID`, queued migrations with
+`LastOutcomeReport`, the fixed last-mortality breakdown, and `SpatialActionUsed`, the monotonic `uint64 NextBandID`, queued migrations with
 band ID, recorded origin, target, edge kind, and optional
 passage ID, queued interbreeding intents with sapiens actor, archaic target, and recorded co-location
 tile, each tile's resource stocks and `Degradation`, the bounded chronological event feed,
@@ -6877,8 +7049,9 @@ untouched. Derived temperatures are never serialized. Moisture takes the opposit
 reason: `ClassifyBiome` is its only consumer, so it needs no identifier of its own and stays inside
 `ClimateAlgorithm`. Changing the moisture curve, its precession table, or the aridity weights still
 reclassifies every tile in an existing save, so it carries the same version-bump-and-migration
-obligation. Derived moisture, `AridityIndex`, and `ClimateEpoch` are never serialized. `BandAlgorithm` versions the fixed 50/50
-split, `MinSplitSourcePopulation`, `MaxBands = 256`, and `MaxArchaicBands`; the sub-cap constrains the computer policy's split branch only, so a loaded world
+obligation. Derived moisture, `AridityIndex`, and `ClimateEpoch` are never serialized. `BandAlgorithm`
+versions the `uint32` population representation and `MaxPopulation`, the fixed 50/50 split,
+`MinSplitSourcePopulation`, `MaxBands = 256`, and `MaxArchaicBands`; the sub-cap constrains the computer policy's split branch only, so a loaded world
 whose archaic count already exceeds a lowered value remains valid and simply takes no further archaic
 splits. `MacroEventAlgorithm` versions eruption
 dates, impact masks, warnings, refugium rule, phase-2 resource/habitat factors, phase-5 mortality and
@@ -6941,6 +7114,11 @@ the Hunting allocation's rate-composition split, source-specific effect channel,
 order, and four-component pro-rata partial-meal attribution used by fatty-acid selection. Source breakdowns and conversion modifiers are transient and never saved; `StoredFood` and
 `LastFoodReport` remain aggregate FU. Load rejects an unknown identifier. After release, changing a
 source, base factor, split rule, or modifier ownership requires an explicit supported migration.
+`Population` is authoritative `uint32` whole-person band state and `BandSave.Population` is a JSON
+number decoded directly into `uint32`. The decoder rejects negative, fractional, and overflowing
+values before aggregate restoration; it never rounds an invalid save into acceptance. Existing
+development saves whose JSON population tokens are whole numbers such as `100` remain wire-compatible,
+while old fractional saves are rejected. Slot metadata uses `uint64` sapiens/archaic totals.
 `Health` is authoritative `float64` band state in `[0, 1]`, not a value reconstructed from current
 food or population. Save it as a JSON number decoded into the typed `float64` field, using a
 round-trip representation that preserves its value; do not store a formatted percentage, string,
@@ -6956,28 +7134,35 @@ coexistence with direct mortality, and chronic vulnerability `1 + (1 - Health)`.
 constant listed under `HazardAlgorithm` in Appendix C, including the six-row camp/non-camp endemic
 health-rate table. It also owns direct quadratic
 starvation without health gating/scaling and food-limited positive growth. The
-genetics algorithms own the trait factors and burdens that enter these hazard checkpoints.
+whole-person demographic, macro-loss, and acute-loss checkpoints use `RoundPopulation` under this
+contract. The genetics algorithms own the trait factors and burdens that enter these hazard checkpoints.
 `ResourceAlgorithm` versions water units, the canonical heat increment, and where the
 `AridClimateAdaptation` remaining-heat factor composes; `GeneticSelectionAlgorithm` owns the `0.40`
 factor itself. Disease and health-loss rules remain under `HazardAlgorithm`.
-These rates and mappings are versioned configuration, not mutable save data. Neither transient
-`BaseGrowth`, health contributions, water-deficit fraction, intermediate health checkpoints, nor
-derived vulnerability is serialized. Only the existing current `Health` persists, including any
-phase-5 outbreak damage. `FoodStorageAlgorithm`
+These rates and mappings are versioned configuration, not mutable save data. The transient
+water-deficit fraction, intermediate health checkpoints, and derived vulnerability are not
+serialized. `LastOutcomeReport` is the one display-only exception: it persists `BaseGrowth`, the
+signed nutrition contribution, individual health-loss actuals, and population/health endpoints for
+the last completed turn. No simulation rule reads those historical values. Current `Health`
+continues to persist independently, including any phase-5 outbreak damage. `FoodStorageAlgorithm`
 continues to own consumption and the transient deficit fraction. These approved numerical
 defaults may be tuned before release.
 The starvation base is derived during the next advancing turn, not saved or recomputed on load;
 the existing last-mortality fields preserve the applied losses. `LastFoodReport` separately
-preserves food actuals without adding a saved population aggregate or display-induced simulation
-step. Require its full value shape and §7 validity/turn/accounting invariants on every band,
-including canonical unavailable reports at new game or after a split. A valid report's requirement
-is historical, so do not validate it against current population or storage capacity. It must
-round-trip unchanged in planning, completed-turn, and terminal saves on both backends; no UI-local
-cache or metadata record substitutes for it. It is included in this still-unreleased schema v1;
-after release, wire changes require a schema-version update and explicit supported migration.
-A migration lacking historical actuals may explicitly produce the canonical unavailable report,
-never fabricated zero-shortfall actuals. Absent or malformed data without such a supported migration
-is rejected; loading does not infer missing history from current state.
+preserves food actuals, while `LastOutcomeReport` brackets the resulting demographic and health
+change without adding a mutable population aggregate or display-induced simulation step. Require
+both reports' full value shapes and §7 validity/turn/accounting invariants on every band,
+including canonical unavailable reports at new game or after a split. A valid food report's
+requirement is historical, so do not validate it against current population or storage capacity.
+Both reports round-trip unchanged in planning, completed-turn, and terminal saves on both backends;
+no UI-local cache or metadata record substitutes for either. They are included in this
+still-unreleased schema v1; the decoder maps an absent `LastOutcomeReport` from an earlier
+development save only to its canonical unavailable zero value and never fabricates causes or
+endpoints. After release, wire changes require a schema-version update and explicit supported
+migration. A migration lacking historical actuals may explicitly produce the applicable canonical
+unavailable report, never fabricated zero-shortfall or zero-loss actuals. Absent or malformed data
+without such a supported migration is rejected; loading does not infer missing history from current
+state.
 `AllocationBasisPoints = 10_000` is a closed constant of
 `proportional-basis-points-v1`; changing its representation or population/split lifecycle requires a
 new assignment-algorithm version and an explicit save migration.
@@ -7040,7 +7225,7 @@ warned/current/elapsed macro-episode summaries and per-tile impact factors, `Ber
 lengths/directed costs, `ElevationKm`, biome, fauna profiles/`FaunaSummary`, `NaturalShelter`, `BaselineK`,
 `EcologicalK`, resource caps, destination membership,
 region membership for every tile and band,
-per-band `OriginalResearchGainPreview`, migration-candidate rankings, timeline
+per-band `OriginalResearchGainPreview`, `ResearchOptions`, migration-candidate rankings, timeline
 labels, and timeline geometry are derived rather than redundantly serialized. The exploration
 bitset is the bounded display-state exception because it records past geographic discovery; each
 frame derives `Tile.Explored` from it. Queued migrations do
@@ -7114,8 +7299,9 @@ create no required bits. A loaded frame exposes the exact validated mask without
 again or consuming RNG.
 Validation also checks queued edge/passage identities under the supported movement and movement-cost
 algorithms, at most 128 chronologically ordered events with valid kinds/references and finite applied
-losses, valid finite non-negative mortality breakdowns, `LastFoodReport` turn and FU bounds under
-§7, and exact PCG state length/format. Only a
+losses, valid finite non-negative mortality breakdowns, `LastFoodReport` turn and FU bounds, and
+`LastOutcomeReport` availability, current-turn endpoints, signed finite growth/nutrition, bounded
+health endpoints, and finite non-negative loss components under §7, plus exact PCG state length/format. Only a
 fully decoded and validated temporary `World` replaces the running world. Missing or mismatched data
 marks the slot damaged in the browser rather than partially loading it.
 
@@ -7454,17 +7640,19 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    The float-to-integer rule gets rejection fixtures for `int(x)`, `int64(x)`, `uint32(x)`, a named
    integer type, a named floating source type, and a conversion inside a `_test.go` file, plus
    acceptance fixtures for `float64(i)` in the other direction, integer-to-integer conversions, and
-   the constant conversion `int(2.0)` that the type-checker folds. Adding all three gates now
+   the constant conversion `int(2.0)` that the type-checker folds. The one production acceptance
+   fixture is `RoundPopulation`'s finite/range-checked `Population(value + 0.5)` conversion; the same
+   conversion anywhere else, or a helper version missing any check, is rejected. Adding all three gates now
    costs one focused test; adding them after the domain exists means auditing every expression already
    written.
 2. **`pkg/gameapi`** — implement Appendix C's closed six-entry `FaunaGroup` catalog and
    `FaunaGroupCount`, then
-   define enums including `CampaignEra`, `Frame`/`Tile`/`Band`/`FoodTurnReport`/`Event`, fixed per-band
-   technology/progress and six-value heritable state, `LastFoodReport`, climate/macro summaries, co-located interbreeding
+   define enums including `CampaignEra`, `Frame`/`Tile`/`Band`/`FoodTurnReport`/`OutcomeReport`/`Event`, fixed per-band
+   technology/progress and six-value heritable state, `LastFoodReport`, `LastOutcomeReport`, climate/macro summaries, co-located interbreeding
    candidates, and five-role basis-point allocation values, per-tile
    `ElevationKm`, `Biome`, `Explored`, `NaturalShelter`, visible macro impact, and fixed-size `FaunaSummary`
    values with the closed `FaunaGroup` enum, derived
-   original-research-preview values, `Interbreed`, the other `Command` values, segregated
+   original-research-preview values, fixed nine-entry `ResearchOptions`, `Interbreed`, the other `Command` values, segregated
    `CampaignUseCases`/`StorageUseCases` and composed `Game` port, and `SlotMetadata`. Depends on
    nothing outside the standard library; every driving adapter is written against it.
 
@@ -7699,7 +7887,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    Implement §7's food and health contracts here, with their fixtures as specified there:
    `population-food-turns-v1` storage capacity, end-of-turn overflow discard, and phase-1 spoilage;
    `normalized-source-v1` conversion; automatic consumption and `FoodDeficitFraction`;
-   `LastFoodReport`; the health representation with its nutritional decline and recovery, water,
+   `LastFoodReport` and `LastOutcomeReport`; the health representation with its nutritional decline and recovery, water,
    endemic-disease, and genetic-burden contributions and their single phase-3 clamp; the phase-5
    outbreak health checkpoint; `HealthVulnerability`; the quadratic starvation response; and
    food-limited positive growth. Each of those subsections' worked examples, bounds, rejection
@@ -7767,7 +7955,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    `WorldRevision`, `EndTurn`, and the `gameapi.Game` implementation. Retain several returned frames
    across more than three later projections, then mutate each older `Frame`, including band
    population, `Health`, `StoredFood`, `HeritableState`,
-   `LastFoodReport`, interbreeding candidates, and
+   `LastFoodReport`, `LastOutcomeReport`, interbreeding candidates, and
    tile `ElevationKm`, `Biome`, `Explored`, `NaturalShelter`,
    `FaunaSummary` weights/flags, passage,
    established-region, event-feed, and nested
@@ -7879,12 +8067,14 @@ stock-unit and conversion values are already selected; step 5 implements and ver
 
    *Wire shapes with their own hazards.* `Health` round-trips as a JSON number with no narrowing,
    percentage quantization, or healing from load or split, and missing or invalid health is rejected
-   rather than defaulted. `LastFoodReport` round-trips exactly — including its turn and canonical
-   unavailable state — across new-game, post-split, planning, completed-turn, and terminal saves on
-   both backends, rejecting missing, wrong-turn, non-finite, negative, and over-required records plus
-   an unavailable record carrying a nonzero FU field, without mutating the running world and without
-   replaying a meal; only an explicit supported migration may mark missing history unavailable. A
-   failed load preserves the current report while a successful one replaces it with that world's. The
+   rather than defaulted. `LastFoodReport` and `LastOutcomeReport` round-trip exactly — including
+   their turn and canonical unavailable states — across new-game, post-split, planning,
+   completed-turn, and terminal saves on both backends. Reject wrong-turn, non-finite, negative, and
+   over-required food records, unavailable records carrying nonzero fields, mismatched outcome
+   endpoints, and invalid signed or loss components, without mutating the running world, replaying a
+   meal, or rerunning demographics. The explicit unreleased-development compatibility fixture maps a
+   missing outcome report to unavailable; no other missing history is invented. A failed load
+   preserves the current reports while a successful one replaces them with that world's. The
    exploration bitset round-trips exactly, including discoveries no longer near any band, and rejects
    a wrong-length mask or missing required initial and current-frontier bits; save and load must
    neither reveal again nor regress it. Also cover bounded event-feed eviction, last-mortality values
@@ -8159,7 +8349,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
     crosses the initial reveal frontier. Before reload it
     captures the observer's canonical `E2ESummary`: turn, year BP, era, `CalendarProgress`, total
     sapiens population, the lowest-ID living sapiens band's ID/tile/population/health/stored FU and
-    complete `LastFoodReport`, the sorted explored-tile IDs, and the SHA-256 of one byte per tile
+    complete `LastFoodReport` and `LastOutcomeReport`, the sorted explored-tile IDs, and the SHA-256 of one byte per tile
     (`0` or `1`) in ascending tile-ID order. A separate injected frontier fixture places the actor at
     a known reveal boundary, proves that a legal move grows the explored set, and chooses the lowest
     newly explored ID and lowest still-hidden ID as probes. After page reload and load of the
@@ -9100,10 +9290,11 @@ Earlier fixtures use explicit values that are never release data.
 | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------- | -------------------------- |
 | `SplitStressThreshold`                                     | `0.9`                                                                                           | Initial | `BandAlgorithm`            |
 | `MinEstablishedBand`                                       | `20`                                                                                            | Initial | `BandAlgorithm`            |
+| `MaxPopulation`                                            | `2^32 - 1` whole people (`uint32`)                                                              | Locked  | `BandAlgorithm`            |
 | New-game band populations                                  | four sapiens `100` in East Africa; two archaic `100` in Levant; two archaic `100` in Frangistan | Locked  | scenario contract          |
 | New-game geographic anchors                                | §6 exact eight-entry Afar-to-Iberia catalog                                                     | Locked  | scenario contract          |
 | New-game starting tile IDs                                 | deterministic nearest valid tiles generated from the anchors and frozen                         | Step 4  | scenario contract          |
-| Split ratio                                                | `50/50`                                                                                         | Locked  | `BandAlgorithm`            |
+| Split ratio                                                | `50/50`; odd whole-person remainder stays with source                                           | Locked  | `BandAlgorithm`            |
 | `MinSplitSourcePopulation`                                 | `2 × MinEstablishedBand = 40`                                                                   | Derived | `BandAlgorithm`            |
 | `DestinationRegions`                                       | `{Frangistan, SouthAsia, YellowRiverBasin, Sahul, Beringia}`                                    | Locked  | campaign outcome contract  |
 | Cardinal / diagonal step length                            | `1` / `math.Sqrt2`                                                                              | Locked  | `MovementAlgorithm`        |

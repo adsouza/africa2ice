@@ -1,0 +1,160 @@
+package ui
+
+import (
+	"fmt"
+
+	"github.com/adsouza/africa2ice/pkg/gameapi"
+)
+
+// MigrationBlockReason classifies a destination rejected by the authoritative
+// migration-candidate projection.
+type MigrationBlockReason uint8
+
+const (
+	MigrationAllowed MigrationBlockReason = iota
+	MigrationBlockedInvalidTile
+	MigrationBlockedActionSpent
+	MigrationBlockedCurrentTile
+	MigrationBlockedUnexplored
+	MigrationBlockedWater
+	MigrationBlockedUninhabitable
+	MigrationBlockedPassageTechnology
+	MigrationBlockedPassageClimate
+	MigrationBlockedPassageUnavailable
+	MigrationBlockedDiagonal
+	MigrationBlockedTooFar
+	MigrationBlockedNoRoute
+)
+
+// MigrationDiagnostic contains the presentation-safe reason for a rejected
+// map destination and, when relevant, the named passage involved.
+type MigrationDiagnostic struct {
+	Reason  MigrationBlockReason
+	Passage gameapi.PassageID
+}
+
+// MoveMigrationPreview moves a keyboard destination cursor one cardinal tile
+// while keeping it inside the band's one-turn 3x3 neighborhood. The cursor
+// may cross an ineligible tile so two arrow presses can still reach a valid
+// diagonal destination; confirmation performs authoritative validation.
+func MoveMigrationPreview(frame *gameapi.Frame, band *gameapi.Band, cursor gameapi.TileID, dx, dy int) (gameapi.TileID, bool) {
+	if frame == nil || band == nil || int(band.TileID) >= len(frame.Tiles) || int(cursor) >= len(frame.Tiles) || absInt(dx)+absInt(dy) != 1 {
+		return 0, false
+	}
+	origin := frame.Tiles[band.TileID]
+	current := frame.Tiles[cursor]
+	targetX, targetY := current.X+dx, current.Y+dy
+	if absInt(targetX-origin.X) > 1 || absInt(targetY-origin.Y) > 1 {
+		return 0, false
+	}
+	for index := range frame.Tiles {
+		if frame.Tiles[index].X == targetX && frame.Tiles[index].Y == targetY {
+			return gameapi.TileID(index), true
+		}
+	}
+	return 0, false
+}
+
+// DiagnoseMigration explains why a clicked tile is absent from the selected
+// band's authoritative candidate list. Unexplored tiles are classified before
+// their terrain is inspected so the diagnostic cannot leak hidden geography.
+func DiagnoseMigration(frame *gameapi.Frame, band *gameapi.Band, destination gameapi.TileID) MigrationDiagnostic {
+	if frame == nil || band == nil || int(destination) >= len(frame.Tiles) || int(band.TileID) >= len(frame.Tiles) {
+		return MigrationDiagnostic{Reason: MigrationBlockedInvalidTile}
+	}
+	if band.SpatialActionUsed {
+		return MigrationDiagnostic{Reason: MigrationBlockedActionSpent}
+	}
+	if destination == band.TileID {
+		return MigrationDiagnostic{Reason: MigrationBlockedCurrentTile}
+	}
+	tile := frame.Tiles[destination]
+	if !tile.Explored {
+		return MigrationDiagnostic{Reason: MigrationBlockedUnexplored}
+	}
+	for _, candidate := range band.MigrationCandidates {
+		if candidate.TileID == destination {
+			return MigrationDiagnostic{Reason: MigrationAllowed, Passage: candidate.Passage}
+		}
+	}
+	if !tile.Land {
+		return MigrationDiagnostic{Reason: MigrationBlockedWater}
+	}
+	if tile.BaselineK <= 0 {
+		return MigrationDiagnostic{Reason: MigrationBlockedUninhabitable}
+	}
+	if passage, ok := framePassageBetween(frame, band.TileID, destination); ok {
+		status := gameapi.PassageUnavailable
+		if passage.ID < gameapi.PassageCount {
+			status = band.PassageStatuses[passage.ID]
+		}
+		switch {
+		case status == gameapi.PassageLocked && passage.ID == gameapi.BeringStrait:
+			return MigrationDiagnostic{Reason: MigrationBlockedPassageClimate, Passage: passage.ID}
+		case status == gameapi.PassageLocked:
+			return MigrationDiagnostic{Reason: MigrationBlockedPassageTechnology, Passage: passage.ID}
+		default:
+			return MigrationDiagnostic{Reason: MigrationBlockedPassageUnavailable, Passage: passage.ID}
+		}
+	}
+	origin := frame.Tiles[band.TileID]
+	dx, dy := absInt(tile.X-origin.X), absInt(tile.Y-origin.Y)
+	if dx == 1 && dy == 1 {
+		return MigrationDiagnostic{Reason: MigrationBlockedDiagonal}
+	}
+	if dx > 1 || dy > 1 {
+		return MigrationDiagnostic{Reason: MigrationBlockedTooFar}
+	}
+	return MigrationDiagnostic{Reason: MigrationBlockedNoRoute}
+}
+
+// MigrationDiagnosticMessage renders a concise player-facing explanation.
+func MigrationDiagnosticMessage(diagnostic MigrationDiagnostic, band *gameapi.Band) string {
+	switch diagnostic.Reason {
+	case MigrationAllowed:
+		return ""
+	case MigrationBlockedInvalidTile:
+		return "That tile is outside the playable map."
+	case MigrationBlockedActionSpent:
+		return "This band has already used its spatial action this turn."
+	case MigrationBlockedCurrentTile:
+		return "The selected band is already on that tile."
+	case MigrationBlockedUnexplored:
+		return "That area is unexplored; move into an outlined frontier tile first."
+	case MigrationBlockedWater:
+		if band != nil && band.AcquiredTech&(1<<gameapi.CoastalNavigation) != 0 {
+			return "Bands cannot occupy open water; use a land endpoint of a named passage."
+		}
+		return "Bands cannot migrate into open water; Coastal Navigation unlocks named sea crossings."
+	case MigrationBlockedUninhabitable:
+		return "This terrain is uninhabitable now; climate change may make it viable later."
+	case MigrationBlockedPassageTechnology:
+		return fmt.Sprintf("%s is locked; research Coastal Navigation to cross it.", diagnostic.Passage)
+	case MigrationBlockedPassageClimate:
+		return "Beringia is closed; long-term cooling must expose the land bridge first."
+	case MigrationBlockedPassageUnavailable:
+		return fmt.Sprintf("%s cannot be used from here right now.", diagnostic.Passage)
+	case MigrationBlockedDiagonal:
+		return "No traversable route: diagonal moves cannot cut across a water corner."
+	case MigrationBlockedTooFar:
+		return "Too far away: move one outlined tile or use an eligible named passage."
+	default:
+		return "There is no traversable route to that tile from this band."
+	}
+}
+
+func framePassageBetween(frame *gameapi.Frame, origin, destination gameapi.TileID) (gameapi.Passage, bool) {
+	for _, passage := range frame.Passages {
+		if passage.From == origin && passage.To == destination || passage.To == origin && passage.From == destination {
+			return passage, true
+		}
+	}
+	return gameapi.Passage{}, false
+}
+
+func absInt(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
+}
