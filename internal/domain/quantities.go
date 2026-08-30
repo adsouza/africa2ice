@@ -23,13 +23,25 @@ func finiteNonNegative(name string, value float64) error {
 }
 
 // RoundPopulation is the domain's only audited float-to-population conversion.
-// Its range checks make Go's truncating conversion deterministic; adding 0.5
-// gives nearest-integer rounding with exact halves rounded upward.
-func RoundPopulation(value float64) (Population, error) {
+// Its range checks make Go's truncating conversion deterministic.
+//
+// It rounds stochastically: adding a draw from [0, 1) before truncating lands
+// on the lower integer with probability 1-fraction and the upper one with
+// probability fraction, so the result is unbiased in expectation while the
+// stored population stays strictly integral. Nearest-integer rounding created a
+// deadband of half a person either side of zero net change, and with growth of
+// roughly 0.05 people per turn every birth the model computed fell inside it and
+// was discarded. Drawing is also the better model: whether a small band grows in
+// a given period is genuinely uncertain, and demographic stochasticity is
+// exactly what makes small populations fragile.
+//
+// The draw comes from the aggregate-owned WorldRNG, so a campaign remains a pure
+// function of its seed and the sequence survives save and restore.
+func RoundPopulation(value float64, rng *WorldRNG) (Population, error) {
 	if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > float64(MaxPopulation) {
 		return 0, fmt.Errorf("%w: population", ErrInvalidValue)
 	}
-	return Population(value + 0.5), nil
+	return Population(value + rng.Float64()), nil
 }
 func ValidateFU(v FU) error { return finiteNonNegative("food units", float64(v)) }
 func ValidateWU(v WU) error { return finiteNonNegative("water units", float64(v)) }

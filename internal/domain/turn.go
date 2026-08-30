@@ -204,7 +204,7 @@ func (world *World) AdvanceTurn() error {
 		if population < 0 {
 			population = 0
 		}
-		band.Population, err = RoundPopulation(population)
+		band.Population, err = RoundPopulation(population, world.rng)
 		if err != nil {
 			return err
 		}
@@ -259,7 +259,7 @@ func (world *World) AdvanceTurn() error {
 			before := float64(band.Population)
 			healthBefore := band.Health
 			macroLoss := float64(before * impact.LossFraction)
-			band.Population, err = RoundPopulation(before - macroLoss)
+			band.Population, err = RoundPopulation(before-macroLoss, world.rng)
 			if err != nil {
 				return err
 			}

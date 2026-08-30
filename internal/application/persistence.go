@@ -45,6 +45,7 @@ type AlgorithmVersions struct {
 	ResourceAlgorithm            string `json:"resource_algorithm"`
 	HazardAlgorithm              string `json:"hazard_algorithm"`
 	KinSupportAlgorithm          string `json:"kin_support_algorithm"`
+	PopulationRoundingAlgorithm  string `json:"population_rounding_algorithm"`
 	RNGAlgorithm                 string `json:"rng_algorithm"`
 }
 
@@ -64,7 +65,7 @@ var supportedAlgorithms = AlgorithmVersions{
 	GeneFlowAlgorithm: "local-reciprocal-v1", MutationAlgorithm: "rare-emergence-v1",
 	MovementAlgorithm: "eight-way-no-water-corners-v1", MovementCostAlgorithm: "destination-vegetation-v1",
 	PassageAlgorithm: "named-asymmetric-v1", ResourceAlgorithm: "toward-cap-v1",
-	HazardAlgorithm: "split-v1", KinSupportAlgorithm: "saturating-kin-acute-v1",
+	HazardAlgorithm: "split-v1", KinSupportAlgorithm: "saturating-kin-acute-v1", PopulationRoundingAlgorithm: "stochastic-v1",
 	RNGAlgorithm: "pcg-splitmix-v1",
 }
 

@@ -7,8 +7,8 @@ const (
 	CampSecurityScale             = 0.75
 	CampHygieneScale              = 0.40
 	MaxChronicRate                = 0.25
-	SeasonalMortalityScale        = 0.10
-	ChronicMortalityScale         = 0.10
+	SeasonalMortalityScale        = 0.05
+	ChronicMortalityScale         = 0.05
 	AcuteProbabilityScale         = 0.10
 )
 
@@ -320,7 +320,7 @@ func ResolveAcute(band *Band, tile TileGeography, habitat HabitatTile, season Se
 	if loss > before {
 		loss = before
 	}
-	population, err := RoundPopulation(before - loss)
+	population, err := RoundPopulation(before-loss, rng)
 	if err != nil {
 		return 0, 0, false, err
 	}

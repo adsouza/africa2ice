@@ -438,6 +438,48 @@ func RoundPopulation(value float64) Population {
 		wantRules: []string{},
 	},
 	{
+		name: "accept/round_population_may_draw_from_an_rng",
+		path: "internal/domain/quantities.go",
+		source: `package domain
+import "math"
+type Population uint32
+type WorldRNG struct{}
+func (r *WorldRNG) Float64() float64 { return 0 }
+const MaxPopulation Population = 1<<32 - 1
+func RoundPopulation(value float64, rng *WorldRNG) Population {
+	if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > float64(MaxPopulation) { return 0 }
+	return Population(value + rng.Float64())
+}`,
+		wantRules: []string{},
+	},
+	{
+		name: "reject/round_population_with_an_rng_but_no_finite_checks",
+		path: "internal/domain/quantities.go",
+		source: `package domain
+type Population uint32
+type WorldRNG struct{}
+func (r *WorldRNG) Float64() float64 { return 0 }
+const MaxPopulation Population = 1<<32 - 1
+func RoundPopulation(value float64, rng *WorldRNG) Population {
+	if value < 0 || value > float64(MaxPopulation) { return 0 }
+	return Population(value + rng.Float64())
+}`,
+		wantRules: []string{ruleFloatInt},
+	},
+	{
+		name: "reject/round_population_with_two_floating_parameters",
+		path: "internal/domain/quantities.go",
+		source: `package domain
+import "math"
+type Population uint32
+const MaxPopulation Population = 1<<32 - 1
+func RoundPopulation(value float64, jitter float64) Population {
+	if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > float64(MaxPopulation) { return 0 }
+	return Population(value + jitter)
+}`,
+		wantRules: []string{ruleFloatInt},
+	},
+	{
 		name: "reject/round_population_without_finite_checks",
 		path: "internal/domain/quantities.go",
 		source: `package domain

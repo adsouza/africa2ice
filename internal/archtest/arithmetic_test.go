@@ -306,14 +306,31 @@ func (a *arithmeticAnalyzer) enclosingFunction() *ast.FuncDecl {
 // not just a convenient file and function spelling. The helper must reject both
 // non-finite classes and both sides of Population's closed numeric range.
 func auditedRoundPopulation(info *types.Info, declaration *ast.FuncDecl) bool {
-	if declaration == nil || declaration.Type.Params == nil || declaration.Type.Params.NumFields() != 1 {
+	if declaration == nil || declaration.Type.Params == nil || declaration.Type.Params.NumFields() > 2 {
 		return false
 	}
-	parameterNames := declaration.Type.Params.List[0].Names
-	if len(parameterNames) != 1 {
-		return false
+	// The audited value is the sole float64 parameter, identified by type rather
+	// than by position. A second parameter is permitted so the conversion can
+	// draw from the aggregate's WorldRNG, but it earns no exemption of its own:
+	// every proof below still binds to the value being converted, and a helper
+	// with no float64 parameter or with two of them is refused outright.
+	var parameter types.Object
+	for _, field := range declaration.Type.Params.List {
+		for _, name := range field.Names {
+			object := info.Defs[name]
+			if object == nil {
+				return false
+			}
+			basic, isBasic := object.Type().(*types.Basic)
+			if !isBasic || basic.Kind() != types.Float64 {
+				continue
+			}
+			if parameter != nil {
+				return false
+			}
+			parameter = object
+		}
 	}
-	parameter := info.Defs[parameterNames[0]]
 	if parameter == nil {
 		return false
 	}

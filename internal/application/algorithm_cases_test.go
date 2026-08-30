@@ -368,6 +368,16 @@ var algorithmCases = []algorithmCase{{
 		return digest(values...)
 	},
 }, {
+	field: "PopulationRoundingAlgorithm", current: "stochastic-v1", unsupported: "nearest-integer-v2",
+	probe: func(world *domain.World) string {
+		// The rounding rule's output is the integral population itself, taken
+		// together with the RNG state its draws advance.
+		state, err := world.ExportState()
+		return digest(state.RNGState, err, eachBand(world, func(band domain.Band) []any {
+			return []any{band.Population, domain.MaxPopulation}
+		}))
+	},
+}, {
 	field: "RNGAlgorithm", current: "pcg-splitmix-v1", unsupported: "xoshiro-v2",
 	probe: func(world *domain.World) string {
 		state, err := world.ExportState()
