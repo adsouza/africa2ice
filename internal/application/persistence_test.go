@@ -113,7 +113,7 @@ func TestDevelopmentSaveWithoutOutcomeReportRemainsCompatible(t *testing.T) {
 
 func TestAllAlgorithmFieldsArePopulated(t *testing.T) {
 	value := reflect.ValueOf(supportedAlgorithms)
-	if value.NumField() != 32 {
+	if value.NumField() != 33 {
 		t.Fatalf("algorithm field count = %d", value.NumField())
 	}
 	for index := 0; index < value.NumField(); index++ {

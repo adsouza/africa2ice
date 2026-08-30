@@ -45,8 +45,8 @@ func TestAcuteProbabilitiesAreCappedAndCrossingSpecific(t *testing.T) {
 	habitat := world.habitat[band.TileID]
 	season, _ := SeasonForTurn(0)
 	work := [AcuteKindCount]float64{1, 1, 1, 1, 0}
-	ordinary := AcuteProbabilities(band, tile, habitat, season, work, false, NorthWallacea)
-	crossing := AcuteProbabilities(band, tile, habitat, season, work, true, NorthWallacea)
+	ordinary := AcuteProbabilities(band, tile, habitat, season, work, false, NorthWallacea, 0)
+	crossing := AcuteProbabilities(band, tile, habitat, season, work, true, NorthWallacea, 0)
 	total := 0.0
 	for _, probability := range crossing {
 		total += probability

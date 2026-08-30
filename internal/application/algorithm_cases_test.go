@@ -212,7 +212,7 @@ var algorithmCases = []algorithmCase{{
 			geography, habitat, season := bandContext(world, band)
 			workRisk := [domain.AcuteKindCount]float64{}
 			workRisk[domain.AcutePredation] = 0.04
-			return []any{domain.AcuteProbabilities(band, geography, habitat, season, workRisk, false, domain.PassageCount)}
+			return []any{domain.AcuteProbabilities(band, geography, habitat, season, workRisk, false, domain.PassageCount, 0)}
 		})
 	},
 }, {
@@ -338,6 +338,34 @@ var algorithmCases = []algorithmCase{{
 			disease, genetic := domain.Phase3HealthLosses(band, geography, habitat, season)
 			return []any{seasonal, chronic, disease, genetic}
 		})
+	},
+}, {
+	field: "KinSupportAlgorithm", current: "saturating-kin-acute-v1", unsupported: "linear-kin-contact-v2",
+	probe: func(world *domain.World) string {
+		// The remaining-risk factor each band derives from its living
+		// same-species neighbours, recomputed from published state.
+		bands := world.Bands()
+		grid := world.Grid()
+		values := make([]any, 0, len(bands))
+		for _, band := range bands {
+			contacts := 0
+			for _, other := range bands {
+				if other.ID == band.ID || other.Population == 0 || band.Population == 0 || other.Species != band.Species {
+					continue
+				}
+				inContact := other.TileID == band.TileID
+				for _, edge := range grid.OrdinaryEdges(band.TileID) {
+					if edge.To == other.TileID {
+						inContact = true
+					}
+				}
+				if inContact {
+					contacts++
+				}
+			}
+			values = append(values, band.ID, contacts, domain.KinSupportRemainingRisk(contacts))
+		}
+		return digest(values...)
 	},
 }, {
 	field: "RNGAlgorithm", current: "pcg-splitmix-v1", unsupported: "xoshiro-v2",

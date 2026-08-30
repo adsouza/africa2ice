@@ -44,6 +44,7 @@ type AlgorithmVersions struct {
 	PassageAlgorithm             string `json:"passage_algorithm"`
 	ResourceAlgorithm            string `json:"resource_algorithm"`
 	HazardAlgorithm              string `json:"hazard_algorithm"`
+	KinSupportAlgorithm          string `json:"kin_support_algorithm"`
 	RNGAlgorithm                 string `json:"rng_algorithm"`
 }
 
@@ -63,7 +64,8 @@ var supportedAlgorithms = AlgorithmVersions{
 	GeneFlowAlgorithm: "local-reciprocal-v1", MutationAlgorithm: "rare-emergence-v1",
 	MovementAlgorithm: "eight-way-no-water-corners-v1", MovementCostAlgorithm: "destination-vegetation-v1",
 	PassageAlgorithm: "named-asymmetric-v1", ResourceAlgorithm: "toward-cap-v1",
-	HazardAlgorithm: "split-v1", RNGAlgorithm: "pcg-splitmix-v1",
+	HazardAlgorithm: "split-v1", KinSupportAlgorithm: "saturating-kin-acute-v1",
+	RNGAlgorithm: "pcg-splitmix-v1",
 }
 
 type SaveState struct {

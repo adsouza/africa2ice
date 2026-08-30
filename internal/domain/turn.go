@@ -127,6 +127,11 @@ func (world *World) AdvanceTurn() error {
 		}
 	}
 
+	// Counted before phase 3 changes any population, so a band's kin bonus
+	// reflects start-of-turn neighbours rather than whichever bands this loop
+	// happens to have already resolved.
+	kinContacts := kinContactCounts(nextBands, world.grid)
+
 	for index := range nextBands {
 		band := &nextBands[index]
 		if band.Population <= 0 || nextHabitat[band.TileID].BaselineK <= 0 {
@@ -263,7 +268,7 @@ func (world *World) AdvanceTurn() error {
 			band.LastOutcomeReport.MacroHealthLoss = float64(healthBefore - band.Health)
 		}
 		healthBeforeAcute := band.Health
-		_, loss, occurred, err := ResolveAcute(band, geography, nextHabitat[band.TileID], season, work[index].acuteRisk, work[index].crossed, work[index].crossedPassage, world.rng)
+		_, loss, occurred, err := ResolveAcute(band, geography, nextHabitat[band.TileID], season, work[index].acuteRisk, work[index].crossed, work[index].crossedPassage, kinContacts[index], world.rng)
 		if err != nil {
 			return err
 		}

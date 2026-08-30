@@ -237,7 +237,7 @@ func acuteTechnologyMitigation(band Band, kind AcuteKind, class protectionClass)
 	return combinedTechnologyMitigation(effects...)
 }
 
-func AcuteProbabilities(band Band, tile TileGeography, habitat HabitatTile, season Season, workRisk [AcuteKindCount]float64, crossed bool, passage PassageID) [AcuteKindCount]float64 {
+func AcuteProbabilities(band Band, tile TileGeography, habitat HabitatTile, season Season, workRisk [AcuteKindCount]float64, crossed bool, passage PassageID, kinContacts int) [AcuteKindCount]float64 {
 	result := [AcuteKindCount]float64{}
 	for kind := AcuteKind(0); kind < AcuteKindCount; kind++ {
 		environmentWeight := 0.0
@@ -266,7 +266,13 @@ func AcuteProbabilities(band Band, tile TileGeography, habitat HabitatTile, seas
 	for index := range result {
 		result[index] = float64(result[index] * AcuteProbabilityScale)
 	}
-	total = float64(total * AcuteProbabilityScale)
+	// Kin support lowers every kind alike: a neighbouring band helps with a
+	// predator, a flood, or a fall without distinction.
+	kinRemaining := KinSupportRemainingRisk(kinContacts)
+	for index := range result {
+		result[index] = float64(result[index] * kinRemaining)
+	}
+	total = float64(total * AcuteProbabilityScale * kinRemaining)
 	if total > MaxAcuteProbability {
 		scale := MaxAcuteProbability / total
 		for index := range result {
@@ -276,8 +282,8 @@ func AcuteProbabilities(band Band, tile TileGeography, habitat HabitatTile, seas
 	return result
 }
 
-func ResolveAcute(band *Band, tile TileGeography, habitat HabitatTile, season Season, workRisk [AcuteKindCount]float64, crossed bool, passage PassageID, rng *WorldRNG) (AcuteKind, float64, bool, error) {
-	probabilities := AcuteProbabilities(*band, tile, habitat, season, workRisk, crossed, passage)
+func ResolveAcute(band *Band, tile TileGeography, habitat HabitatTile, season Season, workRisk [AcuteKindCount]float64, crossed bool, passage PassageID, kinContacts int, rng *WorldRNG) (AcuteKind, float64, bool, error) {
+	probabilities := AcuteProbabilities(*band, tile, habitat, season, workRisk, crossed, passage, kinContacts)
 	draw := rng.Float64()
 	cumulative := 0.0
 	selected := AcuteKindCount
