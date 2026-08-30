@@ -12,6 +12,10 @@ const (
 	WaterHealthLossRate   = 0.40
 	StarvationCoefficient = 0.10
 	PopulationGrowthRate  = 0.002
+
+	// MaxCrowdingDeclineFraction bounds how much of a band the logistic crowding
+	// term may remove in a single turn.
+	MaxCrowdingDeclineFraction = 0.25
 )
 
 var biomeForagingIndex = [BiomeCount]float64{1.20, 1.00, 0.75, 0.60, 0.40, 0.30}
@@ -179,13 +183,33 @@ func StarvationLoss(population, deficitFraction float64) float64 {
 	return float64(float64(population*StarvationCoefficient) * fractionSquared)
 }
 
+// LogisticGrowth returns the band's requested change in people for the turn.
+//
+// The decline it can request is bounded. §7 describes the crowding factor as
+// stopping growth for everyone standing on a full tile, but the same expression
+// is unbounded below: at thirty times capacity it removes most of the band in one
+// turn. That matters more than the magnitude suggests, because crowding is
+// reported as growth and belongs to no MortalityReport cause, so the people are
+// simply gone with every category reading zero and nothing in the UI able to
+// account for them. Bounding the decline to a fraction of the band makes an
+// over-capacity tile a sustained squeeze the player can see coming and answer,
+// by splitting and moving through a chokepoint in smaller groups, instead of a
+// single unexplained cull on the turn of arrival.
+//
+// A tile that cannot support anyone takes the same bound rather than annihilating
+// its occupants, so the function stays continuous as capacity approaches zero and
+// a climate shift under a settled band remains survivable long enough to answer.
 func LogisticGrowth(population, totalPopulation, effectiveK, deficitFraction float64) float64 {
-	if population <= 0 || effectiveK <= 0 {
-		return -population
+	if population <= 0 {
+		return 0
+	}
+	decline := -float64(population * MaxCrowdingDeclineFraction)
+	if effectiveK <= 0 {
+		return decline
 	}
 	base := float64(float64(PopulationGrowthRate*population) * (1 - totalPopulation/effectiveK))
 	if base > 0 {
 		return float64(base * (1 - clamp01(deficitFraction)))
 	}
-	return base
+	return max(base, decline)
 }

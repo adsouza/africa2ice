@@ -65,3 +65,53 @@ func TestFoodHealthStarvationAndGrowth(t *testing.T) {
 		t.Fatal("fed fraction removed all positive growth")
 	}
 }
+
+// The crowding term is a brake, not the model's largest killer. §7 describes a
+// tile at capacity as stopping growth for everyone standing on it; without a
+// bound the same expression removes most of a band in a single turn, and it does
+// so through the growth term, so no cause appears in the persisted
+// MortalityReport and nothing in the UI can explain it.
+func TestCrowdingDeclineIsBounded(t *testing.T) {
+	// The measured case: a band of 112 on a tile whose effective capacity has
+	// collapsed to roughly 1/30th of the people standing on it.
+	//
+	// The bound is computed here exactly as the production code computes it, from
+	// a float64 population rather than an untyped constant. Written as
+	// -112 * MaxCrowdingDeclineFraction both operands fold to an exact rational
+	// and the result differs from the runtime product by one ulp, which is enough
+	// to fail an otherwise correct implementation.
+	population := 112.0
+	got := LogisticGrowth(population, 112, 3.67, 0)
+	if limit := -float64(population * MaxCrowdingDeclineFraction); got < limit {
+		t.Errorf("crowding removed %v of a 112-person band in one turn, the bound is %v", -got, -limit)
+	}
+	if got >= 0 {
+		t.Errorf("a band 30x over capacity should still decline, got %v", got)
+	}
+
+	// A tile that cannot support anyone declines by the same bound rather than
+	// annihilating the band, so a climate shift under a settled band is
+	// survivable long enough to be seen and answered.
+	population = 50.0
+	got = LogisticGrowth(population, 50, 0, 0)
+	if limit := -float64(population * MaxCrowdingDeclineFraction); got < limit {
+		t.Errorf("zero capacity removed %v of a 50-person band, the bound is %v", -got, -limit)
+	}
+	if got >= 0 {
+		t.Errorf("zero capacity should still decline, got %v", got)
+	}
+}
+
+// The bound must not become a floor that all crowding decline snaps to: a mild
+// overshoot has to stay proportional, or crowding stops carrying information.
+func TestMildCrowdingDeclineIsNotClamped(t *testing.T) {
+	population := 100.0
+	got := LogisticGrowth(population, 110, 100, 0)
+	want := float64(float64(PopulationGrowthRate*population) * (1 - 110.0/100.0))
+	if math.Abs(got-want) > 1e-9 {
+		t.Errorf("mild overshoot = %v, want the unbounded %v", got, want)
+	}
+	if bound := -float64(population * MaxCrowdingDeclineFraction); got <= bound {
+		t.Fatalf("test is vacuous: %v already exceeds the bound %v", got, bound)
+	}
+}
