@@ -5,6 +5,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/adsouza/africa2ice/internal/domain"
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 )
 
@@ -273,5 +274,57 @@ func TestStorageMetadataProjectsCommitSequence(t *testing.T) {
 	metadata := mapStorageMetadata(SaveMetadata{SlotID: Auto2, CommitSequence: 42, Turn: 3})
 	if metadata.SlotID != int(Auto2) || metadata.SlotKind != gameapi.AutoSlot || metadata.CommitSequence != 42 {
 		t.Fatalf("projected metadata = %#v", metadata)
+	}
+}
+
+// The renderer cannot show a projected value the frame does not carry. This is
+// the middle link of that path: the domain computes the arrival crowding decline
+// per candidate, and it has to survive projection into gameapi.
+//
+// Asserting only that the projected value is finite and non-negative would pass
+// against a field that is never assigned, since zero satisfies both. So this
+// compares every projected candidate against the domain's own value, and
+// separately requires at least one of them to be non-zero, which is what makes
+// the comparison mean anything.
+func TestFrameCarriesTheProjectedCrowdingDecline(t *testing.T) {
+	service, err := NewGameService(29)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sawNonZero, compared := false, 0
+	for turn := 0; turn < 120 && !sawNonZero; turn++ {
+		frame, err := service.Snapshot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, band := range frame.Bands {
+			expected := map[domain.TileID]float64{}
+			for _, candidate := range service.world.MigrationCandidates(domain.BandID(band.ID)) {
+				expected[candidate.TileID] = candidate.CrowdingDecline
+			}
+			for _, candidate := range band.MigrationCandidates {
+				want, ok := expected[domain.TileID(candidate.TileID)]
+				if !ok {
+					t.Fatalf("band %d projected candidate %d the domain does not offer", band.ID, candidate.TileID)
+				}
+				if candidate.CrowdingDecline != want {
+					t.Fatalf("band %d candidate %d crowding decline = %v, domain says %v",
+						band.ID, candidate.TileID, candidate.CrowdingDecline, want)
+				}
+				compared++
+				if want > 0 {
+					sawNonZero = true
+				}
+			}
+		}
+		if _, err := service.EndTurn(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if compared == 0 {
+		t.Fatal("no candidates compared")
+	}
+	if !sawNonZero {
+		t.Fatal("no candidate ever projected a crowding decline, so the comparison above proves nothing")
 	}
 }

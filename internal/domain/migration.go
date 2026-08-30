@@ -19,8 +19,12 @@ type MigrationCandidate struct {
 	WaterSurvivalEquivalent float64
 	DestinationPopulation   uint64
 	WarningSuitability      float64
-	Passage                 PassageID
-	RequiresPassage         bool
+	// CrowdingDecline is the people the band would lose to the logistic crowding
+	// term on its first turn at this destination, or zero if the tile has room.
+	// It is a magnitude, not a signed growth value.
+	CrowdingDecline float64
+	Passage         PassageID
+	RequiresPassage bool
 }
 
 func (world *World) MigrationCandidates(id BandID) []MigrationCandidate {
@@ -91,11 +95,23 @@ func (world *World) scoreMigration(band Band, destination TileID, cost float64, 
 	if math.IsNaN(attraction) || math.IsInf(attraction, 0) || attraction < 0 {
 		attraction = 0
 	}
+	// What the crowding term will cost on arrival. The band joins whoever already
+	// stands there, so the capacity it is measured against is the whole tile's,
+	// matching the phase-3 rule that crowding uses the whole tile while growth
+	// uses the band. The deficit fraction is zero because a non-positive logistic
+	// result is never scaled by the fed fraction, so feeding cannot change it.
+	arrivalK := float64(ecologicalK * band.Technology.CapacityMultiplier())
+	crowdingDecline := 0.0
+	arriving := float64(band.Population)
+	if growth := LogisticGrowth(arriving, float64(destinationPopulation)+arriving, arrivalK, 0); growth < 0 {
+		crowdingDecline = -growth
+	}
 	return MigrationCandidate{
 		TileID: destination, Cost: cost, Attraction: attraction, EcologicalK: ecologicalK,
 		UsableFoodEquivalent: usableFood, WaterSurvivalEquivalent: waterSurvival,
 		DestinationPopulation: destinationPopulation, WarningSuitability: warningSuitability,
-		Passage: passage, RequiresPassage: requiresPassage,
+		CrowdingDecline: crowdingDecline,
+		Passage:         passage, RequiresPassage: requiresPassage,
 	}
 }
 

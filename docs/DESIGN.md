@@ -576,7 +576,7 @@ presence flag. The projection exposes that already-persisted intent so presentat
 the player selected; it adds no second queue or simulation authority. **Derived previews:**
 `OriginalResearchGainPreview`, the current tile's seasonal/chronic mortality-rate preview, the fixed nine-entry projected `ResearchOptions`
 availability/acquired/current-target view, the ranked `MigrationCandidates` with destination-specific
-seasonal/chronic mortality-rate previews, the freshly allocated co-located
+seasonal/chronic mortality-rate previews and an arrival crowding-decline preview, the freshly allocated co-located
 archaic `InterbreedCandidateIDs`, a fixed three-entry `PassageStatuses` array, and `Stress`. Together these let the HUD explain the band's
 capabilities, food outcome, and population change.
 
@@ -4677,7 +4677,19 @@ the isolated frame projection.
 Each `gameapi.Band` carries at most one `MigrationCandidate` per reachable edge, sorted by
 descending score and then ascending tile ID. A candidate exposes the score, its four inputs,
 the warning-suitability factor, `EdgeKind`, and optional passage ID so the HUD can explain the recommendation rather than present an
-opaque number. Candidate lists are derived and never serialized; snapshot/load recomputes them from
+opaque number.
+
+It also exposes `CrowdingDecline`: the people this band would lose to the logistic crowding term on
+its first turn at that destination, or zero where the tile has room. It is a magnitude rather than a
+signed growth value, and it is computed against the destination's whole-tile population plus the
+arriving band, matching the phase-3 rule that crowding uses the whole tile while growth uses the
+band; the deficit fraction is zero because a non-positive logistic result is never scaled by the fed
+fraction. Capacity alone cannot tell a player this — the same tile is ample for one band and lethal
+for another four times its size — and crowding is the largest population loss in the model wherever
+it applies, exceeding the previewed seasonal and chronic rates by orders of magnitude. It is a
+derived preview like the mortality rates beside it: not serialized, recomputed after load, consuming
+no RNG, and it adds no configuration input, being a projection of `LogisticGrowth` under the
+already-selected `r` and `MaxCrowdingDeclineFraction`. Candidate lists are derived and never serialized; snapshot/load recomputes them from
 persisted world state, including the destination biome and directed cost. Their count is bounded by
 `MaxGridNeighbors + MaxPassageEdgesPerTile`, with
 `MaxGridNeighbors = 8` and the closed passage table enforcing `MaxPassageEdgesPerTile = 2`. Tests

@@ -107,3 +107,32 @@ func tileInfoFixture() *gameapi.Frame {
 		}},
 	}
 }
+
+// The risk line named seasonal and chronic — the two smallest contributors to
+// population loss — and said nothing about crowding, which dominates whenever a
+// band moves onto a tile too small for it. In a traced case a band of 112 lost
+// 99 people in one turn with seasonal at 0.05% and chronic at 0.06%. The player
+// could read the target's capacity but was never told what taking this band
+// there would cost.
+func TestLiveabilityRiskLineNamesTheDominantCause(t *testing.T) {
+	summary := tileLiveabilitySummary{
+		heading: "TARGET", status: "arrow cursor · reachable", showDetails: true,
+		biome: "Savanna", region: "East Africa", ecologicalK: 11,
+		seasonalRisk: 0.0005, chronicRisk: 0.0006, hasRisk: true,
+		crowdingDecline: 28,
+	}
+	line := liveabilityLines(summary)[6]
+	if !strings.Contains(strings.ToLower(line), "crowding") {
+		t.Fatalf("risk line = %q, want the dominant cause named", line)
+	}
+	if !strings.Contains(line, "28") {
+		t.Fatalf("risk line = %q, want the projected loss in people", line)
+	}
+
+	// With room at the destination the line must stay exactly as it was, so the
+	// warning carries meaning by its absence too.
+	summary.crowdingDecline = 0
+	if line := liveabilityLines(summary)[6]; line != "Seasonal 0.05% · chronic 0.06%" {
+		t.Fatalf("uncrowded risk line = %q", line)
+	}
+}

@@ -46,3 +46,62 @@ func TestMigrationPreviewDoesNotMutateWorldOrRNG(t *testing.T) {
 		t.Fatal("migration preview changed durable state")
 	}
 }
+
+// A migration candidate must project what the crowding term will cost the band
+// on arrival. Seasonal and chronic rates are already previewed and are the two
+// smallest contributors to population loss; crowding is by far the largest when
+// a band steps onto a tile too small for it, and a player choosing a destination
+// has no way to anticipate it from capacity alone.
+func TestMigrationCandidatesProjectTheCrowdingDeclineOnArrival(t *testing.T) {
+	world, err := NewWorld(17)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, candidate := range world.MigrationCandidates(1) {
+		if math.IsNaN(candidate.CrowdingDecline) || math.IsInf(candidate.CrowdingDecline, 0) || candidate.CrowdingDecline < 0 {
+			t.Fatalf("invalid projected decline: %#v", candidate)
+		}
+	}
+
+	// The projection has to answer "what will taking *this* band there cost",
+	// so it must scale with the band. A founding band of 100 already draws a
+	// small warning on marginal neighbours; a band forty times larger must be
+	// warned about every reachable tile, and far more sharply.
+	band := world.bands[0]
+	founding := world.MigrationCandidates(band.ID)
+	if len(founding) == 0 {
+		t.Fatal("no candidates to test")
+	}
+	foundingTotal, foundingWarned := 0.0, 0
+	for _, candidate := range founding {
+		foundingTotal += candidate.CrowdingDecline
+		if candidate.CrowdingDecline > 0 {
+			foundingWarned++
+		}
+	}
+	if foundingWarned == len(founding) {
+		t.Fatalf("every tile warned a founding band of %d, so the projection is not discriminating", band.Population)
+	}
+
+	world.bands[0].Population = 4000
+	crowded := world.MigrationCandidates(band.ID)
+	projected := 0
+	for _, candidate := range crowded {
+		if candidate.CrowdingDecline > 0 {
+			projected++
+		}
+		if limit := float64(4000 * MaxCrowdingDeclineFraction); candidate.CrowdingDecline > limit {
+			t.Fatalf("projected decline %v exceeds the per-turn bound %v", candidate.CrowdingDecline, limit)
+		}
+	}
+	if projected != len(crowded) {
+		t.Fatalf("only %d of %d candidates warned a 4000-person band, want every one", projected, len(crowded))
+	}
+	crowdedTotal := 0.0
+	for _, candidate := range crowded {
+		crowdedTotal += candidate.CrowdingDecline
+	}
+	if crowdedTotal <= foundingTotal {
+		t.Fatalf("a 4000-person band projected %v against the founding band's %v; the warning must scale with the band", crowdedTotal, foundingTotal)
+	}
+}

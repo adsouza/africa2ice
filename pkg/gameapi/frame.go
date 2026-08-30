@@ -194,8 +194,11 @@ type MigrationCandidate struct {
 	WarningSuitability      float64
 	SeasonalMortalityRate   float64
 	ChronicMortalityRate    float64
-	Passage                 PassageID
-	RequiresPassage         bool
+	// CrowdingDecline is the people this band would lose to crowding on its
+	// first turn at the destination, or zero if the tile has room for it.
+	CrowdingDecline float64
+	Passage         PassageID
+	RequiresPassage bool
 }
 
 type EventKind uint8

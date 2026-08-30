@@ -143,6 +143,7 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 				WaterSurvivalEquivalent: candidate.WaterSurvivalEquivalent, DestinationPopulation: candidate.DestinationPopulation,
 				WarningSuitability:    candidate.WarningSuitability,
 				SeasonalMortalityRate: seasonalMortalityRate, ChronicMortalityRate: chronicMortalityRate,
+				CrowdingDecline: candidate.CrowdingDecline,
 				Passage:         gameapi.PassageID(candidate.Passage),
 				RequiresPassage: candidate.RequiresPassage,
 			})

@@ -41,6 +41,7 @@ type tileLiveabilitySummary struct {
 	degradation        float64
 	seasonalRisk       float64
 	chronicRisk        float64
+	crowdingDecline    float64
 	hasRisk            bool
 	temperatureC       float64
 	naturalShelter     float64
@@ -82,6 +83,7 @@ func targetTileSummary(frame *gameapi.Frame, band *gameapi.Band, preview Migrati
 		summary.status = status + " · reachable"
 		summary.seasonalRisk = candidate.SeasonalMortalityRate
 		summary.chronicRisk = candidate.ChronicMortalityRate
+		summary.crowdingDecline = candidate.CrowdingDecline
 		summary.hasRisk = true
 	} else {
 		summary.status = status + " · not reachable"
@@ -145,9 +147,18 @@ func liveabilityLines(summary tileLiveabilitySummary) [8]string {
 	lines[3] = fmt.Sprintf("Plants %.0f · animals %.0f", summary.floraStock, summary.faunaStock)
 	lines[4] = fmt.Sprintf("Water %.0f/%.0f WU", summary.waterStock, summary.waterCap)
 	lines[5] = fmt.Sprintf("Capacity %.0f · degraded %.0f%%", summary.ecologicalK, summary.degradation*100)
-	if summary.hasRisk {
+	switch {
+	case summary.crowdingDecline > 0:
+		// Crowding dwarfs the per-person hazards whenever it applies at all — in a
+		// traced case by three orders of magnitude — so the line names it and
+		// carries the loss in people, which is what the choice actually costs.
+		// The column is about thirty-six characters wide, so the two hazard rates
+		// combine rather than being dropped.
+		lines[6] = fmt.Sprintf("Crowding −%.0f · hazards %.2f%%",
+			summary.crowdingDecline, float64((summary.seasonalRisk+summary.chronicRisk)*100))
+	case summary.hasRisk:
 		lines[6] = fmt.Sprintf("Seasonal %.2f%% · chronic %.2f%%", summary.seasonalRisk*100, summary.chronicRisk*100)
-	} else {
+	default:
 		lines[6] = "Risk unavailable for route"
 	}
 	lines[7] = fmt.Sprintf("Shelter %.0f%% · travel ×%.2f", summary.naturalShelter*100, summary.movementCost)
