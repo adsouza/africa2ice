@@ -30,6 +30,40 @@ const (
 	minSeedsReachingTargetPerPolicy = 1
 )
 
+// foundingSapiensBands is how many sapiens bands the scenario opens with. It is
+// derived rather than written down so that editing StartingAnchors cannot
+// silently weaken the subdivision margin below.
+func foundingSapiensBands() int {
+	count := 0
+	for _, anchor := range StartingAnchors {
+		if anchor.Species == HomoSapiens {
+			count++
+		}
+	}
+	return count
+}
+
+// minFinalEstablishedBands is the subdivision margin, and it exists because the
+// other three margins are all satisfiable by a campaign that never disperses.
+//
+// Total sapiens and the regional achievement record are both blind to band
+// count: achievements stay permanently true once earned, so a campaign that
+// touches Beringia at turn 200 and contracts to its founding tiles by turn 400
+// still reports a victory, and a founding band that doubles in place still
+// clears the survival margin. Both degenerate shapes were observed. A carrying
+// capacity high enough to remove crowding stops bands splitting at all, and the
+// model settles into the founding four growing past Dunbar's number while no
+// fifth band is ever founded; the same corpus then passes 48 of 48 with zero
+// variance, which is itself the tell.
+//
+// Requiring strictly more established bands than the scenario was founded with
+// is the weakest statement that rules this out: dispersal in this model happens
+// by splitting, so a campaign that disperses must end more subdivided than it
+// began. Like every margin here it is tighten-only, and it is deliberately set
+// at the floor so that it blocks the degenerate case without asserting a
+// population curve the design has not chosen.
+func minFinalEstablishedBands() int { return foundingSapiensBands() + 1 }
+
 func allRoutePolicies() []RoutePolicy {
 	return append([]RoutePolicy{ReferenceRoutePolicy}, DirectedRoutePolicies[:]...)
 }
@@ -81,6 +115,7 @@ func summarize(outcomes []CampaignOutcome) string {
 		var bestSapiens, worstSapiens uint64
 		var visited uint16
 		var targetPeak Population
+		bestFinalBands, worstFinalBands := 0, int(^uint(0)>>1)
 		worstSapiens = ^uint64(0)
 		established := uint16(0)
 		for _, outcome := range byPolicy[name] {
@@ -100,11 +135,14 @@ func summarize(outcomes []CampaignOutcome) string {
 			targetPeak = max(targetPeak, outcome.TargetPeakBand)
 			bestSapiens = max(bestSapiens, outcome.FinalSapiens)
 			worstSapiens = min(worstSapiens, outcome.FinalSapiens)
+			bestFinalBands = max(bestFinalBands, outcome.FinalEstablishedBands)
+			worstFinalBands = min(worstFinalBands, outcome.FinalEstablishedBands)
 		}
 		fmt.Fprintf(&report,
-			"\n  %-19s victory=%d extinction=%d dispersalFailed=%d targetReached=%d/%d finalSapiens=[%d..%d] regionsEverEstablished=%s regionsVisited=%s targetPeakBand=%d",
+			"\n  %-19s victory=%d extinction=%d dispersalFailed=%d targetReached=%d/%d finalSapiens=[%d..%d] finalEstablishedBands=[%d..%d] regionsEverEstablished=%s regionsVisited=%s targetPeakBand=%d",
 			name, victories, extinctions, failures, reachedTarget, len(byPolicy[name]),
-			worstSapiens, bestSapiens, establishedRegionList(established), establishedRegionList(visited), targetPeak)
+			worstSapiens, bestSapiens, worstFinalBands, bestFinalBands,
+			establishedRegionList(established), establishedRegionList(visited), targetPeak)
 	}
 	return report.String()
 }
@@ -177,6 +215,7 @@ func TestDomainViabilityGate(t *testing.T) {
 	reachedByPolicy := map[string]int{}
 	referenceReachedADestination := 0
 	referenceSurvivedToTurn400 := 0
+	referenceSubdivided := 0
 	for _, outcome := range outcomes {
 		if outcome.TargetReachedTurn >= 0 {
 			reachedByPolicy[outcome.Policy.Name]++
@@ -186,6 +225,9 @@ func TestDomainViabilityGate(t *testing.T) {
 		}
 		if outcome.Policy.Name == ReferenceRoutePolicy.Name && outcome.Result != CampaignExtinction && outcome.FinalSapiens >= minSurvivingSapiensAtTurn400 {
 			referenceSurvivedToTurn400++
+		}
+		if outcome.Policy.Name == ReferenceRoutePolicy.Name && outcome.FinalEstablishedBands >= minFinalEstablishedBands() {
+			referenceSubdivided++
 		}
 	}
 
@@ -201,5 +243,9 @@ func TestDomainViabilityGate(t *testing.T) {
 	}
 	if referenceSurvivedToTurn400 == 0 {
 		t.Errorf("the reference policy retained no turn-400 survival margin of %d sapiens%s", minSurvivingSapiensAtTurn400, report)
+	}
+	if referenceSubdivided == 0 {
+		t.Errorf("the reference policy ended no campaign with more than the %d founding bands still established, so the model grows its founders in place rather than dispersing%s",
+			foundingSapiensBands(), report)
 	}
 }

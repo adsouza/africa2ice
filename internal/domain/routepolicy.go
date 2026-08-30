@@ -76,6 +76,11 @@ type CampaignOutcome struct {
 	FirstDestinationTurn int
 	// TargetReachedTurn is the same for the policy's own target, or -1.
 	TargetReachedTurn int
+	// FinalEstablishedBands is how many sapiens bands still hold at least
+	// MinEstablishedBand people when the campaign ends. Total population alone
+	// cannot distinguish a dispersal from a handful of founding bands that grew
+	// fat in place, so the gate needs the count as well as the sum.
+	FinalEstablishedBands int
 }
 
 func destinationMask() uint16 {
@@ -416,8 +421,12 @@ func RunPolicyCampaign(seed uint64, policy RoutePolicy) (CampaignOutcome, error)
 
 	outcome.Result = world.Result()
 	for _, band := range world.Bands() {
-		if band.Species == HomoSapiens {
-			outcome.FinalSapiens += uint64(band.Population)
+		if band.Species != HomoSapiens {
+			continue
+		}
+		outcome.FinalSapiens += uint64(band.Population)
+		if band.Population >= MinEstablishedBand {
+			outcome.FinalEstablishedBands++
 		}
 	}
 	return outcome, nil
