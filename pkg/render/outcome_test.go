@@ -39,3 +39,36 @@ func TestSummarizeBandOutcomeIsUnavailableWithoutCompletedTurn(t *testing.T) {
 		t.Fatalf("zero report summarized as available: %#v", got)
 	}
 }
+
+// The crowding decline is the one population loss the domain does not record as
+// a mortality cause: it arrives as a negative Growth, and every MortalityReport
+// field reads zero while it happens. This summary is therefore the only place a
+// player is told about it, and the branch that produces it was previously
+// untested.
+func TestSummarizeBandOutcomeAttributesCrowdingDecline(t *testing.T) {
+	// Taken from a traced collapse: a band of 112 on a tile whose effective
+	// capacity had fallen far below it, losing the bounded maximum with no
+	// mortality cause recorded at all.
+	band := &gameapi.Band{
+		LastMortality: gameapi.MortalityReport{},
+		LastOutcomeReport: gameapi.OutcomeReport{
+			Turn: 143, StartingPopulation: 112, EndingPopulation: 84, Growth: -28,
+			StartingHealth: 1, EndingHealth: 1,
+		},
+	}
+	summary := summarizeBandOutcome(band)
+	if !summary.available || summary.populationDelta != -28 {
+		t.Fatalf("summary = %#v", summary)
+	}
+	if len(summary.populationLossCauses) != 1 {
+		t.Fatalf("population causes = %#v, want exactly the crowding cause", summary.populationLossCauses)
+	}
+	if got := summary.populationLossCauses[0]; got.label != "crowding / habitat limits" || math.Abs(got.magnitude-28) > 1e-12 {
+		t.Fatalf("cause = %#v", got)
+	}
+	// Without the branch the player would be told "demographic pressure", which
+	// names nothing and is what the fallback exists for.
+	if got := formatOutcomeCauses(summary.populationLossCauses, 2); got != "crowding / habitat limits" {
+		t.Fatalf("formatted = %q", got)
+	}
+}
