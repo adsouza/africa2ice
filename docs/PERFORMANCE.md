@@ -11,7 +11,8 @@ not, because a partially recorded baseline that reads as complete is worse than 
 sizes alongside, and fails in **both** directions: on growth past `MaxCompressedWasmBytes`, and on a
 ceiling that has gone stale enough to stop constraining the build. The budget lives in
 `tools/wasm_size_budget.env`; §10's direction rule makes it tighten-only, and the script refuses any
-value above Appendix C's original `5_500_000` ceiling.
+increase from CI's trusted base revision. The original `5_500_000` ceiling remains only the bootstrap
+upper bound for a history with no prior budget.
 
 Measured 2026-08-30 from a full `./build_web.sh --release` build — stripped, trimmed, and
 `wasm-opt -O3` optimized:

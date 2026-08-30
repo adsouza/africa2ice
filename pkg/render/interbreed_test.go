@@ -68,6 +68,15 @@ func TestControlHintsMentionInterbreedOnlyWhenAvailable(t *testing.T) {
 	}
 }
 
+func TestInterbreedHUDLineHasDedicatedVerticalSpace(t *testing.T) {
+	if migrationLegendY+hudSmallTextSize >= interbreedPanelLineY {
+		t.Fatal("interbreeding line overlaps the migration legend")
+	}
+	if interbreedPanelLineY+hudSmallTextSize >= fieldNotesPanelOriginY {
+		t.Fatal("Field Notes panel covers the interbreeding line")
+	}
+}
+
 func contains(haystack, needle string) bool {
 	return len(haystack) >= len(needle) && (haystack == needle || indexOf(haystack, needle) >= 0)
 }

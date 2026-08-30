@@ -11,7 +11,7 @@ const (
 	HealthRecoveryRate    = 0.05
 	WaterHealthLossRate   = 0.40
 	StarvationCoefficient = 0.10
-	PopulationGrowthRate  = 0.04
+	PopulationGrowthRate  = 0.002
 )
 
 var biomeForagingIndex = [BiomeCount]float64{1.20, 1.00, 0.75, 0.60, 0.40, 0.30}

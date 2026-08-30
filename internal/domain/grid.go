@@ -3,7 +3,8 @@ package domain
 import "math"
 
 type Grid struct {
-	tiles [TileCount]TileGeography
+	tiles  [TileCount]TileGeography
+	biomes []Biome
 }
 
 func (g *Grid) Tile(id TileID) (TileGeography, bool) {
@@ -18,6 +19,13 @@ func (g *Grid) Tiles() [TileCount]TileGeography {
 		return [TileCount]TileGeography{}
 	}
 	return g.tiles
+}
+
+func (g *Grid) biomeAt(turn int, id TileID) (Biome, bool) {
+	if g == nil || turn < 0 || turn > MaxCampaignTurn || id >= TileCount || len(g.biomes) != (MaxCampaignTurn+1)*TileCount {
+		return 0, false
+	}
+	return g.biomes[turn*TileCount+int(id)], true
 }
 
 type GridEdge struct {

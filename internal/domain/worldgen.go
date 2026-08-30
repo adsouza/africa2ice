@@ -79,6 +79,9 @@ func (WorldGenerator) Generate() (*Grid, error) {
 	}
 	grid.deriveCoasts()
 	grid.deriveMoisture(riverMask)
+	if err := grid.deriveBiomeHistory(); err != nil {
+		return nil, err
+	}
 	return grid, nil
 }
 

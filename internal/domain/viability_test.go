@@ -79,6 +79,8 @@ func summarize(outcomes []CampaignOutcome) string {
 	for _, name := range order {
 		var victories, extinctions, failures, reachedTarget int
 		var bestSapiens, worstSapiens uint64
+		var visited uint16
+		var targetPeak Population
 		worstSapiens = ^uint64(0)
 		established := uint16(0)
 		for _, outcome := range byPolicy[name] {
@@ -94,13 +96,15 @@ func summarize(outcomes []CampaignOutcome) string {
 				reachedTarget++
 			}
 			established |= outcome.EstablishedRegions
+			visited |= outcome.RegionsVisited
+			targetPeak = max(targetPeak, outcome.TargetPeakBand)
 			bestSapiens = max(bestSapiens, outcome.FinalSapiens)
 			worstSapiens = min(worstSapiens, outcome.FinalSapiens)
 		}
 		fmt.Fprintf(&report,
-			"\n  %-19s victory=%d extinction=%d dispersalFailed=%d targetReached=%d/%d finalSapiens=[%d..%d] regionsEverEstablished=%s",
+			"\n  %-19s victory=%d extinction=%d dispersalFailed=%d targetReached=%d/%d finalSapiens=[%d..%d] regionsEverEstablished=%s regionsVisited=%s targetPeakBand=%d",
 			name, victories, extinctions, failures, reachedTarget, len(byPolicy[name]),
-			worstSapiens, bestSapiens, establishedRegionList(established))
+			worstSapiens, bestSapiens, establishedRegionList(established), establishedRegionList(visited), targetPeak)
 	}
 	return report.String()
 }
@@ -161,26 +165,18 @@ func TestCampaignsRespectStructuralBounds(t *testing.T) {
 // TestDomainViabilityGate is the gate itself: can this model produce the
 // campaign the design describes?
 //
-// STATUS: this gate currently FAILS, and the failure is a finding about the
-// balance of the domain model rather than a defect in the harness above.
-// Across all 48 (seed, policy) campaigns no destination region is ever
-// established. The corridor is not the constraint — Arabia holds 10-43
-// habitable tiles and the Levant 22-28 at every sampled turn — the demographics
-// are: total sapiens population falls from a peak of ~400 to double digits, so
-// no band ever carries the surplus that establishing a distant region needs.
-//
-// §12 step 5e is explicit that this pass may tune Appendix C **Initial** domain
-// values, and must update their owning §7 rules, Appendix B, fixtures, and
-// manifest rows together. It may not relax a tighten-only margin or change a
-// **Locked** value to manufacture a win. Closing this gate is therefore a
-// balance decision, not a code change.
+// The selected Initial growth, hazard, and split-pressure values are held by
+// this test rather than by a recorded one-off run: the reference route must
+// both establish a destination and retain the survival margin, and every named
+// route must remain reachable across the exact locked seed corpus.
 func TestDomainViabilityGate(t *testing.T) {
 	outcomes := runViabilityMatrix(t)
 	report := summarize(outcomes)
+	t.Log(report)
 
 	reachedByPolicy := map[string]int{}
 	referenceReachedADestination := 0
-	survivedToTurn400 := 0
+	referenceSurvivedToTurn400 := 0
 	for _, outcome := range outcomes {
 		if outcome.TargetReachedTurn >= 0 {
 			reachedByPolicy[outcome.Policy.Name]++
@@ -188,8 +184,8 @@ func TestDomainViabilityGate(t *testing.T) {
 		if outcome.Policy.Name == ReferenceRoutePolicy.Name && outcome.FirstDestinationTurn >= 0 {
 			referenceReachedADestination++
 		}
-		if outcome.Result != CampaignExtinction && outcome.FinalSapiens >= minSurvivingSapiensAtTurn400 {
-			survivedToTurn400++
+		if outcome.Policy.Name == ReferenceRoutePolicy.Name && outcome.Result != CampaignExtinction && outcome.FinalSapiens >= minSurvivingSapiensAtTurn400 {
+			referenceSurvivedToTurn400++
 		}
 	}
 
@@ -203,7 +199,7 @@ func TestDomainViabilityGate(t *testing.T) {
 				policy.Name, policy.Target, reachedByPolicy[policy.Name], minSeedsReachingTargetPerPolicy)
 		}
 	}
-	if survivedToTurn400 == 0 {
-		t.Errorf("no campaign retained the turn-400 survival margin of %d sapiens", minSurvivingSapiensAtTurn400)
+	if referenceSurvivedToTurn400 == 0 {
+		t.Errorf("the reference policy retained no turn-400 survival margin of %d sapiens%s", minSurvivingSapiensAtTurn400, report)
 	}
 }

@@ -17,10 +17,10 @@ func TestSameSpeciesGeneFlowIsReciprocalAndPopulationWeighted(t *testing.T) {
 	}
 	applyKnowledgeAndGenetics(bands, grid, nil, nil, NewWorldRNG(1))
 	mix := SameSpeciesGeneFlowRate / (1 + SameSpeciesGeneFlowRate)
-	if got, want := float64(bands[0].Heritable[ColdAdaptation]), 0.2+mix*0.6; math.Abs(got-want) > 1e-12 {
+	if got, want := float64(bands[0].Heritable[ColdAdaptation]), 0.2+float64(mix*0.6); math.Abs(got-want) > 1e-12 {
 		t.Fatalf("recipient trait = %.15f, want %.15f", got, want)
 	}
-	if got, want := float64(bands[1].Heritable[ColdAdaptation]), 0.8-mix*0.6; math.Abs(got-want) > 1e-12 {
+	if got, want := float64(bands[1].Heritable[ColdAdaptation]), 0.8-float64(mix*0.6); math.Abs(got-want) > 1e-12 {
 		t.Fatalf("partner trait = %.15f, want %.15f", got, want)
 	}
 }
@@ -33,7 +33,7 @@ func TestActiveInterbreedingCreatesCrossSpeciesGeneFlow(t *testing.T) {
 	}
 	applyKnowledgeAndGenetics(bands, grid, nil, nil, NewWorldRNG(2))
 	mix := InterbreedGeneFlowRate / (1 + InterbreedGeneFlowRate)
-	if got, want := float64(bands[0].Heritable[ColdAdaptation]), 0.1+mix*0.8; math.Abs(got-want) > 1e-12 {
+	if got, want := float64(bands[0].Heritable[ColdAdaptation]), 0.1+float64(mix*0.8); math.Abs(got-want) > 1e-12 {
 		t.Fatalf("introgressed trait = %.15f, want %.15f", got, want)
 	}
 }
@@ -67,7 +67,7 @@ func TestKnowledgeDiffusionDoesNotRelayInSameTurn(t *testing.T) {
 	}
 	bands[0].Technology.Progress[Firecraft] = ResearchCost[Firecraft]
 	applyKnowledgeAndGenetics(bands, grid, nil, nil, NewWorldRNG(3))
-	if got := bands[1].Technology.Progress[Firecraft]; got != DiffusionRate*ResearchCost[Firecraft] {
+	if got := bands[1].Technology.Progress[Firecraft]; got != float64(DiffusionRate*ResearchCost[Firecraft]) {
 		t.Fatalf("direct diffusion = %v", got)
 	}
 	if got := bands[2].Technology.Progress[Firecraft]; got != 0 {

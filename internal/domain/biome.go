@@ -6,6 +6,8 @@ const (
 	TundraSplitTempC      = 0.0
 	CanopyClosureV        = 0.90
 	MaxMovementCost       = 2.75
+	BiomeChurnCap         = 12
+	MinBiomeDwellTurns    = 15
 )
 
 var biomeCapacityFactor = [BiomeCount]float64{1, 1, 1.15, 0.65, 1, 1}

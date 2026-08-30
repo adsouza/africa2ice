@@ -40,8 +40,8 @@ func GeoAt(x, y int) (GeoPoint, error) {
 	if _, err := TileIDAt(x, y); err != nil {
 		return GeoPoint{}, err
 	}
-	lon := MinLongitude + float64(x)*(MaxLongitude-MinLongitude)/float64(MapWidth-1)
-	lat := MaxLatitude - float64(y)*(MaxLatitude-MinLatitude)/float64(MapHeight-1)
+	lon := MinLongitude + float64(float64(x)*(MaxLongitude-MinLongitude))/float64(MapWidth-1)
+	lat := MaxLatitude - float64(float64(y)*(MaxLatitude-MinLatitude))/float64(MapHeight-1)
 	return GeoPoint{Longitude: lon, Latitude: lat}, nil
 }
 
@@ -49,8 +49,8 @@ func ProjectGeo(point GeoPoint) (GridPoint, error) {
 	if point.Longitude < MinLongitude || point.Longitude > MaxLongitude || point.Latitude < MinLatitude || point.Latitude > MaxLatitude {
 		return GridPoint{}, ErrInvalidCoordinate
 	}
-	x := (point.Longitude - MinLongitude) * float64(MapWidth-1) / (MaxLongitude - MinLongitude)
-	y := (MaxLatitude - point.Latitude) * float64(MapHeight-1) / (MaxLatitude - MinLatitude)
+	x := float64((point.Longitude-MinLongitude)*float64(MapWidth-1)) / (MaxLongitude - MinLongitude)
+	y := float64((MaxLatitude-point.Latitude)*float64(MapHeight-1)) / (MaxLatitude - MinLatitude)
 	return GridPoint{X: x, Y: y}, nil
 }
 

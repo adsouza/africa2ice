@@ -40,12 +40,44 @@ test -f "$budget" || {
 # shellcheck source=tools/wasm_size_budget.env
 . "$budget"
 
-# The one-way property, enforced rather than trusted: the live ceiling may sit
-# at or below Appendix C's original, never above it.
+# The original ceiling is the bootstrap bound. The comparison against the
+# trusted base revision below is what makes every later reduction permanent.
 if [ "$MaxCompressedWasmBytes" -gt "$AppendixCOriginalCeiling" ]; then
 	echo "check_wasm_size: MaxCompressedWasmBytes=$MaxCompressedWasmBytes exceeds Appendix C's original ceiling of $AppendixCOriginalCeiling." >&2
 	echo "  The direction rule for this row is tighten only. Raising it is not a way to pass a failing build." >&2
 	exit 1
+fi
+
+requested_base_ref="${WASM_SIZE_BASE_REF:-}"
+base_ref="${requested_base_ref:-HEAD^}"
+case "$base_ref" in
+	0000000000000000000000000000000000000000) base_ref=HEAD^ ;;
+esac
+base_budget=""
+if git rev-parse --verify "$base_ref^{commit}" >/dev/null 2>&1; then
+	base_budget="$(git show "$base_ref:tools/wasm_size_budget.env" 2>/dev/null || true)"
+elif [ -n "$requested_base_ref" ]; then
+	echo "check_wasm_size: trusted base revision $base_ref is unavailable" >&2
+	exit 2
+fi
+if [ -n "$base_budget" ]; then
+	base_ceiling="$(printf '%s\n' "$base_budget" | sed -n 's/^MaxCompressedWasmBytes=//p')"
+	base_headroom="$(printf '%s\n' "$base_budget" | sed -n 's/^CompressedWasmHeadroom=//p')"
+	case "$base_ceiling:$base_headroom" in
+		*[!0-9:]* | :* | *:) echo "check_wasm_size: $base_ref has an invalid wasm budget" >&2; exit 2 ;;
+	esac
+	if [ "$MaxCompressedWasmBytes" -gt "$base_ceiling" ]; then
+		echo "check_wasm_size: MaxCompressedWasmBytes increased from $base_ceiling at $base_ref to $MaxCompressedWasmBytes." >&2
+		echo "  This policy is tighten-only; restore or lower the trusted-base ceiling." >&2
+		exit 1
+	fi
+	if [ "$CompressedWasmHeadroom" -gt "$base_headroom" ]; then
+		echo "check_wasm_size: CompressedWasmHeadroom increased from $base_headroom at $base_ref to $CompressedWasmHeadroom." >&2
+		echo "  This policy is tighten-only; restore or lower the trusted-base headroom." >&2
+		exit 1
+	fi
+else
+	echo "check_wasm_size: no prior wasm budget at $base_ref; applying the bootstrap ceiling"
 fi
 
 raw_bytes="$(wc -c <"$wasm" | tr -d ' ')"

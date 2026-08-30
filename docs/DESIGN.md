@@ -1674,6 +1674,15 @@ label: a single value can express neither the hyperarid nor the scrub end of Sem
 discrete biome label remains the lookup key for regional fauna profiles, the endemic-disease table,
 and Appendix B.2's resource targets.
 
+`ClassifyBiome` produces an **instantaneous candidate**. The published biome table is derived once
+for all 401 turns in order so seasonal threshold crossings cannot make resource caps and movement
+grades flicker. Turn 0 publishes its candidate. On every later turn, a candidate different from the
+published biome must remain identical for `MinBiomeDwellTurns` consecutive turns before it replaces
+the published value; returning to the published biome resets the candidate run. The table is
+seed-independent, derived rather than saved, and `BuildHabitat` indexes it for the requested turn.
+This persistence rule does not smooth `V`, either temperature value, moisture, or the continuous
+capacity and movement curves; it stabilizes only the discrete lookup class.
+
 Validation requires `VegetationColdCutoffC < VegetationWarmthC`, finite coefficients, a finite `V`
 within `[0, 1]` for all 6,144 tiles at all 401 supported turns, and the three `V` thresholds strictly
 ordered within `(0, 1)`. The existing calibration assertions are restated against `V`: turn 0 must
@@ -5252,11 +5261,12 @@ ordered thresholds in `(0, 1)` separated by more than `2 * EpochHysteresis` and 
 unreachable by its own hysteresis band against the clamped index; a reference trajectory entering
 all three epochs at least once across the 401 turns; `MinBiomeDwellTurns = 15`, so no tile may hold
 a biome for fewer than fifteen consecutive turns before reclassifying again; and `BiomeChurnCap =
-12` — no tile may change biome more than twelve times across the campaign. Because the classifier
-reads seed-independent `HabitatTemperatureC`, these gates are checked exhaustively over exactly
-`6,144 * 401` tile-turn states; no seed corpus substitutes for that proof. A configuration that
-would flicker tiles is rejected rather than clamped
-at runtime. The dwell floor is derived from Appendix B.2 rather than chosen. Closing 90% of a
+12` — no tile may change biome more than twelve times across the campaign. Because the candidate
+classifier and the persistence fold read seed-independent `HabitatTemperatureC`, these gates are
+checked exhaustively over exactly `6,144 * 401` tile-turn states; no seed corpus substitutes for
+that proof. The dwell floor is enforced by the derived table rather than by mutating runtime state;
+a configuration whose resulting table exceeds the churn cap is rejected. The dwell floor is derived
+from Appendix B.2 rather than chosen. Closing 90% of a
 toward-cap gap at gap-recovery fraction `g` takes `ceil(ln(0.10) / ln(1 - g))` turns, so
 
 ```text
@@ -5522,13 +5532,14 @@ P_grown        = max(0, P + Growth)
 seasonal_component_rate[c] = SeasonalRisk(origin, Season, c)
                              · SeasonalRemainingRisk(b, c)
                              · SeasonalGeneticRemainingRisk(b, c)
-seasonal_rate  = sum_c(seasonal_component_rate[c])
+seasonal_rate  = SeasonalMortalityScale · sum_c(seasonal_component_rate[c])
 raw_seasonal   = P · seasonal_rate
 chronic_component_rate[c] = ChronicRisk(origin, c) · HealthVulnerability(b)
                             · ChronicRemainingRisk(b, c)
                             · GeneticRemainingRisk(b, c)
 genetic_burden_rate = GeneticBurdenRate(b, origin)
-chronic_rate   = clamp(sum_c(chronic_component_rate[c]) + genetic_burden_rate,
+chronic_rate   = clamp(ChronicMortalityScale
+                       · (sum_c(chronic_component_rate[c]) + genetic_burden_rate),
                        0, MaxChronicRate)
 raw_chronic    = P · chronic_rate
 raw_mortality  = raw_starvation + raw_seasonal + raw_chronic
@@ -5545,13 +5556,14 @@ or capped mortality estimate. The persisted mortality breakdown therefore preser
 fractional estimates, while current population is always an integer-valued count. Validation rejects
 fractional JSON populations and values above `MaxPopulation = 2^32 - 1` during decoding.
 
-The approved initial logistic coefficient is **`r = 0.04` per game turn** for both species. At
-negligible crowding and full feeding it requests growth of approximately 4% of the band's
+The approved initial logistic coefficient is **`r = 0.002` per game turn** for both species. At
+negligible crowding and full feeding it requests growth of approximately 0.2% of the band's
 start-of-turn population before other effects. It is not an annual rate and is deliberately held
 constant across campaign eras even though the calendar span represented by a turn changes. Era
-duration therefore affects the displayed chronology, not this simulation coefficient. The value is
-an initial balance parameter within this design's `0.03`–`0.05` range and remains tunable in
-§12.
+duration therefore affects the displayed chronology, not this simulation coefficient. Step 5e's
+whole-campaign pass selected the value together with the mortality scales below: higher per-turn
+growth drove whole-tile crowding decline faster than outward dispersal could relieve it. It remains
+an Initial balance parameter tunable in §12.
 
 **Crowding uses the whole tile, growth uses the band.** The logistic term has two distinct
 population inputs and they are deliberately different. The leading `r · P` scales the band's own
@@ -5573,8 +5585,8 @@ allocator rather than through this term.
 current `K_eff`, the origin's start-of-turn `P_total_origin`, and the band's own start-of-turn `P`.
 If it is positive, multiply it by the fraction of food
 needs actually met, `1 - FoodDeficitFraction`; otherwise leave it unchanged. Both species use the
-same rule. A logistic gain of four people becomes four, two, or zero when the band is fully fed,
-half-fed, or completely unfed. A logistic decline of four people remains minus four in all three
+same rule. An analytic logistic gain of `0.2` people becomes `0.2`, `0.1`, or zero when the band is fully fed,
+half-fed, or completely unfed. An analytic logistic decline of `0.2` people remains `-0.2` in all three
 cases. Full feeding restores the unscaled logistic result, not extra growth from surplus food.
 
 Use the existing post-reserve fraction, not health, gross harvest, final population, or a second
@@ -5588,7 +5600,7 @@ capacity balance still need tuning together; this rule selects `r` but not the b
 capacities. `HazardAlgorithm: "split-v1"`
 owns this demographic coupling, with no new simulation input, RNG draw, or algorithm identifier.
 
-Fixtures lock `r = 0.04` and cover positive, zero, and negative `BaseGrowth` at deficit fractions `0`, `0.50`, and `1`,
+Fixtures lock `r = 0.002` and cover positive, zero, and negative `BaseGrowth` at deficit fractions `0`, `0.50`, and `1`,
 including zero growth at carrying capacity, a zero logistic coefficient, and valid tiny fractional
 growth whose combined phase-3 survivor result receives exactly one whole-person rounding. Co-location fixtures place two bands of 50 on a tile whose
 `K_eff` is 100 and assert that both compute zero `BaseGrowth`, not the positive growth a band-local
@@ -5680,6 +5692,13 @@ rule and is not added again as a duplicate mortality fraction. Likewise, the chr
 `CampDisease`/`Uncovered` entries are direct attrition and do not duplicate the separate endemic
 disease health-score table.
 
+The tables are relative per-turn risk weights. After component-specific technology, shelter,
+health, and genetic effects, multiply their stable sums by the selected Initial
+`SeasonalMortalityScale = 0.10` and `ChronicMortalityScale = 0.10`. Apply the chronic scale before
+`MaxChronicRate`; invalid or non-finite unscaled arithmetic is still rejected before scaling. The
+scales let the profile retain readable biome and season ratios while step 5e calibrates how quickly
+those weights remove people across a compressed 401-turn campaign.
+
 For each profile, select exactly one current-biome row (and one current season for the seasonal
 table), apply technology, camp, health-vulnerability where specified, and genetic factors to each
 component once, then sum in stable class order. Reject missing/duplicate biome-season keys,
@@ -5698,7 +5717,7 @@ must choose a modifier, mortality burden, or health burden for each channel and 
 application. `raw_seasonal` uses the equivalent component-specific genetic factor for temperature
 exposure. Genetic factors compose with technology/camp remaining risk in the documented component
 order; they do not reduce unrelated predation, shortage, or injury.
-`MaxChronicRate` is a fixed configuration constant bounding the summed, vulnerability-scaled chronic
+`MaxChronicRate` is a fixed configuration constant bounding the scaled, vulnerability-adjusted chronic
 rate before the shared mortality scale; the approved initial playtest value is **`0.25`**. It is the
 ceiling on the fraction of a band that persistent endemic disease, predation, and exposure can remove
 in one turn, after `HealthVulnerability` has already doubled the underlying components at zero
@@ -5786,6 +5805,7 @@ probability_component[k, c] = base_probability[k, c]
                               * ProbabilityRemainingRisk(b, k, c)
                               * GeneticProbabilityRemainingRisk(b, k, c)
 raw_probability[k] = sum_c(probability_component[k, c])
+probability[k] = AcuteProbabilityScale · raw_probability[k]
 ```
 
 `ProbabilityRemainingRisk(b, k, c)` is
@@ -5806,11 +5826,11 @@ linear-share rule above.
 `CrossingMishap` has a non-zero raw probability only when the band successfully traversed a named
 passage during phase 4; a canceled crossing supplies neither that weight nor a destination tile.
 Sum components in stable class order and event weights in stable kind order, validating that all
-components and totals are finite and non-negative. If the mitigated total exceeds
-`MaxAcuteProbability`, every raw probability is scaled by `MaxAcuteProbability / total` so their
-sum equals the cap; otherwise they are unchanged. An aggregate mitigated weight of `0.40` therefore
-scales to `0.25` at the initial cap, after which a draw in `[0, 0.25)` selects some event and a draw
-in `[0.25, 1)` selects none. Configuration validation requires
+components and totals are finite and non-negative. Multiply every event total by the selected
+Initial `AcuteProbabilityScale = 0.10`, then, if the scaled aggregate exceeds
+`MaxAcuteProbability`, scale every event probability proportionally so their sum equals the cap;
+otherwise leave them unchanged. An aggregate mitigated weight of `0.40` therefore becomes `0.04`
+under the selected scale and does not hit the `0.25` cap. Configuration validation requires
 `MaxAcuteProbability` in `[0, 1]`. The approved initial playtest value is **`0.25`**, so even a
 maximally capped band retains a `0.75` no-incident interval and, if held continuously at the cap,
 averages one acute incident per four turns. This is a per-band probability rather than a global
@@ -7398,16 +7418,15 @@ state, operation FIFO ordering, and deletion interrupted between tombstone publi
   it. Neither number is the exact byte count on the wire: Pages compresses on the fly at an
   unpublished quality, so `brotli -q 11` is a reproducible floor rather than a prediction. The gate
   exists to detect growth against a fixed, reproducible measurement, not to model a CDN.
-- **The budget is provisional until it is measured against real code, and then ratchets.** The
-  Appendix C value is a ceiling derived from a pre-implementation dependency skeleton, not from this
-  game. Ebitengine, Tetra3D, and `text/v2` together dominate it: the compiled dependency set alone
-  consumes most of the budget before `internal/domain` exists, and `wasm-opt -O3` moves decompressed
-  size and startup rather than transfer size, so it is not the lever that reclaims headroom. Step 2a
-  therefore reports the skeleton's measured sizes as soon as `go.mod` is fixed, and step 11 must
-  ratchet `MaxCompressedWasmBytes` down to the release build's measured Brotli size plus
-  `CompressedWasmHeadroom`. The manifest row carries the **tighten only** direction rule for the same
-  reason §13's reference-run margins do: a ceiling set generously before the work exists must not
-  survive as a gate that can never fail.
+- **The measured budget ratchets.** The original `5_500_000`-byte ceiling came from a
+  pre-implementation dependency skeleton. The first full release build reduced it to the current
+  Appendix C value: measured Brotli size plus `CompressedWasmHeadroom`, rounded to the ratchet
+  quantum. CI compares both the ceiling and headroom with `tools/wasm_size_budget.env` at the trusted
+  pull-request base or pre-push revision and rejects either value if it increased. The original
+  ceiling remains only a bootstrap upper bound; it cannot be used to reverse a later reduction.
+  Ebitengine, Tetra3D, and `text/v2` dominate transfer size, while `wasm-opt -O3` primarily changes
+  decompressed size and startup, so optimizing application and dependency reachability remains the
+  route for reclaiming compressed bytes.
 - `web/` is the complete deployable root. A release artifact contains `index.html`, the optimized
   `main.wasm`, the matching copied `wasm_exec.js`, and any future runtime assets under that directory;
   it contains no source tree or development-only files. Both compressed streams exist only to measure
@@ -9163,12 +9182,15 @@ Earlier fixtures use explicit values that are never release data.
 | `MinOutbreakHealthLoss`               | `0.05`                             | Initial |
 | `MaxOutbreakHealthLoss`               | `0.15`                             | Initial |
 | `MaxChronicRate`                      | `0.25`                             | Initial |
+| `SeasonalMortalityScale`              | `0.10`                             | Initial |
+| `ChronicMortalityScale`               | `0.10`                             | Initial |
+| `AcuteProbabilityScale`               | `0.10`                             | Initial |
 | Endemic camp/non-camp health rates    | six-biome table in §7              | Initial |
 | Health bounds and new-game value      | `[0, 1]`, new game `1.0`           | Locked  |
 | `HealthVulnerability` mapping         | `1 + (1 - Health)`, range `[1, 2]` | Locked  |
 | `MaxAcuteProbability`                 | `0.25`                             | Initial |
 | `MinAcuteLoss[k]` / `MaxAcuteLoss[k]` | §7 five-kind acute-severity table  | Initial |
-| `r` — logistic growth coefficient     | `0.04` per game turn               | Initial |
+| `r` — logistic growth coefficient     | `0.002` per game turn              | Initial |
 | Seasonal and chronic risk profiles    | §7 six-biome risk-profile tables   | Initial |
 | Technology mitigation effect tables   | §7 channel-specific mitigation table | Initial |
 
@@ -9288,7 +9310,7 @@ Earlier fixtures use explicit values that are never release data.
 
 | Constant                                                   | Value                                                                                           | Status  | Owning contract            |
 | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------- | -------------------------- |
-| `SplitStressThreshold`                                     | `0.9`                                                                                           | Initial | `BandAlgorithm`            |
+| `SplitStressThreshold`                                     | `0.5`                                                                                           | Initial | `BandAlgorithm`            |
 | `MinEstablishedBand`                                       | `20`                                                                                            | Initial | `BandAlgorithm`            |
 | `MaxPopulation`                                            | `2^32 - 1` whole people (`uint32`)                                                              | Locked  | `BandAlgorithm`            |
 | New-game band populations                                  | four sapiens `100` in East Africa; two archaic `100` in Levant; two archaic `100` in Frangistan | Locked  | scenario contract          |
@@ -9309,7 +9331,9 @@ Earlier fixtures use explicit values that are never release data.
 
 `SplitStressThreshold` previously appeared as the bare literal `0.9` in nine semantic places. It gates
 whether `SplitBand` is legal for the player and whether the archaic policy takes a spatial action, so
-it is a balance knob with no name — exactly the kind of value this manifest exists to hold.
+it is a balance knob with no name — exactly the kind of value this manifest exists to hold. Step 5e's
+whole-campaign viability pass selected `0.5`, allowing stressed populations to divide before
+whole-tile crowding turns a viable outward route into synchronized decline.
 
 V1 intentionally adds no founder-flow counter, `EverExitedAfrica` lineage flag, or `2,000`–`5,000`
 gameplay target. The first sapiens establishment in Arabia or the Levant triggers a sourced Field
@@ -9337,12 +9361,11 @@ the run, not the test. Recording these as retunable balance defaults would invit
 the rule forbids, and it is the knife-edge outcome §13 exists to prevent.
 
 `MaxCompressedWasmBytes` carries the same direction rule for a different reason. It is the one
-Policy row whose current value was set from a measurement of the *dependency skeleton* rather than of
-this game, so it is deliberately generous — generous enough that it would pass without ever
-constraining anything. §10 therefore requires step 11 to ratchet it to the measured release build
-plus `CompressedWasmHeadroom`, and the direction rule keeps that ratchet one-way. A ceiling that can
-only fall is a growth detector; one that may rise on demand is a number that records whatever the
-build happens to weigh.
+Policy row that began from a *dependency-skeleton* measurement rather than this game. The first full
+build has now ratcheted it to `4_050_000` bytes, including the selected headroom and quantum. CI
+compares the live ceiling and headroom with the trusted base revision, so the direction rule is
+mechanical rather than an appeal to reviewers. A ceiling that can only fall is a growth detector;
+one that may rise on demand is a number that records whatever the build happens to weigh.
 
 | Constant                                   | Value                                                          | Status                                          | Where |
 | ------------------------------------------ | -------------------------------------------------------------- | ----------------------------------------------- | ----- |
@@ -9358,7 +9381,7 @@ build happens to weigh.
 | Go toolchain                              | `1.26.4`                                                       | Locked                                          | §10/§13 |
 | Binaryen toolchain                        | `version_131`; Linux x86-64 SHA-256 `b5bf1f0eaf17c63ee588ff7a5954dc8f6ce2c26989051c66f24dfe9ece3e46db` | Locked | §10 |
 | Compressed-wasm measurement                | `brotli -q 11`; raw and `gzip -9` recorded alongside, not gated | Locked                                         | §10   |
-| `MaxCompressedWasmBytes`                   | `5_500_000` bytes                                              | Policy (tighten only: smaller ceiling)          | §10   |
+| `MaxCompressedWasmBytes`                   | `4_050_000` bytes                                              | Policy (tighten only: smaller ceiling)          | §10   |
 | `CompressedWasmHeadroom`                   | `500_000` bytes above the step-11 measured release build       | Policy (tighten only: smaller headroom)         | §10   |
 | Automated browser ready timeout            | `10` seconds on the optimized loopback-served bundle           | Policy                                          | §8/§10 |
 | Automated browser scripted checkpoint timeout | `5` seconds each                                             | Policy                                          | §8/§10 |

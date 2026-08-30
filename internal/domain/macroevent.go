@@ -30,12 +30,12 @@ type MacroImpact struct {
 	HealthLoss    float64
 }
 
-var directCampanianPlain = []coordinate{c(12.7, 41.5), c(14.8, 42.3), c(16.5, 41.2), c(15.8, 39.8), c(12.8, 40.0)}
-var proximalSouthernItaly = []coordinate{c(9.0, 44.5), c(14.0, 45.0), c(19.0, 43.0), c(20.0, 39.0), c(17.0, 36.0), c(12.0, 36.5), c(9.0, 40.0)}
+var directCampanianPlain = []coordinate{c(12.7*10, 41.5*10), c(14.8*10, 42.3*10), c(16.5*10, 41.2*10), c(15.8*10, 39.8*10), c(12.8*10, 40.0*10)}
+var proximalSouthernItaly = []coordinate{c(9.0*10, 44.5*10), c(14.0*10, 45.0*10), c(19.0*10, 43.0*10), c(20.0*10, 39.0*10), c(17.0*10, 36.0*10), c(12.0*10, 36.5*10), c(9.0*10, 40.0*10)}
 var wideCampanianPolygons = [][]coordinate{
-	{c(13.5, 40.0), c(18.0, 42.0), c(27.0, 40.0), c(34.0, 36.0), c(32.0, 31.0), c(22.0, 30.0), c(15.0, 34.0), c(13.0, 38.0)},
-	{c(15.0, 44.0), c(20.0, 48.0), c(28.0, 49.0), c(31.0, 46.0), c(30.0, 42.0), c(25.0, 39.0), c(19.0, 39.0), c(15.0, 41.0)},
-	{c(28.0, 48.0), c(33.0, 52.5), c(41.5, 53.0), c(44.0, 50.0), c(42.0, 46.0), c(35.0, 43.5), c(30.0, 45.0)},
+	{c(13.5*10, 40.0*10), c(18.0*10, 42.0*10), c(27.0*10, 40.0*10), c(34.0*10, 36.0*10), c(32.0*10, 31.0*10), c(22.0*10, 30.0*10), c(15.0*10, 34.0*10), c(13.0*10, 38.0*10)},
+	{c(15.0*10, 44.0*10), c(20.0*10, 48.0*10), c(28.0*10, 49.0*10), c(31.0*10, 46.0*10), c(30.0*10, 42.0*10), c(25.0*10, 39.0*10), c(19.0*10, 39.0*10), c(15.0*10, 41.0*10)},
+	{c(28.0*10, 48.0*10), c(33.0*10, 52.5*10), c(41.5*10, 53.0*10), c(44.0*10, 50.0*10), c(42.0*10, 46.0*10), c(35.0*10, 43.5*10), c(30.0*10, 45.0*10)},
 }
 
 func MacroEpisodeActive(turn int) bool {
@@ -87,11 +87,11 @@ func MacroImpactAt(tile TileGeography, turn int) MacroImpact {
 	default:
 		return impact
 	}
-	refugium := 0.20 * clamp01(tile.NaturalShelter)
-	impact.LossFraction = impact.Intensity * 0.40 * (1 - refugium)
+	refugium := float64(0.20 * clamp01(tile.NaturalShelter))
+	impact.LossFraction = float64(impact.Intensity * 0.40 * (1 - refugium))
 	if impact.LossFraction > 0.45 {
 		impact.LossFraction = 0.45
 	}
-	impact.HealthLoss = impact.Intensity * 0.25 * (1 - refugium)
+	impact.HealthLoss = float64(impact.Intensity * 0.25 * (1 - refugium))
 	return impact
 }

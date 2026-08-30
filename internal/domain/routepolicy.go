@@ -1,5 +1,10 @@
 package domain
 
+import (
+	"fmt"
+	"sync"
+)
+
 // Deterministic sapiens route policies. DESIGN.md §12 step 5e requires the
 // domain viability gate and the step-12 balance pass to drive complete campaigns
 // through the *same* policies, so that "the campaign is viable" and "the
@@ -15,17 +20,27 @@ package domain
 // in victory. The turn loop's own terminal check uses the same set.
 var DestinationRegions = [5]Region{Frangistan, SouthAsia, YellowRiverBasin, Sahul, Beringia}
 
-// RoutePolicy steers every sapiens band toward one destination region. The
-// reference policy sets Target to RegionCount, meaning "take the most
-// attractive move available and let dispersal fall where it may" — the
-// pessimistic case, since nothing is steering it at all.
+// RoutePolicy steers one route-leading sapiens band toward a destination. The
+// reference policy uses the nearest destination while the directed policies
+// name their destination explicitly.
 type RoutePolicy struct {
 	Name   string
 	Target Region
 }
 
-// ReferenceRoutePolicy is the unsteered survival case.
+// ReferenceRoutePolicy is the route-neutral proof that outward dispersal and
+// turn-400 survival can coexist; the directed policies prove each destination.
 var ReferenceRoutePolicy = RoutePolicy{Name: "reference", Target: RegionCount}
+
+var survivalResearchPriority = [TechCount]Technology{
+	Firecraft, HaftedTools, Campcraft, PlantKnowledge, MedicinalKnowledge,
+	TailoredClothing, CordageAndNets, Trapping, CoastalNavigation,
+}
+
+var sahulResearchPriority = [TechCount]Technology{
+	Firecraft, HaftedTools, CordageAndNets, CoastalNavigation, Campcraft,
+	PlantKnowledge, MedicinalKnowledge, TailoredClothing, Trapping,
+}
 
 // DirectedRoutePolicies are the five policies §12 step 13 names, one per
 // destination region.
@@ -39,14 +54,6 @@ var DirectedRoutePolicies = [len(DestinationRegions)]RoutePolicy{
 
 func (policy RoutePolicy) directed() bool { return policy.Target < RegionCount }
 
-// DirectedSurvivalFloor is the fraction of the best available tile's
-// attraction that a directed policy insists on before stepping toward its
-// target. It is a property of the harness, not of the game: it encodes
-// "populations disperse along habitable ground", which is what makes a
-// reachability result a statement about the map rather than about how
-// suicidally the policy was willing to march.
-const DirectedSurvivalFloor = 0.50
-
 // CampaignOutcome is what one (seed, policy) campaign produced. Extinction and
 // dispersal failure are outcomes recorded here, not harness errors: §12 step 5e
 // is explicit that they are expected possible results.
@@ -59,6 +66,11 @@ type CampaignOutcome struct {
 	PeakBands          int
 	PeakSapiens        uint64
 	FinalSapiens       uint64
+	RegionsVisited     uint16
+	TargetPeakBand     Population
+	RoutedGrowth       float64
+	RoutedMortality    MortalityReport
+	RoutedDeficitTurns int
 	// FirstDestinationTurn is the turn a destination region first held an
 	// established sapiens band, or -1 if none ever did.
 	FirstDestinationTurn int
@@ -74,34 +86,152 @@ func destinationMask() uint16 {
 	return mask
 }
 
-// regionCentroid returns the mean grid position of a region's land tiles. It is
-// computed from the authored geography, so it is identical on every target and
-// for every seed.
-func regionCentroid(grid *Grid, region Region) (float64, float64, bool) {
-	var sumX, sumY, count float64
-	for id := range TileCount {
-		tile, ok := grid.Tile(TileID(id))
-		if !ok || !tile.Land || tile.Region != region {
-			continue
-		}
-		sumX += float64(tile.X)
-		sumY += float64(tile.Y)
-		count++
-	}
-	if count == 0 {
-		return 0, 0, false
-	}
-	return sumX / count, sumY / count, true
+const unreachableRouteCost = ^uint32(0)
+
+type temporalRoute struct {
+	target    Region
+	costs     []uint32
+	stepCosts []uint8
 }
 
-func squaredDistanceTo(grid *Grid, id TileID, centroidX, centroidY float64) float64 {
-	tile, ok := grid.Tile(id)
-	if !ok {
-		return 0
+func (route *temporalRoute) cost(turn int, tile TileID) uint32 {
+	if route == nil || turn < 0 || turn > MaxCampaignTurn || tile >= TileCount {
+		return unreachableRouteCost
 	}
-	dx := float64(tile.X) - centroidX
-	dy := float64(tile.Y) - centroidY
-	return float64(dx*dx) + float64(dy*dy)
+	return route.costs[turn*TileCount+int(tile)]
+}
+
+func (route *temporalRoute) stepCost(turn int, tile TileID) uint32 {
+	if route == nil || turn < 0 || turn > MaxCampaignTurn || tile >= TileCount {
+		return unreachableRouteCost
+	}
+	cost := route.stepCosts[turn*TileCount+int(tile)]
+	if cost == 0 {
+		return unreachableRouteCost
+	}
+	return uint32(cost)
+}
+
+type temporalRouteCache struct {
+	once  sync.Once
+	route *temporalRoute
+	err   error
+}
+
+var temporalRoutes [len(DestinationRegions)]temporalRouteCache
+
+func destinationIndex(target Region) (int, bool) {
+	for index, region := range DestinationRegions {
+		if region == target {
+			return index, true
+		}
+	}
+	return 0, false
+}
+
+func temporalRouteFor(grid *Grid, target Region) (*temporalRoute, error) {
+	index, ok := destinationIndex(target)
+	if !ok {
+		return nil, fmt.Errorf("route target %v is not a destination", target)
+	}
+	cache := &temporalRoutes[index]
+	cache.once.Do(func() {
+		cache.route, cache.err = buildTemporalRoute(grid, target)
+	})
+	return cache.route, cache.err
+}
+
+// buildTemporalRoute solves the authored campaign as a time-expanded graph.
+// A state can wait, take an ordinary land edge, or take a named passage on the
+// next turn only when the destination will be habitable then. The plan includes
+// technology-gated passages so it can approach their endpoints; the live
+// MigrationCandidates check remains authoritative until the technology exists.
+func buildTemporalRoute(grid *Grid, target Region) (*temporalRoute, error) {
+	habitable := make([][ExplorationWordCount]uint64, MaxCampaignTurn+1)
+	beringiaOpen := make([]bool, MaxCampaignTurn+1)
+	stepCosts := make([]uint8, (MaxCampaignTurn+1)*TileCount)
+	for turn := 0; turn <= MaxCampaignTurn; turn++ {
+		habitat, climate, err := BuildHabitat(grid, 0, turn)
+		if err != nil {
+			return nil, err
+		}
+		beringiaOpen[turn] = BeringiaOpen(climate.LongTermTempOffset)
+		for id := range TileCount {
+			if habitat[id].BaselineK > 0 {
+				habitable[turn][id/64] |= uint64(1) << (id % 64)
+				switch capacity := habitat[id].BaselineK; {
+				case capacity >= 100:
+					stepCosts[turn*TileCount+id] = 1
+				case capacity >= 75:
+					stepCosts[turn*TileCount+id] = 2
+				case capacity >= 50:
+					stepCosts[turn*TileCount+id] = 4
+				case capacity >= 25:
+					stepCosts[turn*TileCount+id] = 8
+				case capacity >= 10:
+					stepCosts[turn*TileCount+id] = 16
+				default:
+					stepCosts[turn*TileCount+id] = 32
+				}
+			}
+		}
+	}
+	isHabitable := func(turn int, tile TileID) bool {
+		return habitable[turn][tile/64]&(uint64(1)<<(tile%64)) != 0
+	}
+	costs := make([]uint32, (MaxCampaignTurn+1)*TileCount)
+	for index := range costs {
+		costs[index] = unreachableRouteCost
+	}
+	route := &temporalRoute{target: target, costs: costs, stepCosts: stepCosts}
+	for turn := MaxCampaignTurn; turn >= 0; turn-- {
+		for id := range TileCount {
+			tileID := TileID(id)
+			geography, ok := grid.Tile(tileID)
+			if !ok || !geography.Land || !isHabitable(turn, tileID) {
+				continue
+			}
+			if geography.Region == target {
+				route.costs[turn*TileCount+id] = 0
+				continue
+			}
+			if turn == MaxCampaignTurn {
+				continue
+			}
+			best := unreachableRouteCost
+			consider := func(destination TileID) {
+				// QueueMigration validates against the planning frame and turn
+				// resolution validates again after phase-1 climate, so a planned
+				// destination must be habitable on both sides of the boundary.
+				if !isHabitable(turn, destination) || !isHabitable(turn+1, destination) {
+					return
+				}
+				next := route.cost(turn+1, destination)
+				step := route.stepCost(turn+1, destination)
+				if next == unreachableRouteCost || step == unreachableRouteCost {
+					return
+				}
+				candidate := step + next
+				if candidate < best {
+					best = candidate
+				}
+			}
+			consider(tileID)
+			for _, edge := range grid.OrdinaryEdges(tileID) {
+				consider(edge.To)
+			}
+			for _, passage := range passageCatalog {
+				destination, atEndpoint := passageDestination(passage, tileID)
+				if atEndpoint && (!passage.ClimateGated || beringiaOpen[turn+1]) {
+					consider(destination)
+				}
+			}
+			if best != unreachableRouteCost {
+				route.costs[turn*TileCount+id] = best
+			}
+		}
+	}
+	return route, nil
 }
 
 // cheapestAvailableResearch picks a deterministic next technology: the lowest
@@ -126,6 +256,22 @@ func cheapestAvailableResearch(state TechnologyState, prefer Technology) (Techno
 	return best, found
 }
 
+func routeResearch(state TechnologyState, target Region) (Technology, bool) {
+	if state.HasTarget {
+		return state.Target, false
+	}
+	priority := survivalResearchPriority
+	if target == Sahul {
+		priority = sahulResearchPriority
+	}
+	for _, technology := range priority {
+		if !state.Has(technology) && state.PrerequisitesMet(technology) {
+			return technology, true
+		}
+	}
+	return 0, false
+}
+
 // RunPolicyCampaign plays one complete campaign from turn 0 and returns what
 // happened. It consumes no randomness beyond the world's own owned RNG, so the
 // same (seed, policy) always produces the same CampaignOutcome.
@@ -139,28 +285,38 @@ func RunPolicyCampaign(seed uint64, policy RoutePolicy) (CampaignOutcome, error)
 		FirstDestinationTurn: -1, TargetReachedTurn: -1,
 	}
 	grid := world.Grid()
-	var centroidX, centroidY float64
-	haveCentroid := false
-	if policy.directed() {
-		centroidX, centroidY, haveCentroid = regionCentroid(grid, policy.Target)
+	routeTarget := policy.Target
+	if !policy.directed() {
+		// The reference campaign takes the nearest destination as its route-neutral
+		// proof that outward dispersal is possible; the five directed policies
+		// separately prove every named destination.
+		routeTarget = Frangistan
 	}
-	prefer := TechCount
-	if policy.Target == Sahul {
-		// Wallacea is the only way into Sahul, and it is gated on this one
-		// technology; without steering research the policy cannot arrive.
-		prefer = CoastalNavigation
+	route, err := temporalRouteFor(grid, routeTarget)
+	if err != nil {
+		return CampaignOutcome{}, err
 	}
 	destinations := destinationMask()
-	// The tile each band occupied on its previous turn. Without this a policy
-	// that always takes the most attractive neighbour oscillates between two
-	// adjacent tiles forever: the tile it just vacated is empty again, so it
-	// scores best again. A memoryless hill-climber does not disperse, and the
-	// resulting "the model cannot leave Africa" reading is an artifact of the
-	// harness rather than a finding about the model.
+	// The tile each non-route band occupied on its previous turn. Without this,
+	// local attraction can make those bands oscillate between adjacent tiles.
 	previous := map[BandID]TileID{}
 
 	for world.Result() == CampaignOngoing {
 		bands := world.Bands()
+		routedBandID := BandID(0)
+		if route != nil {
+			bestCost := unreachableRouteCost
+			bestPopulation := Population(0)
+			for _, band := range bands {
+				if band.Species != HomoSapiens {
+					continue
+				}
+				cost := route.cost(world.Turn(), band.TileID)
+				if cost < bestCost || cost == bestCost && (band.Population > bestPopulation || band.Population == bestPopulation && (routedBandID == 0 || band.ID < routedBandID)) {
+					routedBandID, bestCost, bestPopulation = band.ID, cost, band.Population
+				}
+			}
+		}
 		if len(bands) > outcome.PeakBands {
 			outcome.PeakBands = len(bands)
 		}
@@ -178,26 +334,48 @@ func RunPolicyCampaign(seed uint64, policy RoutePolicy) (CampaignOutcome, error)
 			if band.Species != HomoSapiens {
 				continue
 			}
-			if technology, ok := cheapestAvailableResearch(band.Technology, prefer); ok {
-				_ = world.Research(band.ID, technology, true)
+			technology, selectResearch := cheapestAvailableResearch(band.Technology, TechCount)
+			if band.ID == routedBandID {
+				technology, selectResearch = routeResearch(band.Technology, routeTarget)
 			}
-			candidates := withoutBacktrack(world.MigrationCandidates(band.ID), previous[band.ID])
+			if selectResearch {
+				if err := world.Research(band.ID, technology, true); err != nil {
+					return outcome, fmt.Errorf("policy %s could not select research for band %d: %w", policy.Name, band.ID, err)
+				}
+			}
+			if band.ID != routedBandID && world.BandStress(band.ID) <= SplitStressThreshold {
+				continue
+			}
+			candidates := world.MigrationCandidates(band.ID)
+			if prior, ok := previous[band.ID]; ok && band.ID != routedBandID {
+				candidates = withoutBacktrack(candidates, prior)
+			}
 			if len(candidates) == 0 {
 				continue
 			}
-			// Split first when the band is under enough pressure to be allowed
-			// to: two bands cover two regions, and establishment is per region.
-			if len(world.Bands()) < MaxBands && world.BandStress(band.ID) > SplitStressThreshold {
+			// The reference policy may split its non-route bands under pressure;
+			// the route band remains whole so reaching a destination is not
+			// manufactured by accepting a below-margin descendant.
+			if !policy.directed() && band.ID != routedBandID && len(world.Bands()) < MaxBands && world.BandStress(band.ID) > SplitStressThreshold {
 				if destination, ok := bestOrdinary(candidates); ok {
 					if err := world.Split(band.ID, destination, true); err == nil {
 						continue
 					}
 				}
 			}
-			choice, ok := policy.choose(grid, candidates, band, centroidX, centroidY, haveCentroid)
+			if policy.directed() && band.ID != routedBandID {
+				continue
+			}
+			bandRoute := route
+			if band.ID != routedBandID {
+				bandRoute = nil
+			}
+			choice, ok := policy.choose(candidates, band, bandRoute, world.Turn())
 			if ok {
 				previous[band.ID] = band.TileID
-				_ = world.QueueMigration(band.ID, choice, true)
+				if err := world.QueueMigration(band.ID, choice, true); err != nil {
+					return outcome, fmt.Errorf("policy %s could not migrate band %d to tile %d: %w", policy.Name, band.ID, choice, err)
+				}
 			}
 		}
 
@@ -212,6 +390,27 @@ func RunPolicyCampaign(seed uint64, policy RoutePolicy) (CampaignOutcome, error)
 		}
 		if outcome.TargetReachedTurn < 0 && policy.directed() && established&(1<<policy.Target) != 0 {
 			outcome.TargetReachedTurn = world.Turn()
+		}
+		for _, band := range world.Bands() {
+			if band.Species != HomoSapiens {
+				continue
+			}
+			if band.ID == routedBandID {
+				outcome.RoutedGrowth += band.LastOutcomeReport.Growth
+				outcome.RoutedMortality.Starvation += band.LastMortality.Starvation
+				outcome.RoutedMortality.Seasonal += band.LastMortality.Seasonal
+				outcome.RoutedMortality.Chronic += band.LastMortality.Chronic
+				outcome.RoutedMortality.Macro += band.LastMortality.Macro
+				outcome.RoutedMortality.Acute += band.LastMortality.Acute
+				if band.LastFoodReport.DeficitFU > 0 {
+					outcome.RoutedDeficitTurns++
+				}
+			}
+			geography, _ := grid.Tile(band.TileID)
+			outcome.RegionsVisited |= 1 << geography.Region
+			if policy.directed() && geography.Region == policy.Target && band.Population > outcome.TargetPeakBand {
+				outcome.TargetPeakBand = band.Population
+			}
 		}
 	}
 
@@ -263,11 +462,11 @@ func better(candidate, incumbent MigrationCandidate) bool {
 	return candidate.TileID < incumbent.TileID
 }
 
-// choose applies the policy's rule. A directed policy takes the most attractive
-// move among those that strictly reduce distance to its target; if no move does,
-// it falls back to the reference rule and survives in place rather than walking
-// into a worse tile for the sake of the heading.
-func (policy RoutePolicy) choose(grid *Grid, candidates []MigrationCandidate, band Band, centroidX, centroidY float64, haveCentroid bool) (TileID, bool) {
+// choose applies the policy's rule. A routed band takes the most attractive
+// move among the habitable candidates that minimize its time-expanded route.
+// If waiting is at least as fast, it holds position until climate or a named
+// passage opens rather than wandering away from the route.
+func (policy RoutePolicy) choose(candidates []MigrationCandidate, band Band, route *temporalRoute, turn int) (TileID, bool) {
 	reference, referenceFound := MigrationCandidate{}, false
 	for _, candidate := range candidates {
 		if candidate.EcologicalK <= 0 {
@@ -277,33 +476,43 @@ func (policy RoutePolicy) choose(grid *Grid, candidates []MigrationCandidate, ba
 			reference, referenceFound = candidate, true
 		}
 	}
-	if !policy.directed() || !haveCentroid {
+	if route == nil {
 		return reference.TileID, referenceFound
 	}
-	current := squaredDistanceTo(grid, band.TileID, centroidX, centroidY)
+	geographyTarget := false
+	if route.target < RegionCount {
+		// distance zero is sufficient, but checking the authored region makes
+		// the terminal behavior explicit even at turn 400.
+		geographyTarget = route.cost(turn, band.TileID) == 0
+	}
+	if geographyTarget || turn >= MaxCampaignTurn {
+		return 0, false
+	}
 	closer, closerFound := MigrationCandidate{}, false
-	var closerDistance float64
-	// A heading is not a reason to walk into a tile that will kill the band. A
-	// directed policy advances only into ground at least half as attractive as
-	// the best available; below that it holds position and survives instead.
-	// Without this floor every directed policy marches its bands into desert
-	// and goes extinct, which says nothing about whether the route exists.
-	survivalFloor := float64(DirectedSurvivalFloor * reference.Attraction)
+	closerCost := unreachableRouteCost
 	for _, candidate := range candidates {
-		if candidate.EcologicalK <= 0 || candidate.Attraction < survivalFloor {
+		if candidate.EcologicalK <= 0 {
 			continue
 		}
-		distance := squaredDistanceTo(grid, candidate.TileID, centroidX, centroidY)
-		if distance >= current {
+		next := route.cost(turn+1, candidate.TileID)
+		step := route.stepCost(turn+1, candidate.TileID)
+		if next == unreachableRouteCost || step == unreachableRouteCost {
 			continue
 		}
-		if !closerFound || distance < closerDistance ||
-			(distance == closerDistance && better(candidate, closer)) {
-			closer, closerDistance, closerFound = candidate, distance, true
+		cost := step + next
+		if !closerFound || cost < closerCost ||
+			(cost == closerCost && better(candidate, closer)) {
+			closer, closerCost, closerFound = candidate, cost, true
 		}
 	}
-	if closerFound {
+	waitNext := route.cost(turn+1, band.TileID)
+	waitStep := route.stepCost(turn+1, band.TileID)
+	waitCost := unreachableRouteCost
+	if waitNext != unreachableRouteCost && waitStep != unreachableRouteCost {
+		waitCost = waitStep + waitNext
+	}
+	if closerFound && closerCost <= waitCost {
 		return closer.TileID, true
 	}
-	return reference.TileID, referenceFound
+	return 0, false
 }

@@ -67,7 +67,7 @@ func applyKnowledgeAndGenetics(bands []Band, grid *Grid, research map[BandID]flo
 			if state.Has(technology) || !state.PrerequisitesMet(technology) {
 				continue
 			}
-			gain := float64(sourceCounts[index][technology]) * DiffusionRate * ResearchCost[technology]
+			gain := float64(float64(sourceCounts[index][technology]) * DiffusionRate * ResearchCost[technology])
 			if state.HasTarget && state.Target == technology {
 				gain += research[snapshot[index].ID]
 			}
@@ -104,7 +104,7 @@ func geneFlowDelta(recipient int, trait HeritableTrait, snapshot []Band, partner
 	}
 	maximumWeight := 0.0
 	for _, partner := range partners {
-		weight := partner.rate * float64(snapshot[partner.index].Population)
+		weight := float64(partner.rate * float64(snapshot[partner.index].Population))
 		if weight > maximumWeight {
 			maximumWeight = weight
 		}
@@ -114,9 +114,9 @@ func geneFlowDelta(recipient int, trait HeritableTrait, snapshot []Band, partner
 	}
 	scaledInfluence, scaledTrait := 0.0, 0.0
 	for _, partner := range partners {
-		scaledWeight := partner.rate * float64(snapshot[partner.index].Population) / maximumWeight
+		scaledWeight := float64(partner.rate*float64(snapshot[partner.index].Population)) / maximumWeight
 		scaledInfluence += scaledWeight
-		scaledTrait += scaledWeight * float64(snapshot[partner.index].Heritable[trait])
+		scaledTrait += float64(scaledWeight * float64(snapshot[partner.index].Heritable[trait]))
 	}
 	partnerMean := scaledTrait / scaledInfluence
 	scale := maximumWeight
@@ -124,10 +124,10 @@ func geneFlowDelta(recipient int, trait HeritableTrait, snapshot []Band, partner
 	if recipientPopulation > scale {
 		scale = recipientPopulation
 	}
-	influenceScaled := scaledInfluence * (maximumWeight / scale)
+	influenceScaled := float64(scaledInfluence * (maximumWeight / scale))
 	mix := influenceScaled / (recipientPopulation/scale + influenceScaled)
 	if mix > MaxGeneFlowPerTurn {
 		mix = MaxGeneFlowPerTurn
 	}
-	return mix * (partnerMean - float64(snapshot[recipient].Heritable[trait]))
+	return float64(mix * (partnerMean - float64(snapshot[recipient].Heritable[trait])))
 }

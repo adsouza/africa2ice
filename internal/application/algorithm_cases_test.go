@@ -432,10 +432,6 @@ func TestEveryCurrentAlgorithmRoundTripsAndReconstructs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	before, err := save.RestoreWorld()
-	if err != nil {
-		t.Fatal(err)
-	}
 	encoded, err := EncodeSaveState(save)
 	if err != nil {
 		t.Fatal(err)
@@ -453,7 +449,7 @@ func TestEveryCurrentAlgorithmRoundTripsAndReconstructs(t *testing.T) {
 			if testCase.probe == nil {
 				t.Fatal("case supplies no reconstruction probe")
 			}
-			original, restored := testCase.probe(before), testCase.probe(after)
+			original, restored := testCase.probe(service.world), testCase.probe(after)
 			if original != restored {
 				t.Fatalf("%s: derived state differs across the wire: %s vs %s", testCase.field, original, restored)
 			}
@@ -465,17 +461,20 @@ func TestEveryCurrentAlgorithmRoundTripsAndReconstructs(t *testing.T) {
 // different implementation of any one algorithm is refused, and that refusing
 // it leaves the running world in place.
 func TestUnsupportedAlgorithmIdentifiersAreRejected(t *testing.T) {
-	service, err := NewGameService(7)
-	if err != nil {
-		t.Fatal(err)
-	}
-	before, err := service.ExportSaveState()
-	if err != nil {
-		t.Fatal(err)
-	}
-	liveTurn := service.world.Turn()
 	for _, testCase := range algorithmCases {
 		t.Run(testCase.field, func(t *testing.T) {
+			repository := &repositoryStub{writable: true}
+			service, err := NewGameServiceWithRepository(7, repository)
+			if err != nil {
+				t.Fatal(err)
+			}
+			before, err := service.ExportSaveState()
+			if err != nil {
+				t.Fatal(err)
+			}
+			liveWorld := service.world
+			liveWorldRevision := service.worldRevision
+			liveTerrainRevision := service.terrainRevision
 			if testCase.unsupported == testCase.current {
 				t.Fatal("the unsupported identifier must differ from the current one")
 			}
@@ -485,11 +484,27 @@ func TestUnsupportedAlgorithmIdentifiersAreRejected(t *testing.T) {
 				t.Fatalf("%s is not settable on the wire struct", testCase.field)
 			}
 			field.SetString(testCase.unsupported)
-			if _, err := tampered.RestoreWorld(); err == nil {
-				t.Fatalf("%s = %q was accepted", testCase.field, testCase.unsupported)
+			repository.written = &tampered
+			operationID, err := service.BeginLoad(int(Manual1))
+			if err != nil {
+				t.Fatal(err)
 			}
-			if service.world.Turn() != liveTurn {
-				t.Fatal("a rejected load replaced the running world")
+			results := service.PollStorage()
+			if len(results) != 1 || results[0].OperationID != operationID || results[0].Err == nil {
+				t.Fatalf("rejected load result = %#v", results)
+			}
+			if results[0].ReplacementFrame != nil {
+				t.Fatal("a rejected load published a replacement frame")
+			}
+			if service.world != liveWorld || service.worldRevision != liveWorldRevision || service.terrainRevision != liveTerrainRevision {
+				t.Fatal("a rejected load replaced or revised the running world")
+			}
+			after, err := service.ExportSaveState()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(after, before) {
+				t.Fatal("a rejected load mutated the running save state")
 			}
 		})
 	}

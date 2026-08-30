@@ -40,7 +40,7 @@ func (world *World) MigrationCandidates(id BandID) []MigrationCandidate {
 		if world.habitat[edge.To].BaselineK <= 0 || band.Species == HomoSapiens && !world.IsExplored(edge.To) {
 			continue
 		}
-		result = append(result, world.scoreMigration(band, edge.To, edge.StepLength*world.habitat[edge.To].MovementCost, populationByTile[edge.To], false, 0))
+		result = append(result, world.scoreMigration(band, edge.To, float64(edge.StepLength*world.habitat[edge.To].MovementCost), populationByTile[edge.To], false, 0))
 	}
 	for _, passage := range passageCatalog {
 		if passageAvailability(band, passage, world.habitat, world.climate.LongTermTempOffset, true) != PassageAvailable {
@@ -70,7 +70,7 @@ func (world *World) scoreMigration(band Band, destination TileID, cost float64, 
 		ecologicalK = 0
 	}
 	usableFood := usableFoodEquivalent(band, geography.Region, habitat.Biome, tile.Stock)
-	waterDemand := BaseWaterPerPerson * WaterDemandMultiplier(habitat.LocalTemperatureC, band.Heritable[AridClimateAdaptation])
+	waterDemand := float64(BaseWaterPerPerson * WaterDemandMultiplier(habitat.LocalTemperatureC, band.Heritable[AridClimateAdaptation]))
 	waterSurvival := 0.0
 	if waterDemand > 0 {
 		waterSurvival = float64(tile.Stock.Water) / waterDemand
@@ -84,9 +84,9 @@ func (world *World) scoreMigration(band Band, destination TileID, cost float64, 
 	}
 	resources := usableFood + waterSurvival
 	attraction := 0.0
-	denominator := cost * (1 + float64(destinationPopulation))
+	denominator := float64(cost * (1 + float64(destinationPopulation)))
 	if ecologicalK > 0 && resources > 0 && warningSuitability > 0 && denominator > 0 {
-		attraction = ecologicalK * resources * warningSuitability / denominator
+		attraction = float64(ecologicalK*resources*warningSuitability) / denominator
 	}
 	if math.IsNaN(attraction) || math.IsInf(attraction, 0) || attraction < 0 {
 		attraction = 0
@@ -131,7 +131,7 @@ func usableFoodEquivalent(band Band, region Region, biome Biome, stock ResourceV
 	}
 	metabolism := float64(band.Heritable[FattyAcidMetabolism])
 	plant := float64(stock.Flora * FattyAcidConversion(PlantFood, metabolism))
-	animal := float64(stock.Fauna) * terrestrialWeight * FattyAcidConversion(AnimalFood, metabolism)
-	aquatic := float64(stock.Fauna) * aquaticWeight * FattyAcidConversion(AquaticFood, metabolism)
+	animal := float64(float64(stock.Fauna) * terrestrialWeight * FattyAcidConversion(AnimalFood, metabolism))
+	aquatic := float64(float64(stock.Fauna) * aquaticWeight * FattyAcidConversion(AquaticFood, metabolism))
 	return plant + animal + aquatic
 }

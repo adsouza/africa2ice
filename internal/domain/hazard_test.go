@@ -2,6 +2,15 @@ package domain
 
 import "testing"
 
+func TestViabilityCalibrationConstants(t *testing.T) {
+	if PopulationGrowthRate != 0.002 || SeasonalMortalityScale != 0.10 ||
+		ChronicMortalityScale != 0.10 || AcuteProbabilityScale != 0.10 ||
+		SplitStressThreshold != 0.5 {
+		t.Fatalf("viability calibration drifted: growth=%v seasonal=%v chronic=%v acute=%v split=%v",
+			PopulationGrowthRate, SeasonalMortalityScale, ChronicMortalityScale, AcuteProbabilityScale, SplitStressThreshold)
+	}
+}
+
 func TestShelterCurveUsesNaturalShelterOnlyAsEfficiency(t *testing.T) {
 	if got := ShelterCurve(0, 1); got != 0 {
 		t.Fatalf("zero work mitigation = %v", got)

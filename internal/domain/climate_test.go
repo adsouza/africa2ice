@@ -45,7 +45,7 @@ func TestClimateEpochReferenceTrajectory(t *testing.T) {
 func TestClimateTablesMatchGenerationDefinitions(t *testing.T) {
 	for turn := 0; turn <= MaxCampaignTurn; turn++ {
 		date, _ := CampaignDate(turn)
-		want := math.Sin(8 * math.Pi * date.CalendarProgress)
+		want := math.Sin(float64(8 * math.Pi * date.CalendarProgress))
 		got := math.Float64frombits(orbitalSinBits[turn])
 		if math.Abs(got-want) > 1e-15 {
 			t.Fatalf("orbital table[%d] = %.17g, want %.17g", turn, got, want)

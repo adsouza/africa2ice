@@ -51,9 +51,9 @@ func (world *World) AdvanceTurn() error {
 		}
 		nextTiles[id].Degradation = NextDegradation(nextTiles[id].Degradation, float64(populationByTile[id]), nextHabitat[id].BaselineK)
 		caps := ResourceCaps(nextHabitat[id].Biome, season, nextTiles[id].Degradation, nextHabitat[id].BaselineK)
-		caps.Flora *= macroImpacts[id].FloraFactor
-		caps.Fauna *= macroImpacts[id].FaunaFactor
-		caps.Water *= macroImpacts[id].WaterFactor
+		caps.Flora = float64(caps.Flora * macroImpacts[id].FloraFactor)
+		caps.Fauna = float64(caps.Fauna * macroImpacts[id].FaunaFactor)
+		caps.Water = float64(caps.Water * macroImpacts[id].WaterFactor)
 		nextTiles[id] = nextTiles[id].Regenerate(caps, ResourceVector{})
 	}
 
@@ -75,12 +75,12 @@ func (world *World) AdvanceTurn() error {
 		huntingShare := float64(band.Allocation[HuntingAndFishing]) / AllocationBasisPoints
 		megafaunaShare := float64(band.Allocation[MegafaunaTracking]) / AllocationBasisPoints
 		if hunting.Total > 0 {
-			work[index].acuteRisk[AcutePredation] += 0.04 * huntingShare
-			work[index].acuteRisk[AcuteExposureFall] += 0.01 * huntingShare
+			work[index].acuteRisk[AcutePredation] += float64(0.04 * huntingShare)
+			work[index].acuteRisk[AcuteExposureFall] += float64(0.01 * huntingShare)
 		}
 		if work[index].megafaunaDemand > 0 {
-			work[index].acuteRisk[AcutePredation] += 0.10 * megafaunaShare
-			work[index].acuteRisk[AcuteExposureFall] += 0.04 * megafaunaShare
+			work[index].acuteRisk[AcutePredation] += float64(0.10 * megafaunaShare)
+			work[index].acuteRisk[AcuteExposureFall] += float64(0.04 * megafaunaShare)
 		}
 	}
 
@@ -176,7 +176,7 @@ func (world *World) AdvanceTurn() error {
 		}
 		work[index].selection = SelectionDeltas(*band, geography, nextHabitat[band.TileID], season, work[index].animalFoodShare)
 		effectiveK := float64(float64(nextHabitat[band.TileID].BaselineK*(1-nextTiles[band.TileID].Degradation)) * band.Technology.CapacityMultiplier())
-		effectiveK *= macroImpacts[band.TileID].HabitatFactor
+		effectiveK = float64(effectiveK * macroImpacts[band.TileID].HabitatFactor)
 		growth := LogisticGrowth(startPopulation, float64(populationByTile[band.TileID]), effectiveK, deficitFraction)
 		band.LastOutcomeReport.Growth = growth
 		grownPopulation := startPopulation + growth
@@ -185,16 +185,16 @@ func (world *World) AdvanceTurn() error {
 		}
 		seasonalRate, chronicRate := Phase3MortalityRates(*band, geography, nextHabitat[band.TileID], season)
 		rawStarvation := StarvationLoss(startPopulation, deficitFraction)
-		rawSeasonal := startPopulation * seasonalRate
-		rawChronic := startPopulation * chronicRate
+		rawSeasonal := float64(startPopulation * seasonalRate)
+		rawChronic := float64(startPopulation * chronicRate)
 		rawMortality := rawStarvation + rawSeasonal + rawChronic
 		mortalityScale := 1.0
 		if rawMortality > grownPopulation && rawMortality > 0 {
 			mortalityScale = grownPopulation / rawMortality
 		}
-		starvation := rawStarvation * mortalityScale
-		seasonalLoss := rawSeasonal * mortalityScale
-		chronicLoss := rawChronic * mortalityScale
+		starvation := float64(rawStarvation * mortalityScale)
+		seasonalLoss := float64(rawSeasonal * mortalityScale)
+		chronicLoss := float64(rawChronic * mortalityScale)
 		population := grownPopulation - starvation - seasonalLoss - chronicLoss
 		if population < 0 {
 			population = 0
@@ -253,7 +253,7 @@ func (world *World) AdvanceTurn() error {
 		if impact.Active && impact.Zone != MacroUnaffected {
 			before := float64(band.Population)
 			healthBefore := band.Health
-			macroLoss := before * impact.LossFraction
+			macroLoss := float64(before * impact.LossFraction)
 			band.Population, err = RoundPopulation(before - macroLoss)
 			if err != nil {
 				return err
@@ -312,8 +312,7 @@ func (world *World) AdvanceTurn() error {
 	if !hasSapiens {
 		result = CampaignExtinction
 	} else if nextTurn == MaxCampaignTurn {
-		destinations := uint16(1<<Frangistan | 1<<SouthAsia | 1<<YellowRiverBasin | 1<<Sahul | 1<<Beringia)
-		if established&destinations != 0 {
+		if established&destinationMask() != 0 {
 			result = CampaignVictory
 		} else {
 			result = CampaignDispersalFailed

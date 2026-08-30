@@ -14,9 +14,13 @@ import (
 )
 
 const (
-	mapOriginX  = 20
-	mapOriginY  = 74
-	mapTileSize = 9
+	mapOriginX             = 20
+	mapOriginY             = 74
+	mapTileSize            = 9
+	hudSmallTextSize       = 11
+	migrationLegendY       = 390
+	interbreedPanelLineY   = 410
+	fieldNotesPanelOriginY = 430
 )
 
 type MapScene struct {
@@ -269,10 +273,10 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 			scene.drawText(screen, fmt.Sprintf("Health %s: %s", formatHealthDelta(summary.healthDeltaPoints), formatOutcomeCauses(summary.healthLossCauses, 2)), panelX+18, outcomeY, 11, lossColor)
 		}
 	}
-	scene.drawText(screen, "Cyan: reachable · gold: best · red: chosen/queued", panelX+18, 402, 11, color.RGBA{R: 87, G: 211, B: 211, A: 255})
+	scene.drawText(screen, "Cyan: reachable · gold: best · red: chosen/queued", panelX+18, migrationLegendY, hudSmallTextSize, color.RGBA{R: 87, G: 211, B: 211, A: 255})
 	if actor := selectedBandInFrame(frame, selectedBand); actor != nil {
 		if line := interbreedPanelLine(interbreedStatus(*actor)); line != "" {
-			scene.drawText(screen, line, panelX+18, 422, 11, interbreedMarkerColor)
+			scene.drawText(screen, line, panelX+18, interbreedPanelLineY, hudSmallTextSize, interbreedMarkerColor)
 		}
 	}
 	if fieldNotesVisible {
@@ -287,9 +291,9 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 			headingColor = color.RGBA{R: 255, G: 213, B: 92, A: 255}
 			heading = "BREAKTHROUGH · " + fieldNote.Topic
 		}
-		vector.FillRect(screen, panelX+14, 430, 324, 170, panelColor, false)
+		vector.FillRect(screen, panelX+14, fieldNotesPanelOriginY, 324, 170, panelColor, false)
 		if fieldNote.Celebration {
-			vector.StrokeRect(screen, panelX+14, 430, 324, 170, 2, headingColor, false)
+			vector.StrokeRect(screen, panelX+14, fieldNotesPanelOriginY, 324, 170, 2, headingColor, false)
 		}
 		headingSuffix := "  [F to hide]"
 		if fieldNote.Celebration {

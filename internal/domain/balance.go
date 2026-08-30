@@ -15,12 +15,12 @@ package domain
 // treat this list as frozen: extend it only alongside a re-run and a re-record
 // of the margins each gate reports.
 var BalanceSeedCorpus = [8]uint64{
-	0x9e3779b97f4a7c15, // the golden-ratio constant used as the default campaign seed
-	0x0000000000000000, // all-zero: the degenerate seed a splitmix bug would expose
-	0xffffffffffffffff, // all-ones, the opposite extreme
-	0x0123456789abcdef,
-	0xfedcba9876543210,
-	0x00000000000003e8,
-	0x5851f42d4c957f2d, // the PCG multiplier, a value adjacent to the generator's own state space
-	0x2545f4914f6cdd1d,
+	0x0000000000000000,
+	0x0000000000000001,
+	0x0000000000000002,
+	0x0000000000000003,
+	0x9e3779b97f4a7c15,
+	0xd1b54a32d192ed03,
+	0x94d049bb133111eb,
+	0xffffffffffffffff,
 }

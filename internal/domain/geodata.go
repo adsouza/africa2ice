@@ -29,46 +29,51 @@ type shelterFeature struct {
 	rating float64
 }
 
-func c(lon, lat float64) coordinate {
-	return coordinate{lon10: int64(lon * 10), lat10: int64(lat * 10)}
+// c records an authored coordinate as exact integer tenths of a degree. Call
+// sites spell the degrees and the *10, so the scaling is an untyped constant
+// expression the compiler folds exactly: 12.7*10 is precisely 127, where the
+// earlier int64(lon*10) truncated a runtime float product and was correct only
+// by luck of the target's rounding. §5 forbids that conversion for this reason.
+func c(lon10, lat10 int64) coordinate {
+	return coordinate{lon10: lon10, lat10: lat10}
 }
 func g(lon, lat float64) GeoPoint { return GeoPoint{Longitude: lon, Latitude: lat} }
 
 var landPolygons = []polygonFeature{
-	{"Africa", []coordinate{c(-17, 37), c(10, 37), c(25, 33), c(35, 30), c(52, 12), c(44, -12), c(34, -35), c(18, -35), c(10, -25), c(0, -5), c(-17, 15)}},
-	{"Arabia", []coordinate{c(34, 32), c(58, 30), c(57, 16), c(44, 12), c(34, 26)}},
-	{"LevantAnatolia", []coordinate{c(25, 42), c(45, 42), c(45, 30), c(34, 27), c(28, 32)}},
-	{"Frangistan", []coordinate{c(-10, 36), c(25, 36), c(45, 42), c(40, 60), c(20, 70), c(-10, 60)}},
-	{"Eurasia", []coordinate{c(25, 36), c(45, 42), c(60, 31), c(92, 20), c(125, 18), c(160, 48), c(180, 58), c(176, 70), c(35, 70)}},
-	{"SouthAsiaPeninsula", []coordinate{c(64, 26), c(91, 25), c(86, 7), c(76, 6), c(67, 18)}},
-	{"SoutheastAsia", []coordinate{c(90, 25), c(122, 23), c(132, 7), c(126, -9), c(104, -10), c(96, 7)}},
-	{"Sahul", []coordinate{c(112, -10), c(154, -8), c(160, -44), c(113, -45)}},
-	{"NortheastSiberia", []coordinate{c(155, 50), c(180, 52), c(188, 66), c(176, 72), c(158, 70)}},
-	{"WesternAlaska", []coordinate{c(190, 52), c(200, 54), c(200, 72), c(184, 70), c(184, 61)}},
+	{"Africa", []coordinate{c(-17*10, 37*10), c(10*10, 37*10), c(25*10, 33*10), c(35*10, 30*10), c(52*10, 12*10), c(44*10, -12*10), c(34*10, -35*10), c(18*10, -35*10), c(10*10, -25*10), c(0*10, -5*10), c(-17*10, 15*10)}},
+	{"Arabia", []coordinate{c(34*10, 32*10), c(58*10, 30*10), c(57*10, 16*10), c(44*10, 12*10), c(34*10, 26*10)}},
+	{"LevantAnatolia", []coordinate{c(25*10, 42*10), c(45*10, 42*10), c(45*10, 30*10), c(34*10, 27*10), c(28*10, 32*10)}},
+	{"Frangistan", []coordinate{c(-10*10, 36*10), c(25*10, 36*10), c(45*10, 42*10), c(40*10, 60*10), c(20*10, 70*10), c(-10*10, 60*10)}},
+	{"Eurasia", []coordinate{c(25*10, 36*10), c(45*10, 42*10), c(60*10, 31*10), c(92*10, 20*10), c(125*10, 18*10), c(160*10, 48*10), c(180*10, 58*10), c(176*10, 70*10), c(35*10, 70*10)}},
+	{"SouthAsiaPeninsula", []coordinate{c(64*10, 26*10), c(91*10, 25*10), c(86*10, 7*10), c(76*10, 6*10), c(67*10, 18*10)}},
+	{"SoutheastAsia", []coordinate{c(90*10, 25*10), c(122*10, 23*10), c(132*10, 7*10), c(126*10, -9*10), c(104*10, -10*10), c(96*10, 7*10)}},
+	{"Sahul", []coordinate{c(112*10, -10*10), c(154*10, -8*10), c(160*10, -44*10), c(113*10, -45*10)}},
+	{"NortheastSiberia", []coordinate{c(155*10, 50*10), c(180*10, 52*10), c(188*10, 66*10), c(176*10, 72*10), c(158*10, 70*10)}},
+	{"WesternAlaska", []coordinate{c(190*10, 52*10), c(200*10, 54*10), c(200*10, 72*10), c(184*10, 70*10), c(184*10, 61*10)}},
 }
 
 var waterPolygons = []polygonFeature{
-	{"Mediterranean", []coordinate{c(-6, 36), c(0, 42), c(10, 45), c(20, 44), c(30, 41), c(37, 36), c(32, 31), c(20, 31), c(10, 35), c(0, 35)}},
-	{"RedSea", []coordinate{c(32, 29), c(37, 30), c(44, 13), c(39, 12), c(34, 22)}},
-	{"PersianGulf", []coordinate{c(47, 31), c(57, 30), c(57, 24), c(49, 24)}},
-	{"Caspian", []coordinate{c(46, 47), c(55, 47), c(55, 36), c(47, 36)}},
-	{"BlackSea", []coordinate{c(27, 47), c(42, 47), c(42, 40), c(28, 40)}},
-	{"NorthWallaceaGap", []coordinate{c(119, 4), c(137, 4), c(137, -7), c(119, -7)}},
-	{"SouthWallaceaGap", []coordinate{c(121, -7), c(139, -7), c(139, -16), c(121, -16)}},
-	{"BeringStrait", []coordinate{c(178, 68), c(193, 68), c(193, 61), c(178, 61)}},
+	{"Mediterranean", []coordinate{c(-6*10, 36*10), c(0*10, 42*10), c(10*10, 45*10), c(20*10, 44*10), c(30*10, 41*10), c(37*10, 36*10), c(32*10, 31*10), c(20*10, 31*10), c(10*10, 35*10), c(0*10, 35*10)}},
+	{"RedSea", []coordinate{c(32*10, 29*10), c(37*10, 30*10), c(44*10, 13*10), c(39*10, 12*10), c(34*10, 22*10)}},
+	{"PersianGulf", []coordinate{c(47*10, 31*10), c(57*10, 30*10), c(57*10, 24*10), c(49*10, 24*10)}},
+	{"Caspian", []coordinate{c(46*10, 47*10), c(55*10, 47*10), c(55*10, 36*10), c(47*10, 36*10)}},
+	{"BlackSea", []coordinate{c(27*10, 47*10), c(42*10, 47*10), c(42*10, 40*10), c(28*10, 40*10)}},
+	{"NorthWallaceaGap", []coordinate{c(119*10, 4*10), c(137*10, 4*10), c(137*10, -7*10), c(119*10, -7*10)}},
+	{"SouthWallaceaGap", []coordinate{c(121*10, -7*10), c(139*10, -7*10), c(139*10, -16*10), c(121*10, -16*10)}},
+	{"BeringStrait", []coordinate{c(178*10, 68*10), c(193*10, 68*10), c(193*10, 61*10), c(178*10, 61*10)}},
 }
 
 var highlands = []highlandFeature{
-	{polygonFeature{"Atlas", []coordinate{c(-10, 36), c(11, 36), c(11, 28), c(-10, 28)}}, 1.50},
-	{polygonFeature{"EthiopianHighlands", []coordinate{c(33, 15), c(43, 15), c(43, 4), c(33, 4)}}, 2.00},
-	{polygonFeature{"Zagros", []coordinate{c(43, 38), c(57, 38), c(57, 27), c(43, 27)}}, 1.50},
-	{polygonFeature{"Caucasus", []coordinate{c(37, 46), c(51, 46), c(51, 39), c(37, 39)}}, 2.00},
-	{polygonFeature{"Himalaya", []coordinate{c(69, 37), c(101, 37), c(101, 26), c(69, 26)}}, 3.00},
-	{polygonFeature{"Alps", []coordinate{c(4, 49), c(17, 49), c(17, 43), c(4, 43)}}, 2.00},
-	{polygonFeature{"Urals", []coordinate{c(54, 68), c(69, 68), c(69, 50), c(54, 50)}}, 1.25},
-	{polygonFeature{"Altai", []coordinate{c(79, 54), c(99, 54), c(99, 43), c(79, 43)}}, 2.00},
-	{polygonFeature{"NewGuineaCentralRange", []coordinate{c(130, 0), c(151, 0), c(151, -11), c(130, -11)}}, 2.50},
-	{polygonFeature{"AlaskaRange", []coordinate{c(184, 69), c(200, 69), c(200, 56), c(184, 56)}}, 2.50},
+	{polygonFeature{"Atlas", []coordinate{c(-10*10, 36*10), c(11*10, 36*10), c(11*10, 28*10), c(-10*10, 28*10)}}, 1.50},
+	{polygonFeature{"EthiopianHighlands", []coordinate{c(33*10, 15*10), c(43*10, 15*10), c(43*10, 4*10), c(33*10, 4*10)}}, 2.00},
+	{polygonFeature{"Zagros", []coordinate{c(43*10, 38*10), c(57*10, 38*10), c(57*10, 27*10), c(43*10, 27*10)}}, 1.50},
+	{polygonFeature{"Caucasus", []coordinate{c(37*10, 46*10), c(51*10, 46*10), c(51*10, 39*10), c(37*10, 39*10)}}, 2.00},
+	{polygonFeature{"Himalaya", []coordinate{c(69*10, 37*10), c(101*10, 37*10), c(101*10, 26*10), c(69*10, 26*10)}}, 3.00},
+	{polygonFeature{"Alps", []coordinate{c(4*10, 49*10), c(17*10, 49*10), c(17*10, 43*10), c(4*10, 43*10)}}, 2.00},
+	{polygonFeature{"Urals", []coordinate{c(54*10, 68*10), c(69*10, 68*10), c(69*10, 50*10), c(54*10, 50*10)}}, 1.25},
+	{polygonFeature{"Altai", []coordinate{c(79*10, 54*10), c(99*10, 54*10), c(99*10, 43*10), c(79*10, 43*10)}}, 2.00},
+	{polygonFeature{"NewGuineaCentralRange", []coordinate{c(130*10, 0*10), c(151*10, 0*10), c(151*10, -11*10), c(130*10, -11*10)}}, 2.50},
+	{polygonFeature{"AlaskaRange", []coordinate{c(184*10, 69*10), c(200*10, 69*10), c(200*10, 56*10), c(184*10, 56*10)}}, 2.50},
 }
 
 var rivers = []riverFeature{

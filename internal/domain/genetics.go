@@ -81,12 +81,12 @@ func SelectionDeltas(band Band, tile TileGeography, habitat HabitatTile, season 
 	heatPressure := clamp01((habitat.LocalTemperatureC - 20) / 15)
 	uv := UVExposure(tile, season)
 	result := HeritableState{}
-	result[ColdAdaptation] = TraitValue(0.012 * (coldPressure - 0.25) * float64(state[ColdAdaptation]) * (1 - float64(state[ColdAdaptation])))
-	result[HighAltitudeAdaptation] = TraitValue(0.012 * (hypoxiaPressure - 0.15) * float64(state[HighAltitudeAdaptation]) * (1 - float64(state[HighAltitudeAdaptation])))
-	result[InnateImmuneReactivity] = TraitValue(0.010 * (pathogenPressure - 0.45) * float64(state[InnateImmuneReactivity]) * (1 - float64(state[InnateImmuneReactivity])))
-	result[AridClimateAdaptation] = TraitValue(0.010 * (heatPressure - 0.25) * float64(state[AridClimateAdaptation]) * (1 - float64(state[AridClimateAdaptation])))
-	result[PigmentationLevel] = TraitValue(0.005 * (uv - float64(state[PigmentationLevel])))
-	result[FattyAcidMetabolism] = TraitValue(0.012 * (clamp01(animalFoodShare) - 0.50) * float64(state[FattyAcidMetabolism]) * (1 - float64(state[FattyAcidMetabolism])))
+	result[ColdAdaptation] = TraitValue(float64(0.012 * (coldPressure - 0.25) * float64(state[ColdAdaptation]) * (1 - float64(state[ColdAdaptation]))))
+	result[HighAltitudeAdaptation] = TraitValue(float64(0.012 * (hypoxiaPressure - 0.15) * float64(state[HighAltitudeAdaptation]) * (1 - float64(state[HighAltitudeAdaptation]))))
+	result[InnateImmuneReactivity] = TraitValue(float64(0.010 * (pathogenPressure - 0.45) * float64(state[InnateImmuneReactivity]) * (1 - float64(state[InnateImmuneReactivity]))))
+	result[AridClimateAdaptation] = TraitValue(float64(0.010 * (heatPressure - 0.25) * float64(state[AridClimateAdaptation]) * (1 - float64(state[AridClimateAdaptation]))))
+	result[PigmentationLevel] = TraitValue(float64(0.005 * (uv - float64(state[PigmentationLevel]))))
+	result[FattyAcidMetabolism] = TraitValue(float64(0.012 * (clamp01(animalFoodShare) - 0.50) * float64(state[FattyAcidMetabolism]) * (1 - float64(state[FattyAcidMetabolism]))))
 	return result
 }
 

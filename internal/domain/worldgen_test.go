@@ -16,7 +16,7 @@ func nearestTile(t *testing.T, point GeoPoint) TileID {
 	for id := range TileCount {
 		x, y, _ := TileXY(TileID(id))
 		dx, dy := float64(x)-projected.X, float64(y)-projected.Y
-		distance := dx*dx + dy*dy
+		distance := float64(dx*dx) + float64(dy*dy)
 		if distance < bestDistance {
 			best, bestDistance = TileID(id), distance
 		}

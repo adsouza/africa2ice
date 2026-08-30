@@ -7,6 +7,9 @@ const (
 	CampSecurityScale             = 0.75
 	CampHygieneScale              = 0.40
 	MaxChronicRate                = 0.25
+	SeasonalMortalityScale        = 0.10
+	ChronicMortalityScale         = 0.10
+	AcuteProbabilityScale         = 0.10
 )
 
 type seasonalRiskRow struct{ exposure, campDisease, uncovered float64 }
@@ -32,21 +35,22 @@ var chronicRisk = [BiomeCount]chronicRiskRow{
 
 func ShelterCurve(share, naturalShelter float64) float64 {
 	share, naturalShelter = clamp01(share), clamp01(naturalShelter)
-	effort := share * (1 + NaturalShelterEfficiencyBonus*naturalShelter)
+	naturalBonus := float64(NaturalShelterEfficiencyBonus * naturalShelter)
+	effort := float64(share * (1 + naturalBonus))
 	if effort <= 0 {
 		return 0
 	}
-	return MaxShelterMitigation * (effort / (effort + ShelterHalfSaturation))
+	return float64(MaxShelterMitigation * (effort / (effort + ShelterHalfSaturation)))
 }
 
 func remainingRisk(technologyMitigation, campMitigation float64) float64 {
-	return (1 - clamp01(technologyMitigation)) * (1 - clamp01(campMitigation))
+	return float64((1 - clamp01(technologyMitigation)) * (1 - clamp01(campMitigation)))
 }
 
 func combinedTechnologyMitigation(effects ...float64) float64 {
 	remaining := 1.0
 	for _, effect := range effects {
-		remaining *= 1 - effect
+		remaining = float64(remaining * (1 - effect))
 	}
 	return 1 - remaining
 }
@@ -78,24 +82,24 @@ func campDiseaseTechnologyMitigation(band Band, medicinal bool) float64 {
 
 func Phase3HealthLosses(band Band, tile TileGeography, habitat HabitatTile, season Season) (disease, genetic float64) {
 	share := float64(band.Allocation[Shelter]) / AllocationBasisPoints
-	hygiene := CampHygieneScale * ShelterCurve(share, 0)
+	hygiene := float64(CampHygieneScale * ShelterCurve(share, 0))
 	rates := diseaseHealthRates[habitat.Biome]
 	immuneRemaining := InnateImmuneRemainingRisk(float64(band.Heritable[InnateImmuneReactivity]))
-	camp := rates.camp * remainingRisk(campDiseaseTechnologyMitigation(band, true), hygiene) * immuneRemaining
+	camp := float64(rates.camp * remainingRisk(campDiseaseTechnologyMitigation(band, true), hygiene) * immuneRemaining)
 	nonCampTech := 0.0
 	if band.Technology.Has(MedicinalKnowledge) {
 		nonCampTech = 0.45
 	}
-	nonCamp := rates.nonCamp * remainingRisk(nonCampTech, 0) * immuneRemaining
+	nonCamp := float64(rates.nonCamp * remainingRisk(nonCampTech, 0) * immuneRemaining)
 	disease = camp + nonCamp
 	pathogenPressure := clamp01((rates.camp + rates.nonCamp) / 0.04)
 	immune := float64(band.Heritable[InnateImmuneReactivity])
-	inflammation := 0.010 * immune * (1 - pathogenPressure)
+	inflammation := float64(0.010 * immune * (1 - pathogenPressure))
 	uv := UVExposure(tile, season)
 	pigmentation := float64(band.Heritable[PigmentationLevel])
 	vitamin := 0.0
 	if pigmentation > uv {
-		vitamin = 0.010 * (1 - uv) * (pigmentation - uv)
+		vitamin = float64(0.010 * (1 - uv) * (pigmentation - uv))
 	}
 	return disease, inflammation + vitamin
 }
@@ -103,8 +107,8 @@ func Phase3HealthLosses(band Band, tile TileGeography, habitat HabitatTile, seas
 func Phase3MortalityRates(band Band, tile TileGeography, habitat HabitatTile, season Season) (seasonal, chronic float64) {
 	share := float64(band.Allocation[Shelter]) / AllocationBasisPoints
 	exposureCamp := ShelterCurve(share, tile.NaturalShelter)
-	hygiene := CampHygieneScale * ShelterCurve(share, 0)
-	security := CampSecurityScale * ShelterCurve(share, 0)
+	hygiene := float64(CampHygieneScale * ShelterCurve(share, 0))
+	security := float64(CampSecurityScale * ShelterCurve(share, 0))
 	coldPressure := clamp01((10 - habitat.LocalTemperatureC) / 30)
 	hypoxiaPressure := clamp01((tile.ElevationKm - 1.5) / 2.5)
 	coldRemaining := ColdRemainingRisk(float64(band.Heritable[ColdAdaptation]), coldPressure)
@@ -112,25 +116,27 @@ func Phase3MortalityRates(band Band, tile TileGeography, habitat HabitatTile, se
 	immuneRemaining := InnateImmuneRemainingRisk(float64(band.Heritable[InnateImmuneReactivity]))
 
 	seasonalBase := seasonalRisk[habitat.Biome][season]
-	seasonal = seasonalBase.exposure*remainingRisk(exposureTechnologyMitigation(band), exposureCamp)*coldRemaining +
-		seasonalBase.campDisease*remainingRisk(campDiseaseTechnologyMitigation(band, false), hygiene)*immuneRemaining +
+	seasonal = float64(seasonalBase.exposure*remainingRisk(exposureTechnologyMitigation(band), exposureCamp)*coldRemaining) +
+		float64(seasonalBase.campDisease*remainingRisk(campDiseaseTechnologyMitigation(band, false), hygiene)*immuneRemaining) +
 		seasonalBase.uncovered
+	seasonal = float64(seasonal * SeasonalMortalityScale)
 
 	chronicBase := chronicRisk[habitat.Biome]
 	predationTech := 0.0
 	if band.Technology.Has(Campcraft) {
 		predationTech = 0.40
 	}
-	chronic = chronicBase.exposure*remainingRisk(exposureTechnologyMitigation(band), exposureCamp)*coldRemaining*altitudeRemaining +
-		chronicBase.campPredation*remainingRisk(predationTech, security) +
-		chronicBase.campDisease*remainingRisk(campDiseaseTechnologyMitigation(band, true), hygiene)*immuneRemaining +
+	chronic = float64(chronicBase.exposure*remainingRisk(exposureTechnologyMitigation(band), exposureCamp)*coldRemaining*altitudeRemaining) +
+		float64(chronicBase.campPredation*remainingRisk(predationTech, security)) +
+		float64(chronicBase.campDisease*remainingRisk(campDiseaseTechnologyMitigation(band, true), hygiene)*immuneRemaining) +
 		chronicBase.uncovered
-	chronic *= 1 + (1 - float64(band.Health))
+	chronic = float64(chronic * (1 + (1 - float64(band.Health))))
 	uv := UVExposure(tile, season)
 	pigmentation := float64(band.Heritable[PigmentationLevel])
 	if uv > pigmentation {
-		chronic += 0.012 * uv * (uv - pigmentation)
+		chronic += float64(0.012 * uv * (uv - pigmentation))
 	}
+	chronic = float64(chronic * ChronicMortalityScale)
 	if chronic > MaxChronicRate {
 		chronic = MaxChronicRate
 	}
@@ -194,9 +200,9 @@ func campMitigation(band Band, class protectionClass, naturalShelter float64) fl
 	case protectionExposure:
 		return ShelterCurve(share, naturalShelter)
 	case protectionCampPredation:
-		return CampSecurityScale * ShelterCurve(share, 0)
+		return float64(CampSecurityScale * ShelterCurve(share, 0))
 	case protectionCampDisease:
-		return CampHygieneScale * ShelterCurve(share, 0)
+		return float64(CampHygieneScale * ShelterCurve(share, 0))
 	default:
 		return 0
 	}
@@ -236,10 +242,10 @@ func AcuteProbabilities(band Band, tile TileGeography, habitat HabitatTile, seas
 	for kind := AcuteKind(0); kind < AcuteKindCount; kind++ {
 		environmentWeight := 0.0
 		if kind != AcuteCrossingMishap {
-			environmentWeight = acuteBiomeBase[habitat.Biome][kind] * acuteSeasonFactor[season][kind]
+			environmentWeight = float64(acuteBiomeBase[habitat.Biome][kind] * acuteSeasonFactor[season][kind])
 		}
 		for class := protectionClass(0); class < protectionClassCount; class++ {
-			base := environmentWeight * acutePartition[kind][class]
+			base := float64(environmentWeight * acutePartition[kind][class])
 			if class == protectionUncovered {
 				base += workRisk[kind]
 				if kind == AcuteCrossingMishap && crossed && passage < PassageCount {
@@ -250,17 +256,21 @@ func AcuteProbabilities(band Band, tile TileGeography, habitat HabitatTile, seas
 			if kind == AcuteDiseaseOutbreak {
 				geneticRemaining = InnateImmuneRemainingRisk(float64(band.Heritable[InnateImmuneReactivity]))
 			}
-			result[kind] += base * remainingRisk(acuteTechnologyMitigation(band, kind, class), campMitigation(band, class, tile.NaturalShelter)) * geneticRemaining
+			result[kind] += float64(base * remainingRisk(acuteTechnologyMitigation(band, kind, class), campMitigation(band, class, tile.NaturalShelter)) * geneticRemaining)
 		}
 	}
 	total := 0.0
 	for _, probability := range result {
 		total += probability
 	}
+	for index := range result {
+		result[index] = float64(result[index] * AcuteProbabilityScale)
+	}
+	total = float64(total * AcuteProbabilityScale)
 	if total > MaxAcuteProbability {
 		scale := MaxAcuteProbability / total
 		for index := range result {
-			result[index] *= scale
+			result[index] = float64(result[index] * scale)
 		}
 	}
 	return result
@@ -282,7 +292,7 @@ func ResolveAcute(band *Band, tile TileGeography, habitat HabitatTile, season Se
 		return 0, 0, false, nil
 	}
 	severityDraw := rng.Float64()
-	lossFraction := minimumAcuteLoss[selected] + (maximumAcuteLoss[selected]-minimumAcuteLoss[selected])*severityDraw
+	lossFraction := minimumAcuteLoss[selected] + float64((maximumAcuteLoss[selected]-minimumAcuteLoss[selected])*severityDraw)
 	severityMitigation := 0.0
 	switch selected {
 	case AcutePredation:
@@ -298,9 +308,9 @@ func ResolveAcute(band *Band, tile TileGeography, habitat HabitatTile, season Se
 			severityMitigation = 0.35
 		}
 	}
-	lossFraction *= 1 - severityMitigation
+	lossFraction = float64(lossFraction * (1 - severityMitigation))
 	before := float64(band.Population)
-	loss := before * clamp01(lossFraction)
+	loss := float64(before * clamp01(lossFraction))
 	if loss > before {
 		loss = before
 	}
@@ -311,11 +321,11 @@ func ResolveAcute(band *Band, tile TileGeography, habitat HabitatTile, season Se
 	band.Population = population
 	loss = before - float64(band.Population)
 	if selected == AcuteDiseaseOutbreak && band.Population > 0 {
-		healthLoss := 0.05 + 0.10*severityDraw
+		healthLoss := 0.05 + float64(0.10*severityDraw)
 		if band.Technology.Has(MedicinalKnowledge) {
-			healthLoss *= 0.50
+			healthLoss = float64(healthLoss * 0.50)
 		}
-		healthLoss *= InnateImmuneRemainingRisk(float64(band.Heritable[InnateImmuneReactivity]))
+		healthLoss = float64(healthLoss * InnateImmuneRemainingRisk(float64(band.Heritable[InnateImmuneReactivity])))
 		band.Health = Health(clamp01(float64(band.Health) - healthLoss))
 	}
 	return selected, loss, true, nil

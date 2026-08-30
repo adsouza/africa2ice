@@ -10,9 +10,9 @@ import (
 // all 6,144 tiles at all 401 turns rather than sampled. That exhaustiveness is
 // what makes the configuration-time gates real instead of aspirational.
 //
-// Only the seed-independent quantities are swept here. LocalTemperatureC carries
-// the per-tile climate noise and is therefore seed-dependent by construction; it
-// is covered by the noise bounds below instead.
+// LocalTemperatureC carries per-turn seed-dependent climate noise. Its closed
+// mathematical noise extremes and every seed in BalanceSeedCorpus are swept in
+// dedicated tests below rather than being mistaken for seed-independent state.
 
 func TestSeedIndependentHabitatSweepsOverEveryTileAndTurn(t *testing.T) {
 	grid, err := (WorldGenerator{}).Generate()
@@ -131,6 +131,93 @@ func TestSeedIndependenceHoldsAcrossTheWholeCorpus(t *testing.T) {
 				if got[id].Biome != want[id].Biome || got[id].BaselineK != want[id].BaselineK ||
 					got[id].MovementCost != want[id].MovementCost {
 					t.Fatalf("seed %#x turn %d tile %d: seed-independent habitat differs", seed, turn, id)
+				}
+			}
+		}
+	}
+}
+
+func TestBiomeChurnAndDwellBoundsHoldAcrossExactHistory(t *testing.T) {
+	grid, err := (WorldGenerator{}).Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := [TileCount]Biome{}
+	segmentStart := [TileCount]int{}
+	changes := [TileCount]int{}
+	for turn := 0; turn <= MaxCampaignTurn; turn++ {
+		habitat, _, err := BuildHabitat(grid, BalanceSeedCorpus[0], turn)
+		if err != nil {
+			t.Fatalf("turn %d: %v", turn, err)
+		}
+		for id := range TileCount {
+			geography, _ := grid.Tile(TileID(id))
+			if !geography.Land {
+				continue
+			}
+			if turn == 0 {
+				previous[id] = habitat[id].Biome
+				continue
+			}
+			if habitat[id].Biome == previous[id] {
+				continue
+			}
+			dwell := turn - segmentStart[id]
+			if dwell < MinBiomeDwellTurns {
+				t.Fatalf("tile %d held %v for %d turns before changing to %v at turn %d; minimum is %d",
+					id, previous[id], dwell, habitat[id].Biome, turn, MinBiomeDwellTurns)
+			}
+			changes[id]++
+			if changes[id] > BiomeChurnCap {
+				t.Fatalf("tile %d changed biome %d times by turn %d; cap is %d", id, changes[id], turn, BiomeChurnCap)
+			}
+			previous[id] = habitat[id].Biome
+			segmentStart[id] = turn
+		}
+	}
+}
+
+func TestLocalTemperatureFiniteAtClosedUnitNoiseExtremes(t *testing.T) {
+	grid, err := (WorldGenerator{}).Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for turn := 0; turn <= MaxCampaignTurn; turn++ {
+		climate, err := ClimateAt(0, turn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for id := range TileCount {
+			geography, _ := grid.Tile(TileID(id))
+			if !geography.Land {
+				continue
+			}
+			offset := climate.LongTermTempOffset + climate.SeasonalTempOffset + climate.RegionalAbrupt[geography.Region]
+			for _, unitNoise := range [...]float64{-1, 1} {
+				local, err := LocalTemperatureC(geography.Y, geography.ElevationKm, offset, float64(NoiseAmplitude*unitNoise))
+				if err != nil || math.IsNaN(local) || math.IsInf(local, 0) {
+					t.Fatalf("turn %d tile %d noise %v: LocalTemperatureC = %v, err %v", turn, id, unitNoise, local, err)
+				}
+			}
+		}
+	}
+}
+
+func TestLocalTemperatureFiniteAcrossExactBalanceSeedCorpus(t *testing.T) {
+	grid, err := (WorldGenerator{}).Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, seed := range BalanceSeedCorpus {
+		for turn := 0; turn <= MaxCampaignTurn; turn++ {
+			habitat, _, err := BuildHabitat(grid, seed, turn)
+			if err != nil {
+				t.Fatalf("seed %#x turn %d: %v", seed, turn, err)
+			}
+			for id := range TileCount {
+				local := habitat[id].LocalTemperatureC
+				if math.IsNaN(local) || math.IsInf(local, 0) {
+					t.Fatalf("seed %#x turn %d tile %d: LocalTemperatureC = %v", seed, turn, id, local)
 				}
 			}
 		}
