@@ -89,6 +89,7 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 			Population: uint32(band.Population), Health: float64(band.Health), StoredFood: float64(band.StoredFood),
 			AcquiredTech: band.Technology.Acquired, HasResearchTarget: band.Technology.HasTarget,
 			SpatialActionUsed: band.SpatialActionUsed, QueuedMigration: gameapi.TileID(band.QueuedMigration), HasQueuedMigration: band.HasQueuedMigration,
+			HasInterbreedTarget: band.HasInterbreedTarget, InterbreedTargetID: gameapi.BandID(band.InterbreedTarget),
 			Stress:         service.world.BandStress(band.ID),
 			LastFoodReport: gameapi.FoodTurnReport{Turn: band.LastFoodReport.Turn, RequiredFU: band.LastFoodReport.RequiredFU, DeficitFU: band.LastFoodReport.DeficitFU},
 			LastMortality:  gameapi.MortalityReport{Starvation: band.LastMortality.Starvation, Seasonal: band.LastMortality.Seasonal, Chronic: band.LastMortality.Chronic, Macro: band.LastMortality.Macro, Acute: band.LastMortality.Acute},
@@ -139,9 +140,14 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 				RequiresPassage: candidate.RequiresPassage,
 			})
 		}
-		for _, other := range allBands {
-			if other.ID != band.ID && other.TileID == band.TileID && other.Species != band.Species {
-				publicBand.InterbreedCandidateIDs = append(publicBand.InterbreedCandidateIDs, gameapi.BandID(other.ID))
+		// Only a sapiens actor may interbreed, and only with a co-located
+		// archaic band. Offering an archaic band a candidate list would
+		// advertise an action the domain always rejects.
+		if band.Species == domain.HomoSapiens {
+			for _, other := range allBands {
+				if other.ID != band.ID && other.TileID == band.TileID && other.Species == domain.ArchaicHominin {
+					publicBand.InterbreedCandidateIDs = append(publicBand.InterbreedCandidateIDs, gameapi.BandID(other.ID))
+				}
 			}
 		}
 		frame.Bands = append(frame.Bands, publicBand)

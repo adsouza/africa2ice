@@ -79,18 +79,30 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 		}
 		vector.StrokeLine(screen, mapOriginX+float32(from.X*mapTileSize)+mapTileSize/2, mapOriginY+float32(from.Y*mapTileSize)+mapTileSize/2, mapOriginX+float32(to.X*mapTileSize)+mapTileSize/2, mapOriginY+float32(to.Y*mapTileSize)+mapTileSize/2, 2, lineColor, false)
 	}
+	var interbreedTiles map[gameapi.TileID]bool
+	if actor := selectedBandInFrame(frame, selectedBand); actor != nil {
+		interbreedTiles = interbreedCandidateTiles(frame, *actor)
+	}
 	for _, band := range frame.Bands {
 		if int(band.TileID) >= len(frame.Tiles) || !frame.Tiles[band.TileID].Explored && band.Species != gameapi.HomoSapiens {
 			continue
 		}
 		tile := frame.Tiles[band.TileID]
+		centreX := mapOriginX + float32(tile.X*mapTileSize) + mapTileSize/2
+		centreY := mapOriginY + float32(tile.Y*mapTileSize) + mapTileSize/2
 		marker := color.RGBA{R: 245, G: 202, B: 92, A: 255}
 		if band.Species == gameapi.ArchaicHominin {
 			marker = color.RGBA{R: 201, G: 103, B: 82, A: 255}
 		}
-		vector.FillCircle(screen, mapOriginX+float32(tile.X*mapTileSize)+mapTileSize/2, mapOriginY+float32(tile.Y*mapTileSize)+mapTileSize/2, 3.6, marker, true)
+		vector.FillCircle(screen, centreX, centreY, 3.6, marker, true)
+		// An archaic band the selected band can interbreed with gets its own
+		// ring, so the option is visible on the map rather than only discovered
+		// by pressing the key and hoping.
+		if band.Species == gameapi.ArchaicHominin && interbreedTiles[band.TileID] {
+			vector.StrokeCircle(screen, centreX, centreY, 6.4, 1.5, interbreedMarkerColor, true)
+		}
 		if band.ID == selectedBand {
-			vector.StrokeCircle(screen, mapOriginX+float32(tile.X*mapTileSize)+mapTileSize/2, mapOriginY+float32(tile.Y*mapTileSize)+mapTileSize/2, 5.2, 1.5, color.White, true)
+			vector.StrokeCircle(screen, centreX, centreY, 5.2, 1.5, color.White, true)
 		}
 	}
 	scene.drawQueuedMigrations(screen, frame)
@@ -258,6 +270,11 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 		}
 	}
 	scene.drawText(screen, "Cyan: reachable · gold: best · red: chosen/queued", panelX+18, 402, 11, color.RGBA{R: 87, G: 211, B: 211, A: 255})
+	if actor := selectedBandInFrame(frame, selectedBand); actor != nil {
+		if line := interbreedPanelLine(interbreedStatus(*actor)); line != "" {
+			scene.drawText(screen, line, panelX+18, 422, 11, interbreedMarkerColor)
+		}
+	}
 	if fieldNotesVisible {
 		panelColor := color.RGBA{R: 19, G: 28, B: 34, A: 255}
 		headingColor := color.RGBA{R: 203, G: 172, B: 104, A: 255}
@@ -301,7 +318,11 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 	}
 	scene.drawText(screen, "Click: migrate · Arrows: choose · Enter: queue", panelX+18, 620, 12, color.White)
 	scene.drawText(screen, "Tab/Shift+Tab: bands · Space: turn", panelX+18, 642, 12, color.White)
-	scene.drawText(screen, "N: split  ·  I: interbreed", panelX+18, 664, 12, color.White)
+	spatialHint := "N: split"
+	if actor := selectedBandInFrame(frame, selectedBand); actor != nil {
+		spatialHint = spatialControlHint(interbreedStatus(*actor))
+	}
+	scene.drawText(screen, spatialHint, panelX+18, 664, 12, color.White)
 	scene.drawText(screen, "Ctrl/Cmd+S: quick-save", panelX+18, 684, 12, color.White)
 }
 

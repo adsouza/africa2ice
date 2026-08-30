@@ -164,11 +164,7 @@ func (g *Game) Update() error {
 		}
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyI) {
-		if band := g.selected(); band != nil && len(band.InterbreedCandidateIDs) != 0 {
-			if g.apply(gameapi.Interbreed{BandID: band.ID, TargetBandID: band.InterbreedCandidateIDs[0]}) {
-				g.clearMigrationPreview()
-			}
-		}
+		g.requestInterbreed()
 	}
 	for index, key := range [...]ebiten.Key{ebiten.Key1, ebiten.Key2, ebiten.Key3, ebiten.Key4, ebiten.Key5, ebiten.Key6, ebiten.Key7, ebiten.Key8, ebiten.Key9} {
 		if inpututil.IsKeyJustPressed(key) {
@@ -267,6 +263,32 @@ func newTechnologyDiscoveries(previous, current *gameapi.Frame, preferredBand ga
 }
 
 func (g *Game) SetFirstDrawCallback(callback func()) { g.onFirstDraw = callback }
+
+// requestInterbreed answers the interbreed key in every case. It previously
+// short-circuited on an empty candidate list, so the advertised control did
+// nothing at all and gave no reason — and a successful one was equally silent.
+func (g *Game) requestInterbreed() {
+	band := g.selected()
+	if band == nil {
+		return
+	}
+	switch {
+	case band.Species != gameapi.HomoSapiens:
+		g.showNotice("Only a Homo sapiens band can initiate interbreeding.")
+	case band.HasInterbreedTarget:
+		g.showNotice(fmt.Sprintf("This band is already interbreeding with archaic band %d this turn.", band.InterbreedTargetID))
+	case band.SpatialActionUsed:
+		g.showNotice("This band has already used its spatial action this turn.")
+	case len(band.InterbreedCandidateIDs) == 0:
+		g.showNotice("No archaic band shares this tile — move onto one first to interbreed.")
+	default:
+		target := band.InterbreedCandidateIDs[0]
+		if g.apply(gameapi.Interbreed{BandID: band.ID, TargetBandID: target}) {
+			g.clearMigrationPreview()
+			g.showNotice(fmt.Sprintf("Interbreeding with archaic band %d — gene flow resolves when the turn ends.", target))
+		}
+	}
+}
 
 func (g *Game) selected() *gameapi.Band {
 	if g.frame == nil {

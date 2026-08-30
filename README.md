@@ -13,7 +13,10 @@ Current controls:
 - click any other map tile to see why it is not currently reachable, including water, uninhabitable terrain, and locked passages;
 - Tab/Shift+Tab selects the next/previous sapiens band, with wraparound;
 - Space ends the turn;
-- 1–9 selects the named research shown in the persistent research-key legend, N splits a band, and I initiates available interbreeding;
+- 1–9 selects the named research shown in the persistent research-key legend, and N splits a band;
+- I interbreeds with a co-located archaic band; the option is offered only when one shares the
+  selected band's tile, where a violet ring marks it on the map and the panel names it, and pressing
+  I otherwise explains why it is unavailable;
 - completing a technology triggers a breakthrough toast and updates Field Notes with context, its game effect, and a hint;
 - F toggles the Field Notes panel;
 - Ctrl+S (Cmd+S on macOS) quick-saves to the desktop filesystem or browser IndexedDB.
@@ -48,11 +51,17 @@ Then open `http://localhost:8080/`. Do not open `web/index.html` through a `file
 block the page from fetching the WebAssembly module in that security context, and IndexedDB also
 expects an HTTP origin.
 
-Release builds require Binaryen's `wasm-opt`:
+Release builds require Binaryen's `wasm-opt` (CI pins `version_131`; any Binaryen recent enough to
+support `--enable-bulk-memory-opt` works locally, and the build script says so by name if yours is
+not):
 
 ```sh
 ./build_web.sh --release
 ```
+
+`tools/check_wasm_size.sh` measures and gates the result. It fails both when the module grows past
+`MaxCompressedWasmBytes` and when that ceiling has gone stale enough to stop constraining the
+build — see [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) for the current measurements.
 
 ## Verify
 

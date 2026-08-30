@@ -124,8 +124,13 @@ type Band struct {
 	OriginalResearchGainPreview float64
 	MigrationCandidates         []MigrationCandidate
 	InterbreedCandidateIDs      []BandID
-	PassageStatuses             [PassageCount]PassageStatus
-	Stress                      float64
+	// HasInterbreedTarget and InterbreedTargetID expose the intent the band has
+	// already accepted this turn, so presentation can show what the player
+	// chose before the turn resolves it rather than leaving the action silent.
+	HasInterbreedTarget bool
+	InterbreedTargetID  BandID
+	PassageStatuses     [PassageCount]PassageStatus
+	Stress              float64
 }
 
 // ResearchOption is a projected view of the authoritative prerequisite DAG.
