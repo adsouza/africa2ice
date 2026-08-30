@@ -5569,8 +5569,8 @@ cause's raw or capped mortality estimate. The persisted mortality breakdown ther
 fractional estimates, while current population is always an integer-valued count. Validation rejects
 fractional JSON populations and values above `MaxPopulation = 2^32 - 1` during decoding.
 
-The approved initial logistic coefficient is **`r = 0.010` per game turn** for both species. At
-negligible crowding and full feeding it requests growth of approximately 1% of the band's
+The approved initial logistic coefficient is **`r = 0.020` per game turn** for both species. At
+negligible crowding and full feeding it requests growth of approximately 2% of the band's
 start-of-turn population before other effects. It is not an annual rate and is deliberately held
 constant across campaign eras even though the calendar span represented by a turn changes. Era
 duration therefore affects the displayed chronology, not this simulation coefficient. It remains an
@@ -5583,9 +5583,18 @@ came from the crowding term being unbounded below rather than from growth being 
 bounded, mortality absorbs three times the value that reading had forced, and `0.002` is revealed to
 produce no dispersal whatsoever — a campaign at that coefficient ends holding the four bands it was
 founded with, having grown them in place. The corpus was re-swept across `0.002`, `0.005`, `0.010`,
-`0.020`, and `0.030`: the last two carry the world toward `MaxBands`, `0.005` subdivides on two seeds
-of eight, and `0.010` roughly triples the founding band count while establishing every named
-destination on every seed.
+`0.020`, `0.030`, and `0.060`: `0.005` subdivides on only two seeds of eight, and everything from
+`0.010` upward establishes every named destination on every seed.
+
+`r` and `SplitStressThreshold` are selected **together**, because they move band size in opposite
+directions and neither is meaningful alone. The threshold sets the ceiling a band may reach, at
+roughly `SplitStressThreshold · BaselineK`; `r` sets how fast the ceiling is reached and therefore
+how often a split fires. Raising `r` without raising the threshold does not grow bands, it multiplies
+them at a smaller average size: at the `0.5` threshold, six times the growth rate gave six times the
+bands with the median falling from 74 people to 28. The pair `r = 0.020` with
+`SplitStressThreshold = 0.67` was selected for a band-size distribution with a genuine upper tail —
+median 74, upper quartile 95, largest 148 — rather than the tight 74-to-89 cluster the previous pair
+produced.
 
 **Crowding uses the whole tile, growth uses the band.** The logistic term has two distinct
 population inputs and they are deliberately different. The leading `r · P` scales the band's own
@@ -5648,7 +5657,7 @@ capacity balance still need tuning together; this rule selects `r` but not the b
 capacities. `HazardAlgorithm: "split-v1"`
 owns this demographic coupling, with no new simulation input, RNG draw, or algorithm identifier.
 
-Fixtures lock `r = 0.010` and cover positive, zero, and negative `BaseGrowth` at deficit fractions `0`, `0.50`, and `1`,
+Fixtures lock `r = 0.020` and cover positive, zero, and negative `BaseGrowth` at deficit fractions `0`, `0.50`, and `1`,
 including a decline held at `−MaxCrowdingDeclineFraction · P` when the unbounded term would exceed
 it, a mild overshoot left unbounded so the cap cannot become a floor every decline snaps to, and a
 `K_eff` of zero taking the same bound rather than removing the band,
@@ -9313,7 +9322,7 @@ Earlier fixtures use explicit values that are never release data.
 | `HealthVulnerability` mapping         | `1 + (1 - Health)`, range `[1, 2]` | Locked  |
 | `MaxAcuteProbability`                 | `0.25`                             | Initial |
 | `MinAcuteLoss[k]` / `MaxAcuteLoss[k]` | §7 five-kind acute-severity table  | Initial |
-| `r` — logistic growth coefficient     | `0.010` per game turn              | Initial |
+| `r` — logistic growth coefficient     | `0.020` per game turn              | Initial |
 | `MaxCrowdingDeclineFraction`          | `0.25`                             | Initial |
 | Seasonal and chronic risk profiles    | §7 six-biome risk-profile tables   | Initial |
 | Technology mitigation effect tables   | §7 channel-specific mitigation table | Initial |
@@ -9434,7 +9443,7 @@ Earlier fixtures use explicit values that are never release data.
 
 | Constant                                                   | Value                                                                                           | Status  | Owning contract            |
 | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------- | -------------------------- |
-| `SplitStressThreshold`                                     | `0.5`                                                                                           | Initial | `BandAlgorithm`            |
+| `SplitStressThreshold`                                     | `0.67`                                                                                          | Initial | `BandAlgorithm`            |
 | `MinEstablishedBand`                                       | `20`                                                                                            | Initial | `BandAlgorithm`            |
 | `MaxPopulation`                                            | `2^32 - 1` whole people (`uint32`)                                                              | Locked  | `BandAlgorithm`            |
 | New-game band populations                                  | four sapiens `100` in East Africa; two archaic `100` in Levant; two archaic `100` in Frangistan | Locked  | scenario contract          |
@@ -9456,8 +9465,17 @@ Earlier fixtures use explicit values that are never release data.
 `SplitStressThreshold` previously appeared as the bare literal `0.9` in nine semantic places. It gates
 whether `SplitBand` is legal for the player and whether the archaic policy takes a spatial action, so
 it is a balance knob with no name — exactly the kind of value this manifest exists to hold. Step 5e's
-whole-campaign viability pass selected `0.5`, allowing stressed populations to divide before
-whole-tile crowding turns a viable outward route into synchronized decline.
+whole-campaign viability pass selected `0.67`, allowing stressed populations to divide before
+whole-tile crowding turns a viable outward route into synchronized decline, while leaving bands large
+enough that band size carries information about the ground they stand on.
+
+It cannot go much higher. Because band size tracks `SplitStressThreshold · BaselineK`, and most
+regions have a mean `BaselineK` between 80 and 160, a threshold at or above `0.8` produces bands too
+large to relocate: on arriving at any ordinary tile such a band exceeds its capacity, takes the full
+`MaxCrowdingDeclineFraction` every turn, and is gone within about ten. At `0.8` the corpus collapses
+to a single band of roughly twelve people per seed. The ceiling is therefore set by the map's
+capacity distribution rather than by the demographic constants, and it is selected together with `r`
+above.
 
 V1 intentionally adds no founder-flow counter, `EverExitedAfrica` lineage flag, or `2,000`–`5,000`
 gameplay target. The first sapiens establishment in Arabia or the Levant triggers a sourced Field

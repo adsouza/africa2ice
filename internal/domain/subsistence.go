@@ -11,7 +11,7 @@ const (
 	HealthRecoveryRate    = 0.05
 	WaterHealthLossRate   = 0.40
 	StarvationCoefficient = 0.10
-	PopulationGrowthRate  = 0.010
+	PopulationGrowthRate  = 0.020
 
 	// MaxCrowdingDeclineFraction bounds how much of a band the logistic crowding
 	// term may remove in a single turn.
