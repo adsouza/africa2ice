@@ -17,10 +17,21 @@ const (
 	mapOriginX             = 20
 	mapOriginY             = 74
 	mapTileSize            = 9
-	hudSmallTextSize       = 11
-	migrationLegendY       = 390
-	interbreedPanelLineY   = 410
-	fieldNotesPanelOriginY = 430
+	mapLegendOriginY       = 48
+	mapLegendHeight        = 25
+	bandListOriginY        = 230
+	bandRowHeight          = 16
+	bandOutcomeOriginY     = 310
+	tileInspectorOriginY   = 340
+	tileInspectorHeight    = 116
+	interbreedPanelLineY   = 446
+	fieldNotesPanelOriginY = 462
+	fieldNotesPanelHeight  = 138
+)
+
+var (
+	waterTileColor      = color.RGBA{R: 31, G: 64, B: 82, A: 255}
+	unexploredTileColor = color.RGBA{R: 6, G: 11, B: 15, A: 255}
 )
 
 type MapScene struct {
@@ -60,13 +71,14 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 		return
 	}
 	scene.drawTimeline(screen, frame)
+	scene.drawMapLegend(screen, frame.Climate.AridityIndex)
 	for _, tile := range frame.Tiles {
-		tileColor := color.RGBA{R: 6, G: 11, B: 15, A: 255}
+		tileColor := unexploredTileColor
 		if tile.Explored {
 			if tile.Land {
 				tileColor = climateBiomeColor(tile.Biome, frame.Climate.AridityIndex)
 			} else {
-				tileColor = color.RGBA{R: 31, G: 64, B: 82, A: 255}
+				tileColor = waterTileColor
 			}
 		}
 		vector.FillRect(screen, mapOriginX+float32(tile.X*mapTileSize), mapOriginY+float32(tile.Y*mapTileSize), mapTileSize-0.4, mapTileSize-0.4, tileColor, false)
@@ -111,7 +123,7 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 	}
 	scene.drawQueuedMigrations(screen, frame)
 	scene.drawMigrationPreview(screen, frame, preview)
-	scene.drawHUD(screen, frame, selectedBand, fieldNote, fieldNotesVisible)
+	scene.drawHUD(screen, frame, selectedBand, preview, fieldNote, fieldNotesVisible)
 	scene.drawResearchKeys(screen, frame, selectedBand)
 	scene.drawEndScene(screen, ending)
 	if notice != "" {
@@ -224,7 +236,20 @@ func (scene *MapScene) drawTimeline(screen *ebiten.Image, frame *gameapi.Frame) 
 	scene.drawText(screen, "20,000 BP", right-62, 13, 12, color.RGBA{R: 191, G: 202, B: 199, A: 255})
 }
 
-func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, fieldNote FieldNote, fieldNotesVisible bool) {
+func (scene *MapScene) drawMapLegend(screen *ebiten.Image, aridity float64) {
+	vector.FillRect(screen, mapOriginX, mapLegendOriginY, 864, mapLegendHeight, color.RGBA{R: 18, G: 27, B: 33, A: 245}, false)
+	entries := mapLegendEntries(aridity)
+	const entryWidth = float32(108)
+	for index, entry := range entries {
+		x := float32(mapOriginX) + float32(index)*entryWidth
+		vector.FillRect(screen, x+4, mapLegendOriginY+4, 8, 8, entry.color, false)
+		vector.StrokeRect(screen, x+4, mapLegendOriginY+4, 8, 8, 0.7, color.RGBA{R: 210, G: 216, B: 210, A: 180}, false)
+		scene.drawText(screen, entry.label, x+15, mapLegendOriginY+1, 8.5, color.RGBA{R: 235, G: 236, B: 226, A: 255})
+		scene.drawText(screen, entry.meaning, x+4, mapLegendOriginY+13, 7, color.RGBA{R: 167, G: 184, B: 181, A: 255})
+	}
+}
+
+func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, fieldNote FieldNote, fieldNotesVisible bool) {
 	const panelX = float32(908)
 	vector.FillRect(screen, panelX, 68, 352, 626, color.RGBA{R: 25, G: 35, B: 42, A: 238}, false)
 	scene.drawText(screen, "Africa 2 Ice", panelX+18, 88, 24, color.RGBA{R: 239, G: 220, B: 178, A: 255})
@@ -237,17 +262,16 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 		}
 	}
 	scene.drawText(screen, fmt.Sprintf("Homo sapiens: %d", totalPopulation), panelX+18, 188, 17, color.RGBA{R: 245, G: 202, B: 92, A: 255})
-	scene.drawText(screen, fmt.Sprintf("Bands: %d  ·  Regions: %d", len(frame.Bands), len(frame.SapiensEstablishedRegions)), panelX+18, 215, 14, color.White)
-	y := float32(254)
-	for _, band := range frame.Bands {
-		if band.Species != gameapi.HomoSapiens {
-			continue
-		}
+	bandWindow := visibleSapiensBandWindow(frame.Bands, selectedBand)
+	scene.drawText(screen, fmt.Sprintf("%s  ·  Regions: %d", bandWindow.label(), len(frame.SapiensEstablishedRegions)), panelX+18, 215, 14, color.White)
+	y := float32(bandListOriginY)
+	for row := 0; row < bandWindow.count; row++ {
+		band := &frame.Bands[bandWindow.indices[row]]
 		prefix := "  "
 		if band.ID == selectedBand {
 			prefix = "› "
 		}
-		summary := summarizeBandOutcome(&band)
+		summary := summarizeBandOutcome(band)
 		populationChange, healthChange := "", ""
 		if summary.available && summary.populationDelta != 0 {
 			populationChange = fmt.Sprintf(" (%+d)", summary.populationDelta)
@@ -255,30 +279,22 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 		if summary.available && math.Abs(summary.healthDeltaPoints) >= 0.005 {
 			healthChange = " (" + formatHealthDelta(summary.healthDeltaPoints) + ")"
 		}
-		scene.drawText(screen, fmt.Sprintf("%sB%d  Pop %d%s  Health %.1f%%%s", prefix, band.ID, band.Population, populationChange, band.Health*100, healthChange), panelX+18, y, 12, color.White)
-		y += 20
-		if y > 334 {
-			break
-		}
+		scene.drawText(screen, fmt.Sprintf("%sB%d  Pop %d%s  Health %.1f%%%s", prefix, band.ID, band.Population, populationChange, band.Health*100, healthChange), panelX+18, y, 10.5, color.White)
+		y += bandRowHeight
 	}
 	if band := selectedBandInFrame(frame, selectedBand); band != nil {
 		summary := summarizeBandOutcome(band)
-		outcomeY := float32(352)
+		outcomeY := float32(bandOutcomeOriginY)
 		lossColor := color.RGBA{R: 239, G: 174, B: 151, A: 255}
 		if summary.populationDelta < 0 {
-			scene.drawText(screen, fmt.Sprintf("Pop %+d: %s", summary.populationDelta, formatOutcomeCauses(summary.populationLossCauses, 2)), panelX+18, outcomeY, 11, lossColor)
-			outcomeY += 18
+			scene.drawText(screen, fmt.Sprintf("Pop %+d: %s", summary.populationDelta, formatOutcomeCauses(summary.populationLossCauses, 2)), panelX+18, outcomeY, 9.5, lossColor)
+			outcomeY += 14
 		}
 		if summary.healthDeltaPoints < -0.005 {
-			scene.drawText(screen, fmt.Sprintf("Health %s: %s", formatHealthDelta(summary.healthDeltaPoints), formatOutcomeCauses(summary.healthLossCauses, 2)), panelX+18, outcomeY, 11, lossColor)
+			scene.drawText(screen, fmt.Sprintf("Health %s: %s", formatHealthDelta(summary.healthDeltaPoints), formatOutcomeCauses(summary.healthLossCauses, 2)), panelX+18, outcomeY, 9.5, lossColor)
 		}
 	}
-	scene.drawText(screen, "Cyan: reachable · gold: best · red: chosen/queued", panelX+18, migrationLegendY, hudSmallTextSize, color.RGBA{R: 87, G: 211, B: 211, A: 255})
-	if actor := selectedBandInFrame(frame, selectedBand); actor != nil {
-		if line := interbreedPanelLine(interbreedStatus(*actor)); line != "" {
-			scene.drawText(screen, line, panelX+18, interbreedPanelLineY, hudSmallTextSize, interbreedMarkerColor)
-		}
-	}
+	scene.drawTileInspector(screen, frame, selectedBand, preview)
 	if fieldNotesVisible {
 		panelColor := color.RGBA{R: 19, G: 28, B: 34, A: 255}
 		headingColor := color.RGBA{R: 203, G: 172, B: 104, A: 255}
@@ -291,15 +307,15 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 			headingColor = color.RGBA{R: 255, G: 213, B: 92, A: 255}
 			heading = "BREAKTHROUGH · " + fieldNote.Topic
 		}
-		vector.FillRect(screen, panelX+14, fieldNotesPanelOriginY, 324, 170, panelColor, false)
+		vector.FillRect(screen, panelX+14, fieldNotesPanelOriginY, 324, fieldNotesPanelHeight, panelColor, false)
 		if fieldNote.Celebration {
-			vector.StrokeRect(screen, panelX+14, fieldNotesPanelOriginY, 324, 170, 2, headingColor, false)
+			vector.StrokeRect(screen, panelX+14, fieldNotesPanelOriginY, 324, fieldNotesPanelHeight, 2, headingColor, false)
 		}
 		headingSuffix := "  [F to hide]"
 		if fieldNote.Celebration {
 			headingSuffix = "  [F]"
 		}
-		scene.drawText(screen, heading+headingSuffix, panelX+28, 450, 12, headingColor)
+		scene.drawText(screen, heading+headingSuffix, panelX+28, fieldNotesPanelOriginY+9, 10, headingColor)
 		body := fieldNote.Introduction
 		if fieldNote.Context != "" {
 			body += "\nCONTEXT · " + fieldNote.Context
@@ -310,7 +326,7 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 		if fieldNote.Hint != "" {
 			body += "\nHINT · " + fieldNote.Hint
 		}
-		scene.drawText(screen, body, panelX+28, 477, 11, color.RGBA{R: 202, G: 210, B: 206, A: 255})
+		scene.drawText(screen, body, panelX+28, fieldNotesPanelOriginY+29, 9, color.RGBA{R: 202, G: 210, B: 206, A: 255})
 	} else {
 		label := "F: show Field Notes"
 		labelColor := color.RGBA{R: 203, G: 172, B: 104, A: 255}
@@ -318,7 +334,7 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 			label = "BREAKTHROUGH: " + fieldNote.Topic + " · F for details"
 			labelColor = color.RGBA{R: 255, G: 213, B: 92, A: 255}
 		}
-		scene.drawText(screen, label, panelX+18, 566, 12, labelColor)
+		scene.drawText(screen, label, panelX+18, 574, 12, labelColor)
 	}
 	scene.drawText(screen, "Click: migrate · Arrows: choose · Enter: queue", panelX+18, 620, 12, color.White)
 	scene.drawText(screen, "Tab/Shift+Tab: bands · Space: turn", panelX+18, 642, 12, color.White)
@@ -328,6 +344,57 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 	}
 	scene.drawText(screen, spatialHint, panelX+18, 664, 12, color.White)
 	scene.drawText(screen, "Ctrl/Cmd+S: quick-save", panelX+18, 684, 12, color.White)
+}
+
+func (scene *MapScene) drawTileInspector(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview) {
+	const panelX = float32(922)
+	const currentX = panelX + 8
+	const targetX = panelX + 167
+
+	vector.FillRect(screen, panelX, tileInspectorOriginY, 324, tileInspectorHeight, color.RGBA{R: 18, G: 27, B: 33, A: 255}, false)
+	vector.StrokeRect(screen, panelX, tileInspectorOriginY, 324, tileInspectorHeight, 1, color.RGBA{R: 70, G: 91, B: 97, A: 255}, false)
+	scene.drawText(screen, "TILE LIVEABILITY · cyan reachable · gold best · red queued", currentX, tileInspectorOriginY+3, 7.8, color.RGBA{R: 203, G: 172, B: 104, A: 255})
+
+	band := selectedBandInFrame(frame, selectedBand)
+	current := currentTileSummary(frame, band)
+	target := targetTileSummary(frame, band, preview)
+	currentHeading, targetHeading := current.heading, target.heading
+	if current.showDetails {
+		currentHeading += " · " + current.status
+	}
+	if target.showDetails {
+		targetHeading += " · " + target.status
+	}
+	scene.drawText(screen, currentHeading, currentX, tileInspectorOriginY+15, 8.3, color.RGBA{R: 245, G: 202, B: 92, A: 255})
+	targetColor := color.RGBA{R: 167, G: 184, B: 181, A: 255}
+	if target.showDetails {
+		targetColor = color.RGBA{R: 87, G: 211, B: 211, A: 255}
+	}
+	if band != nil && band.HasQueuedMigration && (!preview.Visible || preview.BandID != band.ID) {
+		targetColor = color.RGBA{R: 255, G: 106, B: 91, A: 255}
+	}
+	scene.drawText(screen, targetHeading, targetX, tileInspectorOriginY+15, 8.3, targetColor)
+	vector.StrokeLine(screen, targetX-8, tileInspectorOriginY+15, targetX-8, tileInspectorOriginY+104, 0.7, color.RGBA{R: 67, G: 82, B: 87, A: 220}, false)
+
+	currentLines, targetLines := liveabilityLines(current), liveabilityLines(target)
+	for index := range currentLines {
+		y := tileInspectorOriginY + 27 + float32(index)*10
+		if currentLines[index] != "" {
+			scene.drawText(screen, currentLines[index], currentX, y, 7.8, color.RGBA{R: 220, G: 225, B: 218, A: 255})
+		}
+		if targetLines[index] != "" {
+			scene.drawText(screen, targetLines[index], targetX, y, 7.8, color.RGBA{R: 220, G: 225, B: 218, A: 255})
+		}
+	}
+
+	footer := "Arrows update target · Enter queues · Esc clears"
+	footerColor := color.RGBA{R: 145, G: 163, B: 161, A: 255}
+	if band != nil {
+		if line := interbreedPanelLine(interbreedStatus(*band)); line != "" {
+			footer, footerColor = line, interbreedMarkerColor
+		}
+	}
+	scene.drawText(screen, footer, currentX, interbreedPanelLineY, 8, footerColor)
 }
 
 func formatHealthDelta(points float64) string {

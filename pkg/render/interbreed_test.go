@@ -68,12 +68,18 @@ func TestControlHintsMentionInterbreedOnlyWhenAvailable(t *testing.T) {
 	}
 }
 
-func TestInterbreedHUDLineHasDedicatedVerticalSpace(t *testing.T) {
-	if migrationLegendY+hudSmallTextSize >= interbreedPanelLineY {
-		t.Fatal("interbreeding line overlaps the migration legend")
+func TestInspectorAndFieldNotesHaveDedicatedVerticalSpace(t *testing.T) {
+	if mapLegendOriginY+mapLegendHeight > mapOriginY {
+		t.Fatal("map legend overlaps the map")
 	}
-	if interbreedPanelLineY+hudSmallTextSize >= fieldNotesPanelOriginY {
-		t.Fatal("Field Notes panel covers the interbreeding line")
+	if interbreedPanelLineY < tileInspectorOriginY || interbreedPanelLineY+8 > tileInspectorOriginY+tileInspectorHeight {
+		t.Fatal("interbreeding line falls outside the tile inspector")
+	}
+	if tileInspectorOriginY+tileInspectorHeight >= fieldNotesPanelOriginY {
+		t.Fatal("Field Notes panel covers the tile inspector")
+	}
+	if fieldNotesPanelOriginY+fieldNotesPanelHeight > 610 {
+		t.Fatal("Field Notes panel overlaps the controls")
 	}
 }
 

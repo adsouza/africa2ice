@@ -73,6 +73,8 @@ type Tile struct {
 	Biome              Biome
 	Explored           bool
 	NaturalShelter     float64
+	LocalTemperatureC  float64
+	MovementCost       float64
 	BaseMoisture       float64
 	VegetationIndex    float64
 	BaselineK          float64
@@ -127,10 +129,12 @@ type Band struct {
 	// HasInterbreedTarget and InterbreedTargetID expose the intent the band has
 	// already accepted this turn, so presentation can show what the player
 	// chose before the turn resolves it rather than leaving the action silent.
-	HasInterbreedTarget bool
-	InterbreedTargetID  BandID
-	PassageStatuses     [PassageCount]PassageStatus
-	Stress              float64
+	HasInterbreedTarget   bool
+	InterbreedTargetID    BandID
+	PassageStatuses       [PassageCount]PassageStatus
+	Stress                float64
+	SeasonalMortalityRate float64
+	ChronicMortalityRate  float64
 }
 
 // ResearchOption is a projected view of the authoritative prerequisite DAG.
@@ -188,6 +192,8 @@ type MigrationCandidate struct {
 	WaterSurvivalEquivalent float64
 	DestinationPopulation   uint64
 	WarningSuitability      float64
+	SeasonalMortalityRate   float64
+	ChronicMortalityRate    float64
 	Passage                 PassageID
 	RequiresPassage         bool
 }

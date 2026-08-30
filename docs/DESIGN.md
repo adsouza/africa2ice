@@ -278,7 +278,7 @@ THIRD_PARTY_NOTICES.md   reviewed runtime/tooling license notices shipped with n
 pkg/gameapi/             DRIVING PORT + DTO CONTRACT — stdlib only, no dependencies
   doc.go                 package contract and architectural role
   enums.go               Biome, Season, Tech, HeritableTrait, Species, Region, FaunaGroup, MacroEpisode + String()
-  frame.go               Frame, climate/macro summaries, passages/achievements, Tile incl. ElevationKm/Band/FoodTurnReport/OutcomeReport/Event/MigrationCandidate values — no pointers
+  frame.go               Frame, climate/macro summaries, passages/achievements, Tile incl. elevation/temperature/movement/Band/FoodTurnReport/OutcomeReport/Event/MigrationCandidate values — no pointers
   command.go             Command iface + SetAssignment, QueueMigration, SplitBand, ResearchTech, Interbreed
   errors.go              stable ErrorCode/GameError boundary values; no domain types
   game.go                Game inbound port: Snapshot, NewCampaign, Apply, EndTurn, and storage use cases
@@ -574,8 +574,9 @@ acute mortality breakdown, and the bounded `LastOutcomeReport` containing that t
 and health endpoints plus causal components, the `SpatialActionUsed` marker, and the queued-migration destination plus
 presence flag. The projection exposes that already-persisted intent so presentation can show what
 the player selected; it adds no second queue or simulation authority. **Derived previews:**
-`OriginalResearchGainPreview`, the fixed nine-entry projected `ResearchOptions`
-availability/acquired/current-target view, the ranked `MigrationCandidates`, the freshly allocated co-located
+`OriginalResearchGainPreview`, the current tile's seasonal/chronic mortality-rate preview, the fixed nine-entry projected `ResearchOptions`
+availability/acquired/current-target view, the ranked `MigrationCandidates` with destination-specific
+seasonal/chronic mortality-rate previews, the freshly allocated co-located
 archaic `InterbreedCandidateIDs`, a fixed three-entry `PassageStatuses` array, and `Stress`. Together these let the HUD explain the band's
 capabilities, food outcome, and population change.
 
@@ -589,7 +590,8 @@ workforce and research controls live. Both are authoritative in the domain: the 
 explain the aggregate's answer, never substitute for its validation. The preview is the `saturating-toolcraft-v1`
 contribution under the current planning assignment, capped at the target's remaining cost, if the
 band survives the turn; it excludes contact diffusion. Each tile value also exposes its fixed finite
-`ElevationKm`, current `Biome`, fixed `NaturalShelter` rating, and a fixed-size `FaunaSummary`
+`ElevationKm`, current `Biome`, current finite `LocalTemperatureC`, destination `MovementCost`, fixed
+`NaturalShelter` rating, and a fixed-size `FaunaSummary`
 containing the current profile's prey-group weights and ordinary-hunting/megafauna support flags,
 plus the tile's authoritative `Explored` flag and any currently visible macro-impact summary. The
 renderer reads `ElevationKm` directly rather than importing or rerasterizing geography. These are environment values,
@@ -6639,7 +6641,19 @@ The same 2D HUD layout applies on desktop and web, over the 3D map:
   the “Computer controlled” label and expose no player commands.
 - **Band-selection keys:** `Tab` and `Shift+Tab` select the next and previous sapiens band,
   respectively, wrapping at either end. Both clear any UI-local keyboard migration preview before
-  changing selection, and the persistent controls legend names both directions.
+  changing selection, and the persistent controls legend names both directions. The compact side
+  panel reserves five band rows and renders the five-row page containing the selected sapiens band;
+  selecting the first band on another page replaces the visible page immediately. Its header shows
+  the one-based visible range and total (for example, `Sapiens bands 6–10/17`), so later bands are
+  never silently hidden and the selected band is always visible. Archaic bands count in neither the
+  range nor the total. This page is derived from the selected ID and accepted frame and adds no
+  independent scroll position or saved UI state.
+- **Persistent terrain legend:** the strip immediately above the map shows a swatch and a short
+  liveability explanation for each of the six biome classes, plus open water and unexplored terrain.
+  Biome swatches use the same current palette function as their map tiles, not a duplicated set of
+  approximate colors. The accompanying text names the characteristic resource opportunity and
+  principal environmental hazard; water says it cannot be occupied and unexplored terrain says its
+  details are not yet known. The legend therefore remains meaningful without color perception.
 - **Reachability overlay:** when the selected sapiens band still has its spatial action, every tile
   in its authoritative `MigrationCandidates` list receives a cyan outline and the first-ranked
   candidate receives a gold outline. A persistent legend explains both colors, and turn-0 Field
@@ -6682,10 +6696,18 @@ The same 2D HUD layout applies on desktop and web, over the 3D map:
   green, and prerequisite-locked technologies grey. These states come from the frame's projected
   `ResearchOptions`, not a prerequisite table duplicated in presentation code. The legend remains
   visible even when Field Notes are hidden, so pressing `1`–`9` is never an unexplained action.
-- **Tile inspector:** local flora, fauna, and water stocks; carrying capacity; degradation;
-  natural shelter; the current regional abrupt-climate anomaly; current visible macro-impact factors;
-  and the already-specified regional prey summary. Distinguish undegraded
-  `BaselineK` from current `EcologicalK`; neither is an extra population resource.
+- **Tile inspector and migration comparison:** one persistent column describes the selected band's
+  current tile and a second describes the UI-local arrow-key destination cursor, or the accepted
+  queued destination when no cursor is active. Each known, habitable land column shows biome,
+  region, local temperature, combined and source-split food stocks, water stock/cap, current
+  `EcologicalK`, degradation, natural shelter, movement cost, and the selected band's projected
+  seasonal/chronic mortality rates for that tile. It also exposes the current regional abrupt-climate
+  anomaly, current visible macro-impact factors, and the already-specified regional prey summary in
+  the expanded inspector. Distinguish undegraded `BaselineK` from current `EcologicalK`; neither is
+  an extra population resource. The compact comparison labels the cursor destination reachable only
+  when it appears in the authoritative `MigrationCandidates`; invalid water and uninhabitable land
+  explain their state. An unexplored destination says only that its details are hidden and must not
+  reveal land, water, biome, resource, hazard, or passage information.
 
 Display current population, `Health`, `StoredFood`, and environmental values from the accepted
 frame. The top-bar population is a display-only sum over at most `MaxBands = 256` band values;
@@ -7669,9 +7691,9 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    define enums including `CampaignEra`, `Frame`/`Tile`/`Band`/`FoodTurnReport`/`OutcomeReport`/`Event`, fixed per-band
    technology/progress and six-value heritable state, `LastFoodReport`, `LastOutcomeReport`, climate/macro summaries, co-located interbreeding
    candidates, and five-role basis-point allocation values, per-tile
-   `ElevationKm`, `Biome`, `Explored`, `NaturalShelter`, visible macro impact, and fixed-size `FaunaSummary`
+   `ElevationKm`, `Biome`, `Explored`, `NaturalShelter`, `LocalTemperatureC`, `MovementCost`, visible macro impact, and fixed-size `FaunaSummary`
    values with the closed `FaunaGroup` enum, derived
-   original-research-preview values, fixed nine-entry `ResearchOptions`, `Interbreed`, the other `Command` values, segregated
+   original-research-preview and band/destination mortality-rate preview values, fixed nine-entry `ResearchOptions`, `Interbreed`, the other `Command` values, segregated
    `CampaignUseCases`/`StorageUseCases` and composed `Game` port, and `SlotMetadata`. Depends on
    nothing outside the standard library; every driving adapter is written against it.
 
@@ -7975,10 +7997,10 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    across more than three later projections, then mutate each older `Frame`, including band
    population, `Health`, `StoredFood`, `HeritableState`,
    `LastFoodReport`, `LastOutcomeReport`, interbreeding candidates, and
-   tile `ElevationKm`, `Biome`, `Explored`, `NaturalShelter`,
+   tile `ElevationKm`, `Biome`, `Explored`, `NaturalShelter`, `LocalTemperatureC`, `MovementCost`,
    `FaunaSummary` weights/flags, passage,
    established-region, event-feed, and nested
-   migration-candidate slices, `CampaignResult`, and every per-band three-entry `PassageStatuses`
+   migration-candidate slices including destination mortality previews, current-tile mortality previews, `CampaignResult`, and every per-band three-entry `PassageStatuses`
    array, and prove the domain and
    every later `Frame` remain unchanged — the no-recycling isolation guarantee, asserted rather
    than assumed. A backing-address fixture must

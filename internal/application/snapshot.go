@@ -45,6 +45,7 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 		if geography.Land {
 			macroImpact := domain.MacroImpactAt(geography, date.Turn)
 			publicTile.Region, publicTile.Biome = mapRegion(geography.Region), mapBiome(habitat[id].Biome)
+			publicTile.LocalTemperatureC, publicTile.MovementCost = habitat[id].LocalTemperatureC, habitat[id].MovementCost
 			publicTile.VegetationIndex, publicTile.BaselineK = habitat[id].VegetationIndex, habitat[id].BaselineK
 			publicTile.Degradation = tileStates[id].Degradation
 			publicTile.EcologicalK = habitat[id].BaselineK * (1 - tileStates[id].Degradation) * macroImpact.HabitatFactor
@@ -100,6 +101,8 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 				MacroHealthLoss: band.LastOutcomeReport.MacroHealthLoss, AcuteDiseaseHealthLoss: band.LastOutcomeReport.AcuteDiseaseHealthLoss,
 			},
 		}
+		geography, _ := grid.Tile(band.TileID)
+		publicBand.SeasonalMortalityRate, publicBand.ChronicMortalityRate = domain.Phase3MortalityRates(band, geography, habitat[band.TileID], season)
 		for index := range publicBand.AllocationBP {
 			publicBand.AllocationBP[index] = uint16(band.Allocation[index])
 		}
@@ -132,11 +135,15 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 			}
 		}
 		for _, candidate := range service.world.MigrationCandidates(band.ID) {
+			destination, _ := grid.Tile(candidate.TileID)
+			seasonalMortalityRate, chronicMortalityRate := domain.Phase3MortalityRates(band, destination, habitat[candidate.TileID], season)
 			publicBand.MigrationCandidates = append(publicBand.MigrationCandidates, gameapi.MigrationCandidate{
 				TileID: gameapi.TileID(candidate.TileID), Cost: candidate.Cost, Attraction: candidate.Attraction,
 				EcologicalK: candidate.EcologicalK, UsableFoodEquivalent: candidate.UsableFoodEquivalent,
 				WaterSurvivalEquivalent: candidate.WaterSurvivalEquivalent, DestinationPopulation: candidate.DestinationPopulation,
-				WarningSuitability: candidate.WarningSuitability, Passage: gameapi.PassageID(candidate.Passage),
+				WarningSuitability:    candidate.WarningSuitability,
+				SeasonalMortalityRate: seasonalMortalityRate, ChronicMortalityRate: chronicMortalityRate,
+				Passage:         gameapi.PassageID(candidate.Passage),
 				RequiresPassage: candidate.RequiresPassage,
 			})
 		}

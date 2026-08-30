@@ -2,6 +2,7 @@ package application
 
 import (
 	"errors"
+	"math"
 	"testing"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
@@ -72,14 +73,52 @@ func TestFrameIsolationAcrossProjections(t *testing.T) {
 	old, _ := service.Snapshot()
 	old.Bands[0].Population = 999
 	old.Tiles[0].ElevationKm = 999
+	old.Tiles[0].LocalTemperatureC = 999
+	if len(old.Bands[0].MigrationCandidates) > 0 {
+		old.Bands[0].MigrationCandidates[0].SeasonalMortalityRate = 999
+	}
 	old.Bands[0].MigrationCandidates = append(old.Bands[0].MigrationCandidates, gameapi.MigrationCandidate{TileID: 6000})
 	fresh, _ := service.Snapshot()
-	if fresh.Bands[0].Population == 999 || fresh.Tiles[0].ElevationKm == 999 {
+	if fresh.Bands[0].Population == 999 || fresh.Tiles[0].ElevationKm == 999 || fresh.Tiles[0].LocalTemperatureC == 999 {
 		t.Fatal("frame aliases a prior projection")
 	}
 	for _, candidate := range fresh.Bands[0].MigrationCandidates {
-		if candidate.TileID == 6000 {
+		if candidate.TileID == 6000 || candidate.SeasonalMortalityRate == 999 {
 			t.Fatal("nested candidate slice aliased")
+		}
+	}
+}
+
+func TestFrameProjectsTileLiveabilityInputsAndBandSpecificRisks(t *testing.T) {
+	service, err := NewGameService(29)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame, err := service.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tile := range frame.Tiles {
+		if !tile.Land {
+			continue
+		}
+		if math.IsNaN(tile.LocalTemperatureC) || math.IsInf(tile.LocalTemperatureC, 0) {
+			t.Fatalf("tile %d temperature = %v", tile.ID, tile.LocalTemperatureC)
+		}
+		if tile.MovementCost < 1 || tile.MovementCost > 2.75 {
+			t.Fatalf("tile %d movement cost = %v", tile.ID, tile.MovementCost)
+		}
+	}
+	for _, band := range frame.Bands {
+		if band.SeasonalMortalityRate < 0 || band.ChronicMortalityRate < 0 ||
+			math.IsNaN(band.SeasonalMortalityRate) || math.IsNaN(band.ChronicMortalityRate) {
+			t.Fatalf("band %d mortality preview = %v/%v", band.ID, band.SeasonalMortalityRate, band.ChronicMortalityRate)
+		}
+		for _, candidate := range band.MigrationCandidates {
+			if candidate.SeasonalMortalityRate < 0 || candidate.ChronicMortalityRate < 0 ||
+				math.IsNaN(candidate.SeasonalMortalityRate) || math.IsNaN(candidate.ChronicMortalityRate) {
+				t.Fatalf("band %d candidate %d mortality preview = %v/%v", band.ID, candidate.TileID, candidate.SeasonalMortalityRate, candidate.ChronicMortalityRate)
+			}
 		}
 	}
 }
