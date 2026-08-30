@@ -9,11 +9,13 @@ package domain
 // uses, so the model has one notion of a neighbouring band rather than two that
 // can drift apart.
 //
-// It attaches to acute risk rather than to fertility because acute events are
-// the only term that moves an integer population under the current calibration:
-// the logistic growth term is smaller than RoundPopulation's half-person
-// threshold in every band-turn measured, so a fertility bonus has nothing to
-// act on. Revisit that once population growth itself can register.
+// It attaches to acute risk rather than to fertility for a reason that has since
+// been fixed: under nearest-integer rounding the logistic term fell inside the
+// rounding deadband every turn, so a fertility bonus had nothing to act on.
+// Stochastic rounding and the selected r have made growth register, so attaching
+// an adjacency effect to fertility is now possible. It stays on acute risk until
+// that variant is measured against the corpus, not because acute risk is the only
+// term that can move a population.
 
 const (
 	KinContactHalfSaturation = 1.0

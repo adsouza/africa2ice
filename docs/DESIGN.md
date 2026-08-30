@@ -1078,11 +1078,13 @@ is `type Population uint32`, bounded by `MaxPopulation = 2^32 - 1`; `gameapi.Ban
 population is likewise a `uint64` count; scoring converts that already-bounded total to `float64`
 only at the formula call.
 
-`RoundPopulation(value)` first rejects NaN, infinity, negative values, and values greater than
-`float64(MaxPopulation)`. Only then does its single `Population(value + 0.5)` conversion execute.
-Because `value` is non-negative and every possible truncated integer part is representable by
-`uint32`, Go's otherwise implementation-dependent out-of-range case is unreachable; adding the exact
-binary fraction `0.5` implements nearest-integer rounding with ties upward. The helper returns
+`RoundPopulation(value, rng)` first rejects NaN, infinity, negative values, and values greater than
+`float64(MaxPopulation)`. Only then does its single `Population(value + rng.Float64())` conversion
+execute. Because `value` is non-negative and every possible truncated integer part is representable
+by `uint32`, Go's otherwise implementation-dependent out-of-range case is unreachable; adding a draw
+from `[0, 1)` before truncating implements unbiased stochastic rounding. The draw is the reason the
+helper takes the aggregate-owned `WorldRNG` rather than reading a package-level source: the sequence
+has to belong to the campaign so that a restored save resumes it exactly. The helper returns
 `(Population, error)`, and phase-3 demographics, macro-event loss, and acute loss must propagate the
 error before publication. Raw demographic terms retain fractional precision, so the model rounds
 once at each population-changing checkpoint rather than inside each formula.
@@ -5552,20 +5554,38 @@ P_demographic_raw = P_grown − M_starvation − M_seasonal − M_chronic
 P_demographic   = RoundPopulation(P_demographic_raw)
 ```
 
-`RoundPopulation` selects the nearest whole person with exact halves rounded upward. It is applied
-once after the complete phase-3 expression; it does not separately round growth or any cause's raw
-or capped mortality estimate. The persisted mortality breakdown therefore preserves those analytic
+`RoundPopulation` rounds **stochastically**: it adds a draw from `[0, 1)` before truncating, so a
+value lands on the lower whole person with probability `1 - frac` and the upper one with probability
+`frac`, and is therefore unbiased in expectation while the stored count stays integral. Nearest-
+integer rounding, the approach first selected here, created a deadband of half a person either side
+of zero net change; at the growth and mortality scales this model actually runs, a band's entire
+per-turn demographic movement fell inside that deadband every turn and was discarded, so populations
+could not move at all. Drawing is also the better model of the thing being represented: whether a
+small band grows in a given period is genuinely uncertain, and demographic stochasticity is exactly
+what makes small populations fragile. The draw comes from the aggregate-owned `WorldRNG`, so a
+campaign remains a pure function of its seed and the sequence survives save and restore. It is
+applied once after the complete phase-3 expression; it does not separately round growth or any
+cause's raw or capped mortality estimate. The persisted mortality breakdown therefore preserves those analytic
 fractional estimates, while current population is always an integer-valued count. Validation rejects
 fractional JSON populations and values above `MaxPopulation = 2^32 - 1` during decoding.
 
-The approved initial logistic coefficient is **`r = 0.002` per game turn** for both species. At
-negligible crowding and full feeding it requests growth of approximately 0.2% of the band's
+The approved initial logistic coefficient is **`r = 0.010` per game turn** for both species. At
+negligible crowding and full feeding it requests growth of approximately 1% of the band's
 start-of-turn population before other effects. It is not an annual rate and is deliberately held
 constant across campaign eras even though the calendar span represented by a turn changes. Era
-duration therefore affects the displayed chronology, not this simulation coefficient. Step 5e's
-whole-campaign pass selected the value together with the mortality scales below: higher per-turn
-growth drove whole-tile crowding decline faster than outward dispersal could relieve it. It remains
-an Initial balance parameter tunable in §12.
+duration therefore affects the displayed chronology, not this simulation coefficient. It remains an
+Initial balance parameter tunable in §12.
+
+Step 5e first selected `r = 0.002`, on the reading that higher per-turn growth drove whole-tile
+crowding decline faster than outward dispersal could relieve it. That reading was wrong, and the
+correction is recorded here because the number alone does not explain itself. The runaway decline
+came from the crowding term being unbounded below rather than from growth being too high; once it is
+bounded, mortality absorbs three times the value that reading had forced, and `0.002` is revealed to
+produce no dispersal whatsoever — a campaign at that coefficient ends holding the four bands it was
+founded with, having grown them in place. The corpus was re-swept across `0.002`, `0.005`, `0.010`,
+`0.020`, and `0.030`: the last two carry the world toward `MaxBands`, `0.005` subdivides on two seeds
+of eight, and `0.010` roughly triples the founding band count while establishing every named
+destination on every seed.
 
 **Crowding uses the whole tile, growth uses the band.** The logistic term has two distinct
 population inputs and they are deliberately different. The leading `r · P` scales the band's own
@@ -5577,8 +5597,34 @@ tile at capacity therefore stops growth for everyone standing on it, rather than
 
 `K_eff` remains band-specific because `T_tech` is the acting band's own capacity multiplier: on a
 crowded tile, a technologically better-equipped band still finds room where a less-equipped one does
-not. The crowding factor may go negative when `P_total_origin > K_eff`, which is the existing
-crowding-driven decline path and is intentionally not scaled by the fed fraction below. This is the
+not. The crowding factor may go negative when `P_total_origin > K_eff`, which is the crowding-driven
+decline path and is intentionally not scaled by the fed fraction below.
+
+**Crowding decline is bounded.** The decline the logistic term may request in one turn is capped at
+`MaxCrowdingDeclineFraction = 0.25` of the band's start-of-turn population:
+
+```
+BaseGrowth = max(r · P · (1 − P_total_origin / K_eff), −MaxCrowdingDeclineFraction · P)
+```
+
+Without the bound the crowding factor is unbounded below, and the paragraph above describing a full
+tile as stopping growth becomes false at any real overshoot: at thirty times capacity the same
+expression removes most of a band in a single turn. What makes that unacceptable is not the
+magnitude but the accounting. Every phase-3 mortality cause is scaled so it cannot exceed the
+population and is recorded in the persisted breakdown §9 stores and the HUD displays; crowding
+decline is reported as growth and belongs to no cause, so the people are simply gone with every
+category reading zero. A band of 112 on a tile whose `K_eff` had fallen to 10.96 lost 99 people in
+one turn with starvation, seasonal, chronic, macro, and acute all zero and no food deficit, and
+ordinary route-neutral dispersal produced roughly ninety such events per campaign.
+
+The bound makes an over-capacity tile a sustained squeeze a player can see coming and answer — by
+splitting and moving through a chokepoint in smaller groups — rather than an unexplained cull on the
+turn of arrival. A tile that cannot support anyone at all takes the same bound rather than
+annihilating its occupants, which keeps the function continuous as `K_eff` approaches zero and
+leaves a climate shift under a settled band survivable long enough to answer. The value is
+deliberately chosen from a range in which it does not act as a balance parameter: at `0.10`, `0.15`,
+`0.20`, and `0.25` the corpus peaks at 1012, 1033, 1035, and 1035 people, and that insensitivity is
+what distinguishes a guard against a pathology from a tuning knob. This is the
 only place total tile population enters demographics; food, water, health, starvation, and mortality
 all remain band-local, and shared stock scarcity continues to act through the proportional
 allocator rather than through this term.
@@ -5602,7 +5648,10 @@ capacity balance still need tuning together; this rule selects `r` but not the b
 capacities. `HazardAlgorithm: "split-v1"`
 owns this demographic coupling, with no new simulation input, RNG draw, or algorithm identifier.
 
-Fixtures lock `r = 0.002` and cover positive, zero, and negative `BaseGrowth` at deficit fractions `0`, `0.50`, and `1`,
+Fixtures lock `r = 0.010` and cover positive, zero, and negative `BaseGrowth` at deficit fractions `0`, `0.50`, and `1`,
+including a decline held at `−MaxCrowdingDeclineFraction · P` when the unbounded term would exceed
+it, a mild overshoot left unbounded so the cap cannot become a floor every decline snaps to, and a
+`K_eff` of zero taking the same bound rather than removing the band,
 including zero growth at carrying capacity, a zero logistic coefficient, and valid tiny fractional
 growth whose combined phase-3 survivor result receives exactly one whole-person rounding. Co-location fixtures place two bands of 50 on a tile whose
 `K_eff` is 100 and assert that both compute zero `BaseGrowth`, not the positive growth a band-local
@@ -5846,6 +5895,37 @@ uncovered probabilities rising while their raw components stay unchanged. Tests 
 not promise that every event kind's final probability falls by its shelter mitigation percentage.
 
 One `WorldRNG.Float64()` draw selects no event or one event by cumulative scaled probability in the
+**Kin support lowers acute risk.** A band in ordinary contact with same-species bands — sharing or
+neighbouring its tile — faces less acute risk than one standing alone:
+
+```
+kin_share      = contacts / (contacts + KinContactHalfSaturation)      contacts > 0
+               = 0                                                     otherwise
+kin_remaining  = 1 − MaxKinAcuteReduction · kin_share
+probability[k] = AcuteProbabilityScale · kin_remaining · raw_probability[k]
+```
+
+with `KinContactHalfSaturation = 1.0` and `MaxKinAcuteReduction = 0.40`. This is an Allee effect:
+mutual aid, shared watch, and shared knowledge of the ground make a shock survivable that would
+otherwise take a chunk of the band. It applies before the `MaxAcuteProbability` cap and lowers every
+event kind alike, because a neighbouring band helps with a predator, a flood, or a fall without
+distinction.
+
+`contacts` counts living same-species bands under `ordinaryContact`, the same predicate same-species
+gene flow already uses, so the model holds one notion of a neighbouring band rather than two that can
+drift apart. It is read from the start-of-turn snapshot, so the count cannot depend on the order the
+turn pipeline happens to walk the bands in. The share saturates rather than accumulating, so a dense
+cluster cannot outrun the reduction cap, and `kin_remaining` is exactly `1` for an isolated band, so
+the rule is invisible where it does not apply and never falls below its stated floor of `0.60`. It
+follows the remaining-risk shape `InnateImmuneRemainingRisk` and `AridHeatRemaining` already use.
+
+The rule attaches to acute risk rather than to fertility for a reason that no longer holds: under
+nearest-integer rounding the logistic term fell inside the rounding deadband every turn, so a
+fertility bonus had nothing to act on. Stochastic rounding and the selected `r` have since made
+growth register, so attaching an adjacency effect to fertility is now possible and is left as an open
+balance question rather than a settled one. `HazardAlgorithm` owns the coupling; the persisted
+`KinSupportAlgorithm: "saturating-kin-acute-v1"` names it, and it consumes no RNG draw of its own.
+
 stable enum order, using half-open intervals: select the first kind for which the draw is strictly
 less than its cumulative upper bound. Zero-width intervals cannot select an event; a draw at or
 above the final cumulative bound means no event. If an event is selected, and only then, a second
@@ -7048,7 +7128,9 @@ world. No JSON tag, slot ID, schema version, or migration branch appears in `int
 `MovementAlgorithm: "eight-way-no-water-corners-v1"`,
 `MovementCostAlgorithm: "destination-vegetation-v1"`,
 `PassageAlgorithm: "named-asymmetric-v1"`, `ResourceAlgorithm: "toward-cap-v1"`,
-`HazardAlgorithm: "split-v1"`, the campaign turn and terminal result,
+`HazardAlgorithm: "split-v1"`,
+`KinSupportAlgorithm: "saturating-kin-acute-v1"`,
+`PopulationRoundingAlgorithm: "stochastic-v1"`, the campaign turn and terminal result,
 `ExploredTiles[ExplorationWordCount]`, the sorted unique
 `SapiensEstablishedRegions`, every non-derived tile and band field including `Species`, acquired-tech
 bitset, research target, fixed research-progress vector, fixed
@@ -7682,7 +7764,9 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    integer type, a named floating source type, and a conversion inside a `_test.go` file, plus
    acceptance fixtures for `float64(i)` in the other direction, integer-to-integer conversions, and
    the constant conversion `int(2.0)` that the type-checker folds. The one production acceptance
-   fixture is `RoundPopulation`'s finite/range-checked `Population(value + 0.5)` conversion; the same
+   fixture is `RoundPopulation`'s finite/range-checked `Population(value + rng.Float64())` conversion,
+   identified by its shape — a single floating parameter, all four checks present — rather than by
+   its name, so a copy under another name is still rejected; the same
    conversion anywhere else, or a helper version missing any check, is rejected. Adding all three gates now
    costs one focused test; adding them after the domain exists means auditing every expression already
    written.
@@ -7982,9 +8066,23 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    - **5e — Mandatory domain viability gate.** Before application or persistence work begins, run the
      complete turn loop through the same fixed seed corpus and deterministic sapiens route policies
      used by the final balance gate. Prove the reference policy reaches one destination by the
-     current margin, retains the establishment and turn-400 survival margins, and never exceeds
-     `MaxBands`; separately prove Frangistan, South Asia, the Yellow River Basin, Sahul, and Beringia
-     are reachable. Record extinction and dispersal-failed outcomes as expected possible results,
+     current margin, retains the establishment and turn-400 survival margins, ends more subdivided
+     than the scenario was founded with, and never exceeds `MaxBands`; separately prove Frangistan,
+     South Asia, the Yellow River Basin, Sahul, and Beringia are reachable.
+
+     The **subdivision margin** requires the reference policy to end at least one corpus campaign
+     holding strictly more established bands than the scenario's founding sapiens count, derived from
+     `StartingAnchors` so that editing the scenario cannot silently weaken it. It exists because the
+     other margins are all satisfiable by a campaign that never disperses: regional achievements latch
+     permanently once earned, so a campaign that touches Beringia and then contracts to its founding
+     tiles still reports a victory with the record intact, and total sapiens is blind to how the
+     people are distributed, so the founding bands doubling in place clear the survival margin as
+     comfortably as forty spread across a continent. Both shapes were produced during calibration, the
+     second of them passing every seed with zero variance — which is itself the tell, since a
+     stochastic model should not land on the same integer 48 times. Dispersal in this model happens by
+     splitting, so a campaign that disperses must end more subdivided than it began. The margin is
+     scoped to the reference policy, matching the survival margin, because only the reference policy
+     splits its non-route bands and so is the only one that can subdivide by construction. Record extinction and dispersal-failed outcomes as expected possible results,
      not harness failures. This pass may tune only Appendix C **Initial** domain values and must update
      their owning §7 rules, Appendix B, fixtures, and manifest rows together. It may not relax a
      tighten-only margin or change a **Locked** value to manufacture a win. The gate must be green
@@ -9059,8 +9157,9 @@ they do not add time-varying species extinction, separately depleted prey, or a 
    health-technology effects; the heritable-effect coverage table remains separate.
    Retain the squared starvation response using the post-reserve deficit fraction, applied
    directly without a health threshold or multiplier, using Appendix C's `StarvationCoefficient`.
-   Scale only positive logistic growth by `1 - FoodDeficitFraction`; keep non-positive growth
-   unchanged. Start from Appendix C's storage constants without changing
+   Scale only positive logistic growth by `1 - FoodDeficitFraction`; leave non-positive growth
+   unscaled by the fed fraction, its magnitude being governed separately by
+   `MaxCrowdingDeclineFraction`. Start from Appendix C's storage constants without changing
    the population-scaled capacity, spoilage model, or checkpoints. Those are approved playtest
    defaults, not final calibration. Validate the selected absolute capacities, collection rates,
    starting-stock fractions, and seed-perturbation parameters. Keep the
@@ -9207,12 +9306,15 @@ Earlier fixtures use explicit values that are never release data.
 | `SeasonalMortalityScale`              | `0.10`                             | Initial |
 | `ChronicMortalityScale`               | `0.10`                             | Initial |
 | `AcuteProbabilityScale`               | `0.10`                             | Initial |
+| `KinContactHalfSaturation`            | `1.0`                              | Initial |
+| `MaxKinAcuteReduction`                | `0.40`                             | Initial |
 | Endemic camp/non-camp health rates    | six-biome table in §7              | Initial |
 | Health bounds and new-game value      | `[0, 1]`, new game `1.0`           | Locked  |
 | `HealthVulnerability` mapping         | `1 + (1 - Health)`, range `[1, 2]` | Locked  |
 | `MaxAcuteProbability`                 | `0.25`                             | Initial |
 | `MinAcuteLoss[k]` / `MaxAcuteLoss[k]` | §7 five-kind acute-severity table  | Initial |
-| `r` — logistic growth coefficient     | `0.002` per game turn              | Initial |
+| `r` — logistic growth coefficient     | `0.010` per game turn              | Initial |
+| `MaxCrowdingDeclineFraction`          | `0.25`                             | Initial |
 | Seasonal and chronic risk profiles    | §7 six-biome risk-profile tables   | Initial |
 | Technology mitigation effect tables   | §7 channel-specific mitigation table | Initial |
 
