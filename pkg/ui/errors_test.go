@@ -8,24 +8,29 @@ import (
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 )
 
+// The contract is enumerated from gameapi rather than retyped here. A retyped
+// list is one a new error code can be added without, leaving the omission to
+// surface as a raw code string in front of a player.
 func TestPlayerErrorCopyCoversEveryPublicErrorCode(t *testing.T) {
-	codes := []gameapi.ErrorCode{
-		gameapi.ErrInvalidCommand, gameapi.ErrInvalidAssignment, gameapi.ErrBandNotFound,
-		gameapi.ErrComputerControlledBand, gameapi.ErrSpatialActionUsed, gameapi.ErrInvalidMigration,
-		gameapi.ErrSplitStressTooLow, gameapi.ErrSplitPopulationTooLow, gameapi.ErrSplitDestinationNotAdjacent,
-		gameapi.ErrSplitDestinationUninhabitable, gameapi.ErrSplitDestinationUnexplored,
-		gameapi.ErrBandLimitReached, gameapi.ErrBandIDExhausted,
-		gameapi.ErrMissingTechnologyPrerequisite, gameapi.ErrTechnologyAlreadyAcquired, gameapi.ErrInvalidInterbreedTarget,
-		gameapi.ErrCampaignComplete, gameapi.ErrStoragePending, gameapi.ErrStorageReadOnly,
-		gameapi.ErrStorageFailure, gameapi.ErrInvalidSave, gameapi.ErrIncompatibleSave,
-	}
-	if len(playerErrorMessages) != len(codes) {
-		t.Fatalf("player error messages = %d, public codes = %d", len(playerErrorMessages), len(codes))
+	codes := gameapi.ErrorCodes()
+	if len(codes) == 0 {
+		t.Fatal("gameapi reports no error codes")
 	}
 	for _, code := range codes {
 		message := ErrorMessage(&gameapi.GameError{Code: code, Message: "internal wording"})
 		if message == "" || message == string(code) || message == "internal wording" {
 			t.Fatalf("code %q has non-player copy %q", code, message)
+		}
+	}
+	// Copy for a code gameapi no longer publishes is dead weight that will
+	// outlive whatever removed it.
+	published := make(map[gameapi.ErrorCode]bool, len(codes))
+	for _, code := range codes {
+		published[code] = true
+	}
+	for code := range playerErrorMessages {
+		if !published[code] {
+			t.Fatalf("player copy for %q, which is not a public error code", code)
 		}
 	}
 }
