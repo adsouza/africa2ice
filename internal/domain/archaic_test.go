@@ -18,12 +18,17 @@ func TestArchaicPlanningUsesClosedAssignmentResearchAndRankedSplit(t *testing.T)
 	if string(beforeRNG) != string(afterRNG) {
 		t.Fatal("archaic planning consumed randomness")
 	}
+	// The child takes the next free ID, which follows the anchor catalog. Deriving
+	// it keeps this fixture correct when anchors are added: hard-coded, it silently
+	// began matching a starting band instead of the split descendant.
+	const sourceID = BandID(5)
+	childID := BandID(len(StartingAnchors) + 1)
 	var source, child *Band
 	for index := range planning.bands {
 		switch planning.bands[index].ID {
-		case 5:
+		case sourceID:
 			source = &planning.bands[index]
-		case 9:
+		case childID:
 			child = &planning.bands[index]
 		}
 	}

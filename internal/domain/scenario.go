@@ -16,10 +16,12 @@ var StartingAnchors = [...]StartingAnchor{
 	{Species: ArchaicHominin, Region: Levant, Name: "Northern Levant", Point: g(36.0, 34.5), Population: 120},
 	{Species: ArchaicHominin, Region: Frangistan, Name: "Balkans", Point: g(22.0, 43.0), Population: 60},
 	{Species: ArchaicHominin, Region: Frangistan, Name: "Iberia", Point: g(-4.0, 40.0), Population: 60},
-	{Species: ArchaicHominin, Region: YellowRiverBasin, Name: "Baishiya Karst Cave (Denisovan)", Point: g(102.57, 35.45), Population: 150},
+	{Species: ArchaicHominin, Region: Siberia, Name: "Denisova Cave (Altai)", Point: g(84.68, 51.40), Population: 12},
+	{Species: ArchaicHominin, Region: SoutheastAsia, Name: "Tam Pa Ling", Point: g(103.40, 20.20), Population: 12},
+	{Species: ArchaicHominin, Region: EastAsia, Name: "Harbin (Denisovan)", Point: g(126.63, 45.75), Population: 90},
 }
 
-var StartingTileIDs = [len(StartingAnchors)]TileID{3098, 3480, 3671, 3960, 1944, 1459, 1639, 1877}
+var StartingTileIDs = [len(StartingAnchors)]TileID{3098, 3480, 3671, 3960, 1944, 1459, 1639, 909, 2645, 1407}
 
 func ResolveStartingTiles(grid *Grid, habitat *Habitat) ([len(StartingAnchors)]TileID, error) {
 	var result [len(StartingAnchors)]TileID

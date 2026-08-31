@@ -28,7 +28,7 @@ func TestNewWorldInitializer(t *testing.T) {
 			archaic += uint64(band.Population)
 		}
 	}
-	if sapiens != 480 || archaic != 390 || world.nextBandID != BandID(len(StartingAnchors)+1) {
+	if sapiens != 480 || archaic != 354 || world.nextBandID != BandID(len(StartingAnchors)+1) {
 		t.Fatalf("scenario totals sapiens=%v archaic=%v next=%d", sapiens, archaic, world.nextBandID)
 	}
 }

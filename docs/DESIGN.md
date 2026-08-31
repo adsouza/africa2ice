@@ -1303,21 +1303,40 @@ that each band represents a population at one exact archaeological site:
 |            4 | `ArchaicHominin`, Levant                | Northern Levant                   |      `120` | `34.5°N` |  `36.0°E` |
 |            5 | `ArchaicHominin`, Frangistan            | Balkans                           |       `60` | `43.0°N` |  `22.0°E` |
 |            6 | `ArchaicHominin`, Frangistan            | Iberia                            |       `60` | `40.0°N` |   `4.0°W` |
-|            7 | `ArchaicHominin`, Yellow River Basin    | Baishiya Karst Cave (Denisovan)   |      `150` | `35.45°N` | `102.57°E` |
+|            7 | `ArchaicHominin`, Siberia               | Denisova Cave (Altai)             |       `12` | `51.40°N` |  `84.68°E` |
+|            8 | `ArchaicHominin`, Southeast Asia        | Tam Pa Ling                       |       `12` | `20.20°N` | `103.40°E` |
+|            9 | `ArchaicHominin`, East Asia             | Harbin (Denisovan)                |       `90` | `45.75°N` | `126.63°E` |
 
-The Baishiya Karst Cave anchor represents a Denisovan population within the shared
-`ArchaicHominin` simulation type. It establishes an eastern, high-altitude archaic presence without
-introducing separate Neanderthal and Denisovan mechanics, technology graphs, or computer policies.
-The location and turn-0 presence are evidence-shaped: Denisovan occupation is attested around
-100,000 and 60,000 years ago at this 3,280-metre Tibetan Plateau site
-([Xia et al. 2024](https://www.nature.com/articles/s41586-024-07612-9)).
+The three eastern anchors represent a Denisovan population within the shared `ArchaicHominin`
+simulation type. They establish an eastern archaic presence without introducing separate Neanderthal
+and Denisovan mechanics, technology graphs, or computer policies, and their shared
+`HighAltitudeAdaptation` is what distinguishes the lineage from the western archaic populations.
+Denisova Cave in the Altai is the type site and the eponym; Harbin carries the largest of the three,
+matching the size of the ground available there; Tam Pa Ling stands for the southern range implied by
+the Denisovan ancestry carried by present-day Southeast Asian and Papuan populations.
+
+The Baishiya Karst Cave site on the Tibetan Plateau is deliberately **not** an anchor, despite being
+the best-attested Denisovan occupation outside the Altai
+([Xia et al. 2024](https://www.nature.com/articles/s41586-024-07612-9)). It resolves to a 3,000-metre
+tile whose mean temperature of −3.3 °C gives a thermal suitability of 0.12, and because the
+vegetation index is the product of moisture and thermal suitability, that tile yields
+`BaselineK = 4.1` despite excellent moisture. A band of any playable size there begins in maximal
+crowding collapse. The model has no capacity channel for high-altitude adaptation — the trait acts on
+hypoxia risk — so the site cannot be represented as a viable starting population without inventing
+one. This is the model being accurate about the Tibetan Plateau rather than a defect, and the sites
+that make Denisovans archaeologically famous are marginal for exactly the reason they preserved.
 
 After step 4 can classify turn-0 habitat, an authoring generator projects each anchor to fractional
 grid coordinates and processes this stable order. Its candidates are unused tiles that are land,
 belong to the anchor's required region, and have finite positive turn-0 `BaselineK` under the
-seed-independent habitat-temperature curve. Rank them by squared Euclidean distance from the fractional
+seed-independent habitat-temperature curve. Positive `BaselineK` is a necessary condition and not a
+sufficient one: a tile with `K = 4.1` satisfies it while supporting nobody, so the catalog
+additionally requires that no anchor begin in maximal crowding collapse. The crowding term is pinned
+at `MaxCrowdingDeclineFraction` once `P / K_eff` reaches `1 + MaxCrowdingDeclineFraction / r`, so an
+anchor at or beyond that ratio would take the maximum loss every turn from turn one. Anchors may
+begin stressed, and several deliberately do; they may not begin in free fall. Rank them by squared Euclidean distance from the fractional
 projected anchor, then by ascending tile ID. Select the first and exclude it from later anchors. The
-generator writes the resulting eight exact tile IDs into the checked-in scenario fixture; runtime
+generator writes the resulting ten exact tile IDs into the checked-in scenario fixture; runtime
 initialization reads those IDs and does not repeat the search. A generation test reruns the resolver
 and requires an exact match, so geography or climate changes cannot silently move a starting band.
 The habitat predicate makes resolution independent of `WorldSeed`; the resolver and placement
@@ -1596,9 +1615,10 @@ derived bound, version identifier, fixture, and migration named by the checklist
 `Species` has two simulated values in this slice: `HomoSapiens` and `ArchaicHominin`, but only
 `HomoSapiens` is player-controlled. New-world scenario data deterministically places sapiens bands
 as four bands of `120` people on four distinct East African land tiles, for `480` total sapiens.
-It places one archaic band of `120` in the Levant, two of `60` on distinct Frangistan tiles, and one
-Denisovan-representative band of `150` at the Baishiya Karst Cave anchor in the Yellow River Basin,
-for `390` total archaics and `870` people overall. Step 4 resolves §6's eight geographic anchors and freezes
+It places one archaic band of `120` in the Levant, two of `60` on distinct Frangistan tiles, and three
+Denisovan-representative bands — `12` at Denisova Cave in Siberia, `12` at Tam Pa Ling in Southeast
+Asia, and `90` at Harbin in East Asia —
+for `354` total archaics and `834` people overall. Step 4 resolves §6's ten geographic anchors and freezes
 the exact generated tile IDs after validating their region, land, and turn-0 habitability; placement
 and population consume no RNG.
 Every new-game band of either
@@ -7903,8 +7923,8 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    cardinal/diagonal edges, `1`/`math.Sqrt2` step lengths, and removal of a diagonal when either
    orthogonal corner is water but not merely uninhabitable. Movement-cost fixtures wait for step 4,
    where `V`, `ClassifyBiome`, the curve, and the biome factors all exist.
-   Add §6's exact eight-entry starting-anchor catalog and validate stable order, finite in-bounds
-   coordinates, the `4/2/2` species/region partition, and distinct fractional projected positions.
+   Add §6's exact ten-entry starting-anchor catalog and validate stable order, finite in-bounds
+   coordinates, the `4/1/2/3` species/region partition, and distinct fractional projected positions.
    Exact tile resolution waits for step 4's turn-0 habitat classifier.
    Exploration fixtures assert the exact initial East Africa land/coastline mask, no other initial
    region land, deterministic 96-word bit ordering, and no reveal from Levant/Frangistan archaic
@@ -9504,8 +9524,8 @@ Earlier fixtures use explicit values that are never release data.
 | `MinEstablishedBand`                                       | `20`                                                                                            | Initial | `BandAlgorithm`            |
 | `referenceRouteDeparturePopulation`                        | `5 × MinEstablishedBand / 2 = 50`                                                               | Derived | reference route policy     |
 | `MaxPopulation`                                            | `2^32 - 1` whole people (`uint32`)                                                              | Locked  | `BandAlgorithm`            |
-| New-game band populations                                  | four sapiens `120` in East Africa; one archaic `120` in the Levant; two archaic `60` in Frangistan; one Denisovan-representative archaic `150` in the Yellow River Basin | Locked  | scenario contract          |
-| New-game geographic anchors                                | §6 exact eight-entry Afar-to-Baishiya catalog                                                    | Locked  | scenario contract          |
+| New-game band populations                                  | four sapiens `120` in East Africa; one archaic `120` in the Levant; two archaic `60` in Frangistan; Denisovan-representative archaics `12` in Siberia, `12` in Southeast Asia, and `90` in East Asia | Locked  | scenario contract          |
+| New-game geographic anchors                                | §6 exact ten-entry Afar-to-Harbin catalog                                                        | Locked  | scenario contract          |
 | New-game starting tile IDs                                 | deterministic nearest valid tiles generated from the anchors and frozen                         | Step 4  | scenario contract          |
 | Split ratio                                                | `50/50`; odd whole-person remainder stays with source                                           | Locked  | `BandAlgorithm`            |
 | `MinSplitSourcePopulation`                                 | `2 × MinEstablishedBand = 40`                                                                   | Derived | `BandAlgorithm`            |

@@ -7,7 +7,18 @@ type HeritableState [HeritableTraitCount]TraitValue
 var sapiensEastAfricaTraits = HeritableState{0.10, 0.00, 0.45, 0.55, 0.85, 0.40}
 var archaicLevantTraits = HeritableState{0.45, 0.00, 0.60, 0.25, 0.65, 0.55}
 var archaicFrangistanTraits = HeritableState{0.75, 0.10, 0.55, 0.00, 0.45, 0.65}
-var archaicYellowRiverTraits = HeritableState{0.80, 0.35, 0.60, 0.05, 0.50, 0.65}
+
+// The two Denisovan-representative anchors. Both carry the lineage's high-altitude
+// adaptation, which is what distinguishes them from the western archaic
+// populations; the Altai band is colder and further north, so it is more
+// cold-adapted and less pigmented, tracking the lower UV it lives under.
+var archaicSiberiaTraits = HeritableState{0.85, 0.35, 0.60, 0.00, 0.35, 0.70}
+var archaicEastAsiaTraits = HeritableState{0.75, 0.30, 0.60, 0.05, 0.45, 0.65}
+
+// The southern Denisovan anchor lives under tropical UV and pathogen load rather
+// than cold, so it inverts the Altai profile on pigmentation and cold adaptation
+// while keeping the lineage's altitude marker.
+var archaicSoutheastAsiaTraits = HeritableState{0.15, 0.25, 0.65, 0.10, 0.80, 0.55}
 
 func StartingHeritableState(species Species, region Region) (HeritableState, bool) {
 	switch {
@@ -17,8 +28,12 @@ func StartingHeritableState(species Species, region Region) (HeritableState, boo
 		return archaicLevantTraits, true
 	case species == ArchaicHominin && region == Frangistan:
 		return archaicFrangistanTraits, true
-	case species == ArchaicHominin && region == YellowRiverBasin:
-		return archaicYellowRiverTraits, true
+	case species == ArchaicHominin && region == Siberia:
+		return archaicSiberiaTraits, true
+	case species == ArchaicHominin && region == EastAsia:
+		return archaicEastAsiaTraits, true
+	case species == ArchaicHominin && region == SoutheastAsia:
+		return archaicSoutheastAsiaTraits, true
 	default:
 		return HeritableState{}, false
 	}
