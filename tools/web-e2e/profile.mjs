@@ -27,14 +27,12 @@ await new Promise(resolveListen => server.listen(0, "127.0.0.1", resolveListen))
 const origin = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ headless: true });
 const allConfigurations = [
-  { detail: "normal", dpr: 1, minimumFPS: 20 },
-  { detail: "low", dpr: 1, minimumFPS: 30 },
-  { detail: "normal", dpr: 2, minimumFPS: 15 },
-  { detail: "low", dpr: 2, minimumFPS: 20 },
+  { dpr: 1, minimumFPS: 30 },
+  { dpr: 2, minimumFPS: 20 },
 ];
 const selectedConfiguration = process.env.A2I_PROFILE_CONFIGURATION;
 const configurations = selectedConfiguration
-  ? allConfigurations.filter(configuration => `${configuration.detail}-dpr${configuration.dpr}` === selectedConfiguration)
+  ? allConfigurations.filter(configuration => `dpr${configuration.dpr}` === selectedConfiguration)
   : allConfigurations;
 if (configurations.length === 0) throw new Error(`unknown A2I_PROFILE_CONFIGURATION ${selectedConfiguration}`);
 
@@ -55,7 +53,7 @@ try {
       window.africa2iceE2EObserver = () => {};
       window.africa2iceRenderProfileSave = save;
     }, profileSave);
-    await page.goto(`${origin}/?e2e=1&profile=1&terrain-detail=${configuration.detail}`, { waitUntil: "load" });
+    await page.goto(`${origin}/?e2e=1&profile=1`, { waitUntil: "load" });
     await page.waitForFunction(() => document.documentElement.dataset.africa2iceReady === "true", null, { timeout: 10_000 });
     await page.waitForTimeout(5_000);
 
@@ -85,7 +83,7 @@ try {
     const gaps = await gapsPromise;
     const medianGap = percentile(gaps, 0.5);
     const result = {
-      detail: configuration.detail,
+      view: "top-down",
       dpr: configuration.dpr,
       median_fps: 1000 / medianGap,
       p95_frame_gap_ms: percentile(gaps, 0.95),
@@ -94,9 +92,9 @@ try {
     };
     process.stdout.write(`${JSON.stringify(result)}\n`);
     if (failures.length > 0) throw new Error(failures.join("\n"));
-    if (result.median_fps < configuration.minimumFPS) throw new Error(`${configuration.detail} DPR${configuration.dpr} median FPS ${result.median_fps} is below ${configuration.minimumFPS}`);
-    if (result.p95_frame_gap_ms > 150) throw new Error(`${configuration.detail} DPR${configuration.dpr} p95 gap ${result.p95_frame_gap_ms}ms exceeds 150ms`);
-    if (result.maximum_turn_latency_ms > 2_000) throw new Error(`${configuration.detail} DPR${configuration.dpr} turn latency exceeds 2s`);
+    if (result.median_fps < configuration.minimumFPS) throw new Error(`top-down DPR${configuration.dpr} median FPS ${result.median_fps} is below ${configuration.minimumFPS}`);
+    if (result.p95_frame_gap_ms > 150) throw new Error(`top-down DPR${configuration.dpr} p95 gap ${result.p95_frame_gap_ms}ms exceeds 150ms`);
+    if (result.maximum_turn_latency_ms > 2_000) throw new Error(`top-down DPR${configuration.dpr} turn latency exceeds 2s`);
     profiles.push(result);
     await context.close();
   }

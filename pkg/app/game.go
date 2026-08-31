@@ -67,7 +67,6 @@ type Game struct {
 	toasts                 ui.ToastManager
 	traitFocus             gameapi.HeritableTrait
 	logSession             *logging.Session
-	terrainDetail          render.TerrainDetailMode
 }
 
 const (
@@ -177,9 +176,6 @@ func (g *Game) Update() error {
 	}
 	if g.viewportInitialized && !g.viewport.SupportsGameplay() {
 		return nil
-	}
-	if x, y, inside := g.logicalCursorPosition(); inside {
-		g.scene.UpdateCameraInput(x, y)
 	}
 	modifier := ebiten.IsKeyPressed(ebiten.KeyControl) || ebiten.IsKeyPressed(ebiten.KeyMeta)
 	if modifier && inpututil.IsKeyJustPressed(ebiten.KeyS) && g.scenes.Current() == ui.SceneGameplay {
@@ -567,11 +563,6 @@ func newTechnologyDiscoveries(previous, current *gameapi.Frame, preferredBand ga
 }
 
 func (g *Game) SetFirstDrawCallback(callback func()) { g.onFirstDraw = callback }
-
-func (g *Game) SetTerrainDetail(detail render.TerrainDetailMode) {
-	g.terrainDetail = detail
-	g.scene.SetTerrainDetail(detail)
-}
 
 // SetRenderProfileFrame installs the browser's validated maximum-render
 // fixture only at the drawing seam. Simulation commands, storage, hashes, and
@@ -1067,15 +1058,6 @@ func (g *Game) handleSceneInput() bool {
 		if inpututil.IsKeyJustPressed(ebiten.KeyEqual) {
 			g.adjustVolume(0.1)
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyT) {
-			if g.terrainDetail == render.TerrainDetailNormal {
-				g.SetTerrainDetail(render.TerrainDetailLow)
-				g.showNotice("Terrain detail: low (session only)")
-			} else {
-				g.SetTerrainDetail(render.TerrainDetailNormal)
-				g.showNotice("Terrain detail: normal (session only)")
-			}
-		}
 		return true
 	default:
 		return false
@@ -1460,10 +1442,6 @@ func (g *Game) menuOverlayForRender() render.MenuOverlay {
 		}
 		return overlay
 	case ui.SceneSettings:
-		detail := "Normal"
-		if g.terrainDetail == render.TerrainDetailLow {
-			detail = "Low"
-		}
 		mute := "Off"
 		if g.settings.Muted {
 			mute = "On"
@@ -1473,14 +1451,13 @@ func (g *Game) menuOverlayForRender() render.MenuOverlay {
 			visible = "Visible"
 		}
 		return render.MenuOverlay{
-			Visible: true, Heading: "Settings", Selected: -1, LineCount: 4,
+			Visible: true, Heading: "Settings", Selected: -1, LineCount: 3,
 			Lines: [8]string{
 				fmt.Sprintf("-/+  Master volume  %.0f%%", g.settings.MasterVolume*100),
 				"M  Muted  " + mute,
 				"F  Field Notes  " + visible,
-				"T  Terrain detail  " + detail,
 			},
-			Help: "O / Esc back · terrain detail is session-local",
+			Help: "O / Esc back",
 		}
 	default:
 		return render.MenuOverlay{}

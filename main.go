@@ -14,7 +14,6 @@ import (
 	"github.com/adsouza/africa2ice/internal/adapters/logging"
 	"github.com/adsouza/africa2ice/internal/verification"
 	"github.com/adsouza/africa2ice/pkg/app"
-	"github.com/adsouza/africa2ice/pkg/render"
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
@@ -32,7 +31,6 @@ type desktopOptions struct {
 	policy         string
 	checkpointJSON string
 	screenshot     string
-	terrainDetail  string
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -77,7 +75,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func parseDesktopOptions(args []string, stderr io.Writer) (desktopOptions, error) {
-	options := desktopOptions{turns: verification.MaxTurns, seed: 0x9e3779b97f4a7c15, policy: "reference", terrainDetail: "normal"}
+	options := desktopOptions{turns: verification.MaxTurns, seed: 0x9e3779b97f4a7c15, policy: "reference"}
 	flags := flag.NewFlagSet("africa2ice", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.BoolVar(&options.dumpMap, "dumpmap", false, "print biome and region map layers without opening a window")
@@ -87,7 +85,6 @@ func parseDesktopOptions(args []string, stderr io.Writer) (desktopOptions, error
 	flags.StringVar(&options.policy, "policy", options.policy, "route policy: "+strings.Join(verification.PolicyNames(), ", "))
 	flags.StringVar(&options.checkpointJSON, "checkpoint-json", "", "write canonical checkpoint JSON to this path")
 	flags.StringVar(&options.screenshot, "screenshot", "", "write one rendered PNG to this path and exit")
-	flags.StringVar(&options.terrainDetail, "terrain-detail", options.terrainDetail, "terrain detail: normal or low")
 	if err := flags.Parse(args); err != nil {
 		return desktopOptions{}, err
 	}
@@ -99,9 +96,6 @@ func parseDesktopOptions(args []string, stderr io.Writer) (desktopOptions, error
 	}
 	if _, err := verification.ParsePolicy(options.policy); err != nil {
 		return desktopOptions{}, err
-	}
-	if options.terrainDetail != "normal" && options.terrainDetail != "low" {
-		return desktopOptions{}, fmt.Errorf("terrain-detail must be normal or low")
 	}
 	modeCount := 0
 	for _, enabled := range []bool{options.dumpMap, options.headless || options.checkpointJSON != "", options.screenshot != ""} {
@@ -122,9 +116,6 @@ func runScreenshot(options desktopOptions, session *logging.Session, stderr io.W
 		return 1
 	}
 	game := app.New(logging.DecorateGame(session, port))
-	if options.terrainDetail == "low" {
-		game.SetTerrainDetail(render.TerrainDetailLow)
-	}
 	runner := &screenshotRunner{game: game, path: options.screenshot}
 	ebiten.SetScreenClearedEveryFrame(false)
 	ebiten.SetWindowSize(app.LogicalWidth, app.LogicalHeight)

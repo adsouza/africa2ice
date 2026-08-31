@@ -7,28 +7,21 @@ import (
 
 // GradeColors is the continuous presentation grade driven by the accepted
 // frame's aridity index. Biome colors deliberately are not part of this value:
-// the grade changes atmosphere and chrome without changing what a tile is.
+// the grade changes water and chrome without changing what a land tile is.
 type GradeColors struct {
-	DirectionalLight          color.RGBA
-	DirectionalLightIntensity float64
-	AmbientLevel              float64
-	Veil                      color.RGBA
-	Water                     color.RGBA
-	HUDChromeAccent           color.RGBA
+	Water           color.RGBA
+	HUDChromeAccent color.RGBA
 }
 
 var epochGradeAnchors = [...]GradeColors{
 	{
-		DirectionalLight: color.RGBA{R: 0xff, G: 0xe8, B: 0xbc, A: 0xff}, DirectionalLightIntensity: 0.94, AmbientLevel: 0.72,
-		Veil: color.RGBA{R: 0x48, G: 0x58, B: 0x60, A: 0xff}, Water: color.RGBA{R: 0x20, G: 0x6c, B: 0x9c, A: 0xff}, HUDChromeAccent: color.RGBA{R: 0x9e, G: 0x9e, B: 0x48, A: 0xff},
+		Water: color.RGBA{R: 0x20, G: 0x6c, B: 0x9c, A: 0xff}, HUDChromeAccent: color.RGBA{R: 0x9e, G: 0x9e, B: 0x48, A: 0xff},
 	},
 	{
-		DirectionalLight: color.RGBA{R: 0xf1, G: 0xda, B: 0xb6, A: 0xff}, DirectionalLightIntensity: 0.82, AmbientLevel: 0.60,
-		Veil: color.RGBA{R: 0x50, G: 0x5a, B: 0x60, A: 0xff}, Water: color.RGBA{R: 0x38, G: 0x68, B: 0x84, A: 0xff}, HUDChromeAccent: color.RGBA{R: 0xa6, G: 0x80, B: 0x42, A: 0xff},
+		Water: color.RGBA{R: 0x38, G: 0x68, B: 0x84, A: 0xff}, HUDChromeAccent: color.RGBA{R: 0xa6, G: 0x80, B: 0x42, A: 0xff},
 	},
 	{
-		DirectionalLight: color.RGBA{R: 0xcf, G: 0xe0, B: 0xf0, A: 0xff}, DirectionalLightIntensity: 0.70, AmbientLevel: 0.48,
-		Veil: color.RGBA{R: 0x4c, G: 0x58, B: 0x68, A: 0xff}, Water: color.RGBA{R: 0x34, G: 0x54, B: 0x74, A: 0xff}, HUDChromeAccent: color.RGBA{R: 0x70, G: 0xaa, B: 0xcc, A: 0xff},
+		Water: color.RGBA{R: 0x34, G: 0x54, B: 0x74, A: 0xff}, HUDChromeAccent: color.RGBA{R: 0x70, G: 0xaa, B: 0xcc, A: 0xff},
 	},
 }
 
@@ -50,12 +43,8 @@ func EpochGrade(aridityIndex float64) GradeColors {
 
 func interpolateGrade(from, to GradeColors, fraction float64) GradeColors {
 	return GradeColors{
-		DirectionalLight:          interpolateRGBA(from.DirectionalLight, to.DirectionalLight, fraction),
-		DirectionalLightIntensity: lerp(from.DirectionalLightIntensity, to.DirectionalLightIntensity, fraction),
-		AmbientLevel:              lerp(from.AmbientLevel, to.AmbientLevel, fraction),
-		Veil:                      interpolateRGBA(from.Veil, to.Veil, fraction),
-		Water:                     interpolateRGBA(from.Water, to.Water, fraction),
-		HUDChromeAccent:           interpolateRGBA(from.HUDChromeAccent, to.HUDChromeAccent, fraction),
+		Water:           interpolateRGBA(from.Water, to.Water, fraction),
+		HUDChromeAccent: interpolateRGBA(from.HUDChromeAccent, to.HUDChromeAccent, fraction),
 	}
 }
 

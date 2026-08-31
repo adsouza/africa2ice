@@ -11,8 +11,8 @@ Current controls:
 - click a cyan- or gold-outlined reachable tile to migrate the selected sapiens band (gold is the current recommendation);
 - use the arrow keys to move a destination cursor anywhere in the band's one-turn neighborhood, including corners; Enter queues the selected migration and Esc clears it (named passages remain clickable);
 - a red arrow marks the keyboard-selected or queued migration until it is cleared or the next turn resolves it;
-- right-drag rotates the terrain camera, middle-drag changes its elevation, Shift+middle-drag pans,
-  and the mouse wheel zooms;
+- the fixed top-down map keeps every tile aligned with its grid location; biome color, fog, reachable
+  outlines, band markers, and migration arrows share that one unambiguous surface;
 - band rows show last-turn population and health changes, while the selected band names the leading causes of any decline;
 - click any other map tile to see why it is not currently reachable, including water, uninhabitable terrain, and locked passages;
 - Tab/Shift+Tab selects the next/previous sapiens band, with wraparound;
@@ -32,7 +32,7 @@ Current controls:
 - F1–F3 save Manual 1–3, and Shift+F1–F3 load them; loading is blocked until any dirty workforce
   draft is applied or discarded.
 - P or Esc opens Pause; S opens grouped Save/Delete slots, L opens grouped Load/Delete slots,
-  and O opens settings for sound, Field Notes, and the session-local terrain-detail toggle.
+  and O opens settings for sound and Field Notes.
   The browser lists Manual 1–3, Quick Save, and rolling Auto 1–3 together.
 
 Victory, extinction, and turn-400 dispersal failure open a campaign epilogue with final

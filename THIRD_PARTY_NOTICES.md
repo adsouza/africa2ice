@@ -8,11 +8,8 @@ Africa 2 Ice includes or depends on the following third-party software. Versions
 | Component | License |
 | --- | --- |
 | Ebitengine and `hideconsole`/`oto`/`purego` support modules | Apache License 2.0 |
-| Tetra3D | MIT License |
 | `github.com/go-text/typesetting` | BSD-3-Clause or Unlicense |
-| `github.com/qmuntal/gltf` | BSD-2-Clause |
 | `github.com/rivo/uniseg` | MIT License |
-| `github.com/tanema/gween` | MIT License |
 | `golang.org/x/image`, `x/sync`, `x/sys`, and `x/text` | BSD-3-Clause |
 
 The complete copyright and license texts for these modules are distributed in their upstream source

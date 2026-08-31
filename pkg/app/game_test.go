@@ -7,7 +7,6 @@ import (
 
 	gameaudio "github.com/adsouza/africa2ice/pkg/audio"
 	"github.com/adsouza/africa2ice/pkg/gameapi"
-	"github.com/adsouza/africa2ice/pkg/render"
 	"github.com/adsouza/africa2ice/pkg/ui"
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -613,18 +612,17 @@ func TestStorageBrowserRestrictsWritesButCanDeleteAnyOccupiedGroup(t *testing.T)
 	}
 }
 
-func TestSettingsSceneReportsLivePreferencesAndSessionDetail(t *testing.T) {
+func TestSettingsSceneReportsLivePreferences(t *testing.T) {
 	game := New(&gameStub{frame: migrationPreviewFrame()})
 	game.scenes.Push(ui.ScenePause)
 	game.scenes.Push(ui.SceneSettings)
 	game.settings.MasterVolume = 0.7
 	game.settings.Muted = true
 	game.fieldNotesVisible = false
-	game.SetTerrainDetail(render.TerrainDetailLow)
 
 	overlay := game.menuOverlayForRender()
 	joined := strings.Join(overlay.Lines[:overlay.LineCount], " ")
-	for _, required := range []string{"70%", "Muted  On", "Field Notes  Hidden", "Terrain detail  Low"} {
+	for _, required := range []string{"70%", "Muted  On", "Field Notes  Hidden"} {
 		if !strings.Contains(joined, required) {
 			t.Fatalf("settings overlay missing %q: %#v", required, overlay)
 		}

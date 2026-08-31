@@ -19,23 +19,23 @@ Measured 2026-08-31 from a full `./build_web.sh --release` build — stripped, t
 
 | measurement            |      bytes |
 |------------------------|-----------:|
-| raw                    | 22,333,333 |
-| `brotli -q 11` (gated) |  3,796,829 |
-| `gzip -9`              |  5,277,562 |
+| raw                    | 17,615,683 |
+| `brotli -q 11` (gated) |  3,147,440 |
+| `gzip -9`              |  4,380,773 |
 
 **`wasm-opt` is primarily a decompressed-size optimization.** Measuring the same build with and
 without the optimizer shows a modest compressed improvement rather than a second-order transfer-size lever:
 
 |                         |        raw |     brotli |      gzip |
 |-------------------------|-----------:|-----------:|----------:|
-| stripped, no `wasm-opt` | 23,772,052 |  3,817,531 | 5,313,107 |
-| `wasm-opt -O3`          | 22,333,333 |  3,796,829 | 5,277,562 |
-| change                  |     −6.05% |  **−0.54%** | **−0.67%** |
+| stripped, no `wasm-opt` | 18,830,163 |  3,129,279 | 4,401,248 |
+| `wasm-opt -O3`          | 17,615,683 |  3,147,440 | 4,380,773 |
+| change                  |     −6.45% |  **+0.58%** | **−0.47%** |
 
-The optimizer removes about six percent of the decompressed module. Brotli already finds nearly all
-of that redundancy, while gzip retains a small additional benefit. Keep `wasm-opt` for decompressed
-size, startup, and the smaller transfer benefit; application/dependency reachability remains the
-route for larger transfer-size reductions.
+The optimizer removes about six percent of the decompressed module. Brotli already finds all of
+that redundancy and compresses this optimized build slightly worse, while gzip retains a small
+benefit. Keep `wasm-opt` for decompressed size and startup; application/dependency reachability
+remains the route for transfer-size reductions.
 
 **Provenance.** Built with Homebrew Binaryen **132** on darwin/arm64. Appendix C Locks the toolchain
 at `version_131` and records a SHA-256 for the Linux x86-64 tarball only, so this is a close
@@ -49,7 +49,7 @@ with the runner's reported image version. If the ceiling below is wrong for the 
 that job fails and names the exact replacement value.
 
 `MaxCompressedWasmBytes` was ratcheted from Appendix C's pre-implementation `5_500_000` to
-`4_050_000` (measured Brotli plus the `500_000` headroom, rounded up to the next `50_000`). The
+`3_650_000` (measured Brotli plus the `500_000` headroom, rounded up to the next `50_000`). The
 original ceiling was set from a dependency skeleton rather than from this game and, as §10 puts it,
 was "generous enough that it would pass without ever constraining anything."
 
@@ -66,14 +66,12 @@ sample with one successful `EndTurn` every five seconds.
 
 Measured 2026-08-31 from the optimized artifact in pinned Chromium `151.0.7922.34`:
 
-| detail | DPR | median FPS | required floor | p95 frame gap | maximum `EndTurn` latency | JS heap |
+| view | DPR | median FPS | required floor | p95 frame gap | maximum `EndTurn` latency | JS heap |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| normal | 1 | 59.88 | 20 | 16.7 ms | 54.85 ms | 26.0 MB |
-| low | 1 | 59.88 | 30 | 16.8 ms | 43.36 ms | 26.0 MB |
-| normal | 2 | 59.88 | 15 | 16.8 ms | 49.66 ms | 26.0 MB |
-| low | 2 | 59.88 | 20 | 16.8 ms | 185.49 ms | 26.0 MB |
+| top-down | 1 | 72.46 | 30 | 26.2 ms | 100.17 ms | 24.5 MB |
+| top-down | 2 | 70.42 | 20 | 26.2 ms | 145.19 ms | 24.5 MB |
 
-All four floors, the 150 ms p95 frame-gap ceiling, and the two-second turn-latency ceiling pass.
+Both floors, the 150 ms p95 frame-gap ceiling, and the two-second turn-latency ceiling pass.
 The key optimization is appropriate to a turn-based presentation: production disables automatic
 screen clearing, caches one complete immutable presentation frame, and leaves the screen untouched
 until either the accepted frame or UI-local presentation key changes. This lets Ebitengine skip idle

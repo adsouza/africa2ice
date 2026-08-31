@@ -14,6 +14,8 @@ import (
 )
 
 const (
+	TerrainGridWidth       = 96
+	TerrainGridHeight      = 64
 	mapOriginX             = 20
 	mapOriginY             = 74
 	mapTileSize            = 9
@@ -40,24 +42,19 @@ var (
 )
 
 type MapScene struct {
-	faceSource            *text.GoTextFaceSource
-	detail                TerrainDetailMode
-	terrainImage          *ebiten.Image
-	terrainFrame          *gameapi.Frame
-	terrainDetail         TerrainDetailMode
-	terrainRebuilds       uint64
-	terrain3D             *TerrainScene3D
-	terrainCameraRevision uint64
-	cameraPointerX        int
-	cameraPointerY        int
-	cameraPointerSet      bool
-	frameImage            *ebiten.Image
-	frameKey              mapFrameKey
-	frameWidth            int
-	frameHeight           int
-	frameCached           bool
-	workforce             WorkforceDraft
-	overlay               MenuOverlay
+	faceSource      *text.GoTextFaceSource
+	terrainImage    *ebiten.Image
+	terrainRevision uint64
+	terrainAridity  float64
+	terrainCached   bool
+	terrainRebuilds uint64
+	frameImage      *ebiten.Image
+	frameKey        mapFrameKey
+	frameWidth      int
+	frameHeight     int
+	frameCached     bool
+	workforce       WorkforceDraft
+	overlay         MenuOverlay
 }
 
 type mapFrameKey struct {
@@ -68,11 +65,9 @@ type mapFrameKey struct {
 	fieldNote         FieldNote
 	fieldNotesVisible bool
 	ending            EndScene
-	detail            TerrainDetailMode
 	workforce         WorkforceDraft
 	resizeRequired    bool
 	overlay           MenuOverlay
-	cameraRevision    uint64
 }
 
 type MigrationPreview struct {
@@ -122,42 +117,6 @@ func NewMapScene() *MapScene {
 
 func (scene *MapScene) Update() {}
 
-// UpdateCameraInput changes presentation state only. Right-drag rotates,
-// middle-drag changes elevation, Shift+middle-drag pans, and the wheel zooms.
-func (scene *MapScene) UpdateCameraInput(x, y int) {
-	insideMap := x >= mapOriginX && x < mapOriginX+mapPixelWidth && y >= mapOriginY && y < mapOriginY+mapPixelHeight
-	deltaX, deltaY := 0, 0
-	if scene.cameraPointerSet {
-		deltaX, deltaY = x-scene.cameraPointerX, y-scene.cameraPointerY
-	}
-	scene.cameraPointerX, scene.cameraPointerY, scene.cameraPointerSet = x, y, true
-	if scene.terrain3D == nil || !insideMap {
-		return
-	}
-	var azimuth, elevation, zoom, panX, panZ float32
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
-		azimuth = -float32(deltaX) * 0.006
-	}
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonMiddle) {
-		if ebiten.IsKeyPressed(ebiten.KeyShift) {
-			panX, panZ = -float32(deltaX)*0.08, -float32(deltaY)*0.08
-		} else {
-			elevation = -float32(deltaY) * 0.004
-		}
-	}
-	_, wheelY := ebiten.Wheel()
-	zoom = float32(wheelY) * 5
-	if scene.terrain3D.AdjustCamera(azimuth, elevation, zoom, panX, panZ) {
-		scene.frameCached = false
-	}
-}
-
-func (scene *MapScene) SetTerrainDetail(detail TerrainDetailMode) {
-	if detail == TerrainDetailNormal || detail == TerrainDetailLow {
-		scene.detail = detail
-	}
-}
-
 func (scene *MapScene) SetWorkforceDraft(draft WorkforceDraft) { scene.workforce = draft }
 func (scene *MapScene) SetMenuOverlay(overlay MenuOverlay)     { scene.overlay = overlay }
 
@@ -168,9 +127,8 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 	}
 	key := mapFrameKey{
 		frame: frame, selectedBand: selectedBand, preview: preview, notice: notice,
-		fieldNote: fieldNote, fieldNotesVisible: fieldNotesVisible, ending: ending, detail: scene.detail,
+		fieldNote: fieldNote, fieldNotesVisible: fieldNotesVisible, ending: ending,
 		workforce: scene.workforce, resizeRequired: resizeRequired, overlay: scene.overlay,
-		cameraRevision: scene.cameraRevision(),
 	}
 	width, height := screen.Bounds().Dx(), screen.Bounds().Dy()
 	if scene.frameCached && scene.frameKey == key && scene.frameWidth == width && scene.frameHeight == height {
@@ -279,45 +237,21 @@ func (scene *MapScene) drawMenuOverlay(screen *ebiten.Image) {
 	scene.drawText(screen, scene.overlay.Help, x+28, y+height-42, 11, color.RGBA{R: 167, G: 184, B: 181, A: 255})
 }
 
-// drawTerrain caches the immutable terrain layer for the lifetime of an
-// accepted frame. A frame is replaced whenever application state changes, so
-// this avoids issuing thousands of vector draw calls on every display refresh
-// without risking stale exploration or climate colors.
+// drawTerrain caches the immutable top-down tile layer until either its coarse
+// terrain revision or its continuously graded water color changes. Planning-
+// only frames can therefore reuse it without risking stale exploration,
+// biome, macro-impact, or climate colors.
 func (scene *MapScene) drawTerrain(screen *ebiten.Image, frame *gameapi.Frame) {
-	fullTerrain := len(frame.Tiles) == TerrainGridWidth*TerrainGridHeight
-	geometryRebuild := scene.terrainDetail != scene.detail
-	if fullTerrain {
-		geometryRebuild = geometryRebuild || scene.terrain3D == nil || scene.terrain3D.terrainRevision != frame.TerrainRevision
-	} else {
-		geometryRebuild = geometryRebuild || scene.terrainFrame != frame
-	}
-	imageRebuild := scene.terrainImage == nil || geometryRebuild
-	if fullTerrain && scene.terrain3D != nil {
-		imageRebuild = imageRebuild || scene.terrainCameraRevision != scene.terrain3D.orbit.revision
-	}
-	if imageRebuild {
+	if !scene.terrainCached || scene.terrainRevision != frame.TerrainRevision || scene.terrainAridity != frame.Climate.AridityIndex {
 		if scene.terrainImage != nil {
 			scene.terrainImage.Deallocate()
 		}
 		scene.terrainImage = ebiten.NewImage(mapPixelWidth, mapPixelHeight)
 		scene.terrainImage.Fill(unexploredTileColor)
-		if fullTerrain {
-			if scene.terrain3D == nil {
-				scene.terrain3D = NewTerrainScene3D()
-			}
-			if !geometryRebuild || scene.terrain3D.Rebuild(frame, scene.detail) == nil {
-				scene.terrain3D.Draw(scene.terrainImage)
-			} else {
-				scene.drawFlatTerrain(frame)
-			}
-		} else {
-			scene.drawFlatTerrain(frame)
-		}
-		scene.terrainFrame = frame
-		scene.terrainDetail = scene.detail
-		if scene.terrain3D != nil {
-			scene.terrainCameraRevision = scene.terrain3D.orbit.revision
-		}
+		scene.drawFlatTerrain(frame)
+		scene.terrainRevision = frame.TerrainRevision
+		scene.terrainAridity = frame.Climate.AridityIndex
+		scene.terrainCached = true
 		scene.terrainRebuilds++
 	}
 	options := &ebiten.DrawImageOptions{}
@@ -325,18 +259,8 @@ func (scene *MapScene) drawTerrain(screen *ebiten.Image, frame *gameapi.Frame) {
 	screen.DrawImage(scene.terrainImage, options)
 }
 
-func (scene *MapScene) cameraRevision() uint64 {
-	if scene.terrain3D == nil {
-		return 0
-	}
-	return scene.terrain3D.orbit.revision
-}
-
 func (scene *MapScene) drawFlatTerrain(frame *gameapi.Frame) {
 	tileExtent := float32(mapTileSize - 0.4)
-	if scene.detail == TerrainDetailLow {
-		tileExtent = mapTileSize
-	}
 	for _, tile := range frame.Tiles {
 		vector.FillRect(
 			scene.terrainImage,
@@ -351,18 +275,10 @@ func (scene *MapScene) drawFlatTerrain(frame *gameapi.Frame) {
 }
 
 func (scene *MapScene) tilePoint(tile gameapi.Tile) (float32, float32) {
-	if scene.terrain3D != nil && len(scene.terrain3D.screenTiles) == TerrainGridWidth*TerrainGridHeight {
-		if x, y, ok := scene.terrain3D.TilePoint(tile.ID); ok {
-			return x, y
-		}
-	}
 	return mapOriginX + float32(tile.X*mapTileSize) + mapTileSize/2, mapOriginY + float32(tile.Y*mapTileSize) + mapTileSize/2
 }
 
 func (scene *MapScene) PickTile(x, y int) (gameapi.TileID, bool) {
-	if scene.terrain3D != nil && len(scene.terrain3D.screenTiles) == TerrainGridWidth*TerrainGridHeight {
-		return scene.terrain3D.PickTile(x, y)
-	}
 	return MapTileAt(x, y)
 }
 
@@ -424,15 +340,10 @@ func (scene *MapScene) drawReachableTiles(screen *ebiten.Image, frame *gameapi.F
 		tile := frame.Tiles[candidate.TileID]
 		x, y := scene.tilePoint(tile)
 		highlight := reachableTileColor(index)
-		if scene.terrain3D != nil && len(scene.terrain3D.screenTiles) == TerrainGridWidth*TerrainGridHeight {
-			vector.FillCircle(screen, x, y, 4.5, color.RGBA{R: highlight.R, G: highlight.G, B: highlight.B, A: 48}, false)
-			vector.StrokeCircle(screen, x, y, 4.5, 1.35, highlight, false)
-		} else {
-			x -= mapTileSize / 2
-			y -= mapTileSize / 2
-			vector.FillRect(screen, x+0.7, y+0.7, mapTileSize-1.8, mapTileSize-1.8, color.RGBA{R: highlight.R, G: highlight.G, B: highlight.B, A: 48}, false)
-			vector.StrokeRect(screen, x+0.7, y+0.7, mapTileSize-1.8, mapTileSize-1.8, 1.35, highlight, false)
-		}
+		x -= mapTileSize / 2
+		y -= mapTileSize / 2
+		vector.FillRect(screen, x+0.7, y+0.7, mapTileSize-1.8, mapTileSize-1.8, color.RGBA{R: highlight.R, G: highlight.G, B: highlight.B, A: 48}, false)
+		vector.StrokeRect(screen, x+0.7, y+0.7, mapTileSize-1.8, mapTileSize-1.8, 1.35, highlight, false)
 	}
 }
 

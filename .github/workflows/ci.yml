@@ -84,7 +84,7 @@ jobs:
         run: node tools/run_wasm_checkpoint.mjs
       - name: Run staged-browser smoke
         run: npm --prefix tools/web-e2e test
-      - name: Profile locked browser detail and DPR matrix
+      - name: Profile locked top-down browser DPR matrix
         run: npm --prefix tools/web-e2e run profile
       - name: Validate deploy root
         shell: bash

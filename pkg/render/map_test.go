@@ -150,7 +150,7 @@ func TestMapSceneDrawsTerrainVisibilityBandsAndPassagesOffscreen(t *testing.T) {
 	}
 }
 
-func TestMapSceneCachesTerrainForAnAcceptedFrame(t *testing.T) {
+func TestMapSceneCachesTerrainByTerrainRevisionAndAridity(t *testing.T) {
 	frame := representativeRenderFrame()
 	screen := ebiten.NewImage(1280, 720)
 	defer screen.Deallocate()
@@ -168,14 +168,55 @@ func TestMapSceneCachesTerrainForAnAcceptedFrame(t *testing.T) {
 	nextFrame := cloneRenderFrame(frame)
 	nextFrame.WorldRevision++
 	scene.Draw(screen, nextFrame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
-	if scene.terrainRebuilds != 2 {
-		t.Fatalf("terrain rebuilds after accepted frame replacement = %d, want 2", scene.terrainRebuilds)
+	if scene.terrainRebuilds != 1 {
+		t.Fatalf("terrain rebuilds after planning-only frame replacement = %d, want 1", scene.terrainRebuilds)
 	}
 
-	scene.SetTerrainDetail(TerrainDetailLow)
+	nextFrame = cloneRenderFrame(nextFrame)
+	nextFrame.TerrainRevision++
+	scene.Draw(screen, nextFrame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
+	if scene.terrainRebuilds != 2 {
+		t.Fatalf("terrain rebuilds after terrain revision = %d, want 2", scene.terrainRebuilds)
+	}
+
+	nextFrame = cloneRenderFrame(nextFrame)
+	nextFrame.Climate.AridityIndex += 0.1
 	scene.Draw(screen, nextFrame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
 	if scene.terrainRebuilds != 3 {
-		t.Fatalf("terrain rebuilds after detail change = %d, want 3", scene.terrainRebuilds)
+		t.Fatalf("terrain rebuilds after water-grade change = %d, want 3", scene.terrainRebuilds)
+	}
+}
+
+func TestTopDownTerrainKeepsColorPickingAndMarkersOnTheSameGrid(t *testing.T) {
+	frame := representativeRenderFrame()
+	frame.Tiles[5].Biome = gameapi.MountainousHighlands
+	scene := NewMapScene()
+
+	for _, test := range []struct {
+		name string
+		tile gameapi.Tile
+		want color.RGBA
+	}{
+		{name: "revealed highland", tile: frame.Tiles[5], want: climateBiomeColor(gameapi.MountainousHighlands, frame.Climate.AridityIndex)},
+		{name: "unexplored", tile: frame.Tiles[2], want: unexploredTileColor},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			localX := test.tile.X*mapTileSize + mapTileSize/2
+			localY := test.tile.Y*mapTileSize + mapTileSize/2
+			got := tileColorForRender(test.tile, frame.Climate.AridityIndex)
+			if got != test.want {
+				t.Fatalf("tile %d color = %v, want %v", test.tile.ID, got, test.want)
+			}
+			pointX, pointY := scene.tilePoint(test.tile)
+			if pointX != float32(mapOriginX+localX) || pointY != float32(mapOriginY+localY) {
+				t.Fatalf("tile %d marker point = (%v,%v), want (%d,%d)", test.tile.ID, pointX, pointY, mapOriginX+localX, mapOriginY+localY)
+			}
+			picked, ok := scene.PickTile(mapOriginX+localX, mapOriginY+localY)
+			wantID := gameapi.TileID(test.tile.Y*TerrainGridWidth + test.tile.X)
+			if !ok || picked != wantID {
+				t.Fatalf("tile %d pick = (%d,%t), want (%d,true)", test.tile.ID, picked, ok, wantID)
+			}
+		})
 	}
 }
 

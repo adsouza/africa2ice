@@ -52,7 +52,7 @@ func TestParseDesktopOptionsRejectsInvalidVerificationInputs(t *testing.T) {
 			t.Fatalf("parseDesktopOptions(%q) accepted invalid input", strings.Join(args, " "))
 		}
 	}
-	for _, args := range [][]string{{"-terrain-detail", "ultra"}, {"-dumpmap", "-headless"}, {"-screenshot", "x.png", "-checkpoint-json", "x.json"}} {
+	for _, args := range [][]string{{"-terrain-detail", "low"}, {"-dumpmap", "-headless"}, {"-screenshot", "x.png", "-checkpoint-json", "x.json"}} {
 		var stderr bytes.Buffer
 		if _, err := parseDesktopOptions(args, &stderr); err == nil {
 			t.Fatalf("parseDesktopOptions(%q) accepted conflicting mode", strings.Join(args, " "))

@@ -19,7 +19,7 @@ to environment and local contact; the player may actively interbreed a sapiens b
 co-located archaic band, while a persistent Field Notes panel explains the evidence, abstraction,
 and strategic consequences. Long-cycle climate, irregular multi-century warm/cold pulses, and rare
 major eruptions create shared environmental pressure without granting a random event permission to
-erase an entire region. The world beyond East Africa begins beneath a persistent exploration veil
+erase an entire region. The world beyond East Africa begins beneath persistent exploration fog
 and is revealed outward as surviving sapiens bands reach new frontiers.
 
 This document is the implementation design and the game's single source of truth. It resolves the
@@ -62,10 +62,10 @@ Capitalized lifecycle terms in this register — **Locked**, **Initial**, **Poli
 | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Persistence must use one cross-platform wire format without cgo                                                                                         | **No SQLite**; versioned JSON behind a pure-Go application port, using file and IndexedDB adapters on desktop and web                                                                                                                                                                                                                                                                                                                                                                                                | This avoids cgo/driver dependencies, preserves one wire format, and keeps the browser-storage path without putting persistence inside the domain.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | The biome set is specified, but nothing says where the world map comes from                                                                             | **Stylized real geography** — Africa across Eurasia to Sahul and the Bering Strait                                                                                                                                                                                                                                                                                                                                                                                                                                   | A broader dispersal game needs the northern, southern, and far-northeastern routes on one map; chokepoints only mean something if they are the real ones.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| The full world map is initially visible                                                                                                                 | **Persistent sapiens exploration veil:** East Africa starts explored; each surviving sapiens band reveals its local frontier and currently usable passage endpoints, and discoveries never regress                                                                                                                                                                                                                                                                                                                   | Geographic expansion gains the classic map-uncovering rhythm without adding tactical line-of-sight. Archaic movement cannot reveal the map for the player, and the reveal mask changes presentation and player knowledge rather than simulation outcomes.                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| The full world map is initially visible                                                                                                                 | **Persistent sapiens exploration fog:** East Africa starts explored; each surviving sapiens band reveals its local frontier and currently usable passage endpoints, and discoveries never regress                                                                                                                                                                                                                                                                                                                    | Geographic expansion gains the classic map-uncovering rhythm without adding tactical line-of-sight. Archaic movement cannot reveal the map for the player, and the reveal mask changes presentation and player knowledge rather than simulation outcomes.                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Audio feedback should not require binary assets                                                                                                         | **Synthesize PCM tones in Go**; `SoundManager` interface unchanged                                                                                                                                                                                                                                                                                                                                                                                                                                                   | No binary assets need to enter the repo, and real `.wav` files can replace the synth later without an API change.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Moving climate-derived biome boundaries need legible spatial presentation                                                                               | **3D terrain via Tetra3D with a rotatable orbit camera**                                                                                                                                                                                                                                                                                                                                                                                                                                                             | §6 derives biomes every turn, so the tundra line and desert margin move; a rotatable 3D view is what makes that legible.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| High-DPI behavior is undefined                                                                                                                          | **Automatic DPI-aware rendering:** `LayoutF` converts the window's device-independent dimensions to a physical render surface using the current monitor scale, capped at `MaxRenderScale = 2.0`; HUD layout and hit targets remain in device-independent pixels                                                                                                                                                                                                                                                      | Text, vector strokes, and map details stay sharp on Retina/high-DPI desktop and browser displays without making controls physically smaller. One explicit viewport transform keeps UI input, 3D picking, resize behavior, and browser DPR handling consistent; the cap bounds fill rate and render-target memory on WASM.                                                                                                                                                                                                                                                                                                                                                                                  |
+| Moving climate-derived biome boundaries need legible spatial presentation                                                                               | **Fixed top-down 2D tile map:** terrain, exploration, markers, reachability, migration previews, and picking share one grid-aligned surface                                                                                                                                                                                                                                                                                                                                                                           | §6 derives biomes every turn, so stable tile positions and explicit biome colors make the moving tundra line and desert margin legible. Removing elevation displacement and side walls also prevents highland geometry from resembling unrevealed or impassable tiles.                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| High-DPI behavior is undefined                                                                                                                          | **Automatic DPI-aware rendering:** `LayoutF` converts the window's device-independent dimensions to a physical render surface using the current monitor scale, capped at `MaxRenderScale = 2.0`; HUD layout and hit targets remain in device-independent pixels                                                                                                                                                                                                                                                      | Text, vector strokes, and map details stay sharp on Retina/high-DPI desktop and browser displays without making controls physically smaller. One explicit viewport transform keeps UI input, grid picking, resize behavior, and browser DPR handling consistent; the cap bounds fill rate and render-target memory on WASM.                                                                                                                                                                                                                                                                                                                                                                                |
 | Target platforms and title                                                                                                                              | **Desktop and web; Africa 2 Ice: Paleolithic Dispersal**                                                                                                                                                                                                                                                                                                                                                                                                                                                             | These are the current baseline, not later extensions or deviations.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | The web release has no public delivery contract                                                                                                         | **After the step-13 release-readiness gate exists, deploy the optimized repository project site to GitHub Pages after every fully successful push to `main`; pull requests validate the same release build but never publish**                                                                                                                                                                                                                                                                                        | This supplies the web target's stable public release path without credentials or a separate hosting stack, while preventing an uncalibrated implementation from becoming the public build merely because its platform checks pass.                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | Region naming                                                                                                                                           | **Frangistan**, not "Europe"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | This is the selected in-world naming convention.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
@@ -347,18 +347,17 @@ pkg/audio/               stdlib + Ebitengine audio only
   synth.go               PCM tone generation (enveloped sine/square)
   manager.go             SoundManager, lazily constructed on first user gesture
 
-pkg/render/              DRAWING ADAPTER — gameapi + Ebitengine + Tetra3D; no domain/application/ui
+pkg/render/              DRAWING ADAPTER — gameapi + Ebitengine; no domain/application/ui
   fonts.go               goregular -> text/v2 face, cached at three sizes
-  palette.go             biome colors, UI chrome colors, three-anchor epoch grade
+  palette.go             water and UI-chrome colors from the three-anchor epoch grade
   viewport.go            DPI-aware logical-DIP/render-pixel transforms + viewport revision
-  terrain.go             bounded 32×32 terrain chunks + per-snapshot vertex recolor
-  veil.go                bounded opaque cover geometry for unexplored tiles
-  scene3d.go             Tetra3D scene, lighting, model registry
-  orbit.go               orbit camera: azimuth / elevation / distance / focus
-  picking.go             BoundingTriangles ray hit -> tile resolution
-  passages.go            open/locked Wallacea and Beringian route overlays
-  markers.go             species-distinct band markers, hover highlight, selection ring
-  hud.go                 2D overlay: top bar/timeline, band/tile inspectors, passages, migration ranking, event feed, Field Notes
+  map.go                 fixed top-down terrain, fog, grid picking, markers, routes, and HUD
+  tile_info.go           legend and current/candidate tile summaries
+  band_window.go         scrollable visible-band window
+  timeline.go            campaign timeline presentation derivations
+  interbreed.go          interbreeding candidate presentation
+  outcome.go             population/health change explanations
+  end_scene.go           terminal outcome presentation
 
 pkg/ui/                  DRIVING PRESENTATION ADAPTER — gameapi + render + audio; no domain/application
   scene.go               Scene interface + stack router
@@ -369,7 +368,7 @@ pkg/ui/                  DRIVING PRESENTATION ADAPTER — gameapi + render + aud
   game_scene.go          input routing, one workforce draft + inline exit guard, Ctrl/Cmd+S or click quick-save; emits typed ui.Action values
   pause_overlay.go       translucent modal over live gameplay
   save_load_scene.go     grouped manual/quick/auto slots, metadata preview, immediate actions
-  settings_scene.go      terrain-detail toggle, master-volume slider, mute checkbox
+  settings_scene.go      master-volume slider, mute checkbox, Field Notes visibility
   field_notes.go         bundled sourced entries keyed by gameapi context values; no domain imports
   ui_settings.go         versioned local-preference record and store interface
   ui_settings_file.go    desktop JSON preference store                    (//go:build !js)
@@ -467,7 +466,7 @@ initialization/run failures and panics. An end record's level follows its outcom
 searchable without finding and joining its start record first.
 
 The minimum level is `Debug` on both targets. “Pervasive” does not mean noisy frame tracing:
-`Update`, `Draw`, `LayoutF`, empty storage polls, pointer movement, hover, camera interpolation,
+`Update`, `Draw`, `LayoutF`, empty storage polls, pointer movement, hover,
 workforce-draft slider movement, tile iteration, and individual RNG draws emit nothing. An explicit
 player action, use case, asynchronous completion, lifecycle transition, or error is a join point. A
 single JSON record is at most `MaxOperationalLogRecordBytes = 64 * 1024`; longer string attributes or
@@ -607,23 +606,19 @@ health, or history from current state; UI and rendering only format their values
 failure returns an error rather than exposing a clamped or internally inconsistent frame.
 Render and UI hold that frame until `pkg/app` replaces it wholesale.
 
-**Derived cache key.** The frame carries one monotonic `uint64` counter so drawing code can skip
-the one rebuild expensive enough to be worth skipping. `TerrainRevision` changes only when a tile's
-rendered geometry inputs change — its biome, `Explored` bit, or visible macro-impact factors. It is
-not `WorldRevision`: `WorldRevision` increments on every accepted planning mutation, including
-`SetAssignment`, so keying terrain rebuilds off it would recolor all six chunks on every workforce
-Apply — exactly the cost §8's recolor rule exists to avoid. The application computes the key while
-projecting, from the same state it is already walking; it is a derived frame value, never persisted,
-never hashed, and never a simulation input. `pkg/render` compares it against the value it last drew
-and rebuilds only the affected caches. It starts at `1` on the first published frame and increments
-only when its named projected inputs differ. It belongs to the long-lived application projector and
-is not reset when a load or new campaign replaces the world; such a replacement therefore increments
-it whenever it replaces those inputs. `TerrainRevision` is a coarse dirty signal,
-not proof that every terrain-related cache changed: after it advances, each cache compares its own
-inputs, so a biome-only recolor does not rebuild the exploration veil and an exploration-only change
-does not rewrite unchanged biome colors. §8's epoch grade is deliberately not among these inputs:
-it is a per-frame uniform on lighting and chrome, so a changing `AridityIndex` never dirties a
-terrain cache.
+**Derived cache key.** The frame carries one monotonic `uint64` counter so drawing code can skip the
+one rebuild expensive enough to be worth skipping. `TerrainRevision` changes only when a tile's
+rendered inputs change — its biome, `Explored` bit, or visible macro-impact factors. It is not
+`WorldRevision`: `WorldRevision` increments on every accepted planning mutation, including
+`SetAssignment`, so keying the top-down terrain image off it would redraw 6,144 cells on every
+workforce Apply. The application computes the key while projecting, from the same state it is
+already walking; it is a derived frame value, never persisted, never hashed, and never a simulation
+input. It starts at `1` on the first published frame and increments only when its named projected
+inputs differ. It belongs to the long-lived application projector and is not reset when a load or
+new campaign replaces the world; such a replacement therefore increments it whenever it replaces
+those inputs. `pkg/render` keys its cached tile layer by `(TerrainRevision, AridityIndex)`: the
+revision covers land biomes and exploration, while the continuous index covers water color. A
+planning-only frame therefore reuses the tile layer, and a changed water grade cannot become stale.
 
 **Band markers need no such key.** A frame is published only after an accepted command, a completed
 turn, or a successful load — never on an idle update or draw — so the renderer already rebuilds
@@ -648,7 +643,7 @@ after resolution may proceed. Player simulation commands may target only
 `game.Apply(cmd)`, where `game` implements `gameapi.Game`, but calls `game.EndTurn()` **only** when
 it receives `EndTurn`.
 `EndTurn` must be the final action in a batch; more than one in the same Ebitengine update
-is rejected. Pause, camera input, drawing, saving, and loading do not advance time.
+is rejected. Pause, map inspection, drawing, saving, and loading do not advance time.
 Save/load/delete/list actions begin asynchronous storage operations; `Game.Update()` polls completed
 operations without waiting. A successful load replaces the frame from loaded state without taking a
 turn.
@@ -882,7 +877,6 @@ linters:
             - "$gostd"
             - "github.com/adsouza/africa2ice/pkg/gameapi"
             - "github.com/hajimehoshi/ebiten/v2"
-            - "github.com/solarlune/tetra3d"
             - "golang.org/x/image"
 
         ui-adapter-dependencies:
@@ -1112,7 +1106,7 @@ handling stays confined to the import walk, which needs no type information.
 
 All three rules are scoped to `internal/domain` because that is where simulation arithmetic lives and where
 the campaign-state hash is ultimately determined. Presentation and adapter code may compute
-`a*b + c`, call any `math` function, and convert a float to an int freely: a fused camera transform,
+`a*b + c`, call any `math` function, and convert a float to an int freely: a fused presentation transform,
 a `math.Round` in a layout calculation, and an `int(x)` in a formatter change no simulation result.
 The test reports the file, line, and the unrounded product, forbidden call, or float-to-integer
 conversion, so a violation reads as a specific edit rather than a category of sin.
@@ -1278,7 +1272,8 @@ interpolation, slope, depression, sea-level change, or separate render-only heig
 
 The catalog, strict threshold, land clipping, and maximum-overlap rule belong to
 `GeographyAlgorithm: "dispersal-map-v2"`. The resulting fixed tile elevations drive temperature,
-biome classification, orographic moisture, altitude UV, hypoxia pressure, and the 3D mesh, but are
+biome classification, orographic moisture, altitude UV, hypoxia pressure, and the top-down highland
+classification and inspector, but are
 derived geography rather than mutable or serialized campaign state. The Initial values may be tuned
 before release; afterward, changing any height, mask, threshold, or overlap rule changes downstream
 simulation and requires a geography-version change and explicit migration.
@@ -1384,7 +1379,7 @@ ordinary tile adjacency; the named, bounded passage edges in §7 provide their o
 Sahul destination lies beyond Wallacea, and the Beringia destination mask lies on the Alaska side of
 the strait, so each achievement proves that its passage was actually crossed.
 
-### Persistent exploration veil
+### Persistent exploration fog
 
 The full geography exists and simulates from turn 0, but the player map begins with only East
 Africa explored. `World` stores a fixed-size `ExploredTiles [ExplorationWordCount]uint64` bitset,
@@ -1590,9 +1585,9 @@ falls the tundra threshold moves south, and as `TileMoistureOffset` falls savann
 semi-arid desert — the Last
 Glacial Maximum becomes an emergent consequence of two derived scalars rather than a scripted event.
 **A map with painted biomes could not do this**, because the tundra line and the desert margin would
-both be frozen in the data. It is also what makes the 3D view worth having: the ice sheet advances
-from the north while desert spreads from the south, and the precession term lets habitat visibly
-reopen during a wetter interval before closing again.
+both be frozen in the data. The fixed top-down grid keeps those shifts easy to compare: the ice
+sheet advances from the north while desert spreads from the south, and the precession term lets
+habitat visibly reopen during a wetter interval before closing again.
 
 The new-game `seed` perturbs initial **resource abundance** (flora/fauna/water stocks) and the small
 bounded local hazard/demand temperature-noise component. Landmasses, `BaseMoisture` and its zonal table, biome history, the directed LGM
@@ -6530,40 +6525,29 @@ and reload.
 
 ## 8. Rendering
 
-### 3D terrain: bounded chunks, one shared material, per-snapshot recolor
+### Top-down terrain: one grid-aligned cached surface
 
-Tetra3D transforms vertices on the **CPU**, so a naive model-per-tile at 6,144 tiles would become
-the performance ceiling of the whole game — and WASM is slower than native. A single whole-map
-`MeshPart` is unsafe too: 6,144 top quads contribute 12,288 triangles, and a maximally stepped 96×64
-grid can add more than 24,000 wall triangles, exceeding the 21,845-triangle range of Tetra3D v0.18's
-`uint16` display indices.
+The gameplay map is a fixed top-down **96 × 64** tile grid. Its logical rectangle starts at
+`(20, 74)` in the 1280 × 720 presentation surface; each tile owns a 9 × 9 cell and draws an 8.6 ×
+8.6 colored rectangle at the cell's upper-left corner. The sub-pixel gap keeps adjacent biomes
+legible without creating a second geometric interpretation of the world.
 
-The 96×64 terrain is therefore divided into six spatial **32×32 chunks**. Each chunk has its own
-`Mesh` and one `MeshPart`, and all chunks share one `Material`. The worst-case triangle count of a
-chunk, including walls assigned along its outer edge, is below 6,500. `terrain.go` nevertheless
-defines `MaxTrianglesPerPart = 21_000` and fails construction if any chunk crosses it, so changing
-grid or chunk dimensions cannot silently wrap an index. The count and six-chunk partition are tests,
-not performance assumptions.
+`map.go` keeps one `864 × 576` Ebitengine image for the terrain layer. Whenever the accepted frame's
+`(TerrainRevision, AridityIndex)` key changes, it fills the image with the unexplored color and draws
+all 6,144 tiles in stable tile order. Explored water uses the continuous epoch water grade, explored
+land uses its current biome color, and unexplored tiles retain the opaque unknown color. Planning-
+only frames reuse the image; the completed presentation frame is separately cached until frame or
+UI-local presentation state changes.
 
-- Each tile contributes a flat-topped quad at `y = Tile.ElevationKm * heightScale`, plus side-wall quads
-  only where it borders a lower neighbour. Flat tops keep tiles visually discrete, which a strategy
-  game needs for unambiguous clicking.
-- Biome color is written to a `VertexColorChannel` with `VertexActiveColorChannel` set. Geography
-  fixes elevation, so only colors change when a new simulation snapshot arrives; vertex heights are
-  not rewritten every turn.
-- The normal mode material has `Shadeless = false` and uses one directional light. Tetra3D's default
-  depth rendering remains enabled, so each visible chunk has depth and color work; the design claims
-  six bounded render batches, not one literal GPU draw call.
-- The terrain-detail toggle rebuilds six top-only meshes, their colliders, and lookup tables once;
-  low-detail material has `Shadeless = true`, so it performs neither side-wall nor lighting work.
-  Switching back rebuilds the normal meshes from the unchanged elevation grid. Normal detail is the
-  **Policy** launch default; the toggle is session-local and does not add a fifth `UISettings` field.
-  Both detail modes must pass their own release floors. Low detail is a player fallback and a useful
-  diagnostic, not a remedy for a failing mandatory normal-detail floor. A reviewed launch-default
-  change updates Appendix C explicitly and does not waive either gate.
+Elevation remains load-bearing simulation and inspector data, but does not displace pixels. There
+are no side walls, lighting, depth targets, 3D camera, orbit/pan/zoom controls, colliders, or terrain-
+detail modes. This is deliberate: a highland tile must never create a dark shape that resembles an
+unexplored or impassable tile, and the visual route between two cells must match the migration graph
+rather than perspective geometry.
 
-`camera.ColorTexture()` is blitted to the Ebitengine screen, then the 2D HUD is drawn on top with
-`text/v2` and `vector` — a crisp 2D interface over a 3D world.
+Terrain, exploration, passage overlays, reachable highlights, migration arrows, and band markers
+all use the same cell formula. A tile's marker point is the center of its 9 × 9 cell. Rendering and
+picking therefore cannot disagree because of elevation or view angle.
 
 ### High-DPI viewport and coordinate spaces
 
@@ -6592,7 +6576,7 @@ ScaleY = RenderHeightPx / outsideHeightDIP
 ```
 
 `MaxRenderScale = 2.0` is a presentation **Policy**. It gives a Retina-class 2× backing surface
-while bounding color/depth targets and fill work to four times the 1× pixel count. A transient
+while bounding presentation targets and fill work to four times the 1× pixel count. A transient
 non-positive outside dimension during minimization retains the last valid viewport; before the first
 valid layout it returns `1 × 1`. Scale and dimensions are never inferred from the world frame.
 
@@ -6604,7 +6588,7 @@ or application port and may not appear below `pkg/app` or `pkg/render`.
 `RenderScale`, `ScaleX`, `ScaleY`, and a monotonic presentation-only `ViewportRevision`. `LayoutF`
 atomically publishes a new value only when one of those inputs changes; repeated calls with the same
 inputs preserve the revision. `Update` and `Draw` each load one complete value, so a monitor move or
-browser resize cannot expose mixed old/new dimensions. `ViewportRevision`, like font and camera
+browser resize cannot expose mixed old/new dimensions. `ViewportRevision`, like font and terrain
 caches, is absent from `gameapi.Frame`, `WorldRevision`, `TerrainRevision`, saves, hashes, and RNG.
 
 All HUD layout constants, responsive breakpoints, scroll distances, and hit rectangles are authored
@@ -6618,29 +6602,26 @@ rather than accumulating one cache entry per resize or monitor. Text measurement
 same scaled face, so labels do not clip merely because glyphs became sharper.
 
 Ebitengine pointer and touch positions are in its returned game-screen coordinate space. The input
-router therefore keeps both representations for the current event:
+router converts each current event into the fixed logical presentation space:
 
 ```text
 PointerRenderPx = Ebitengine cursor/touch position
-PointerDIP      = (PointerRenderPx.x / ScaleX, PointerRenderPx.y / ScaleY)
+PointerLogical  = FitPresentation(RenderWidthPx, RenderHeightPx)^-1(PointerRenderPx)
 ```
 
-Widgets and HUD exclusion zones consume `PointerDIP`; Tetra3D ray picking consumes
-`PointerRenderPx` against a camera whose color/depth targets equal `RenderWidthPx × RenderHeightPx`.
-No handler may compare render pixels with a DIP rectangle. The same logical point must hit the same
-control and map tile at 1×, fractional scale, and 2×.
+Widgets, HUD exclusion zones, and `MapTileAt` consume `PointerLogical`. No handler may compare render
+pixels with a logical rectangle. The same logical point must hit the same control and map tile at
+1×, fractional scale, and 2×.
 
-A viewport change reallocates the Tetra3D camera color/depth targets and screen-sized presentation
-buffers once, replaces the scaled font set if necessary, and recomputes responsive HUD geometry. It
-does **not** rebuild terrain chunks, veil topology, colliders, band markers, or any simulation frame;
-the camera projection alone adopts the new physical aspect ratio. Resize or monitor movement emits
-no UI action, storage operation, sound, revision outside `ViewportRevision`, or RNG draw.
+A viewport change reallocates screen-sized presentation buffers once, replaces the scaled font set
+if necessary, and recomputes responsive HUD geometry. It does **not** rebuild the logical terrain
+image, band markers, or any simulation frame. Resize or monitor movement emits no UI action,
+storage operation, sound, revision outside `ViewportRevision`, or RNG draw.
 
-High-DPI scaling is automatic, not another `UISettings` field. The existing terrain-detail toggle
-still controls geometry and lighting rather than pixel density. If either 2× detail mode misses its
-release floor, optimize it or explicitly revise the measured policy; lowering `MaxRenderScale`
-remains a separately reviewed presentation-policy change. The build must not silently change
-simulation grid dimensions, launch detail, or introduce frame-time-dependent dynamic resolution.
+High-DPI scaling is automatic, not another `UISettings` field. There is no terrain-detail toggle or
+dynamic-resolution path. If either mandatory DPR profile misses its release floor, optimize it or
+explicitly revise the measured policy; lowering `MaxRenderScale` remains a separately reviewed
+presentation-policy change. The build must not silently change simulation grid dimensions.
 
 ### Release performance contract
 
@@ -6667,13 +6648,12 @@ benchmark. The interactive reference machine is a 2024 Mac mini (`Mac16,10`) wit
 the exact browser version used by the release candidate. Step 13 loads the checked-in
 `testdata/performance_profile_save.json` maximum-render fixture (`ReferenceSeed`, turn 300, 256 live
 bands, every tile explored), uses a 1280×720-DIP viewport, warms for 5 seconds, then runs the exact
-30-second `tools/web-e2e/profile.mjs` orbit/pan script with one `EndTurn` every 5 seconds. It records
-each DPR/detail combination separately. At DPR 1, normal detail must sustain a median 20 FPS and low
-detail a median 30 FPS; at DPR 2, normal detail must sustain a median 15 FPS and low detail a median
-20 FPS. Every profile must have a
+30-second `tools/web-e2e/profile.mjs` top-down presentation script with one `EndTurn` every 5 seconds.
+It records DPR 1 and DPR 2 separately. DPR 1 must sustain a median 30 FPS and DPR 2 a median 20 FPS.
+Every profile must have a
 95th-percentile frame gap no greater than 150 ms and a maximum successful `EndTurn` latency no
-greater than 2 seconds. **All four profiles are mandatory.** The release record names the CPU, GPU, OS, browser, browser version, detail
-mode, DPR, median FPS, frame-gap percentile, turn latency, and peak process memory so later results
+greater than 2 seconds. **Both profiles are mandatory.** The release record names the CPU, GPU, OS,
+browser, browser version, view (`top-down`), DPR, median FPS, frame-gap percentile, turn latency, and peak process memory so later results
 are comparable. Missing a floor requires optimization or an explicit revision of this policy; it
 cannot silently reduce the simulation grid, omit bands, skip turn work, or publish anyway.
 
@@ -6681,81 +6661,51 @@ Pixel-golden and screenshot fixtures inject and record an explicit render scale;
 their expected dimensions from the test runner's monitor. Manual screenshots may use the host scale,
 but comparisons are valid only between captures with the same logical viewport and render scale.
 
-### Epoch grade: atmosphere, not terrain
+### Epoch grade: water and chrome, not land identity
 
-The three climate epochs shift the scene's palette, but never per-tile biome color. The grade
-applies to the directional light's color and intensity, ambient level, the veil's blue-grey, water
-tiles, and HUD chrome accents. Biome vertex colors remain the authoritative answer to what a tile
-_is_.
+The three climate epochs shift water and HUD chrome, but never per-tile biome color or the fixed
+unexplored color. Biome colors remain the authoritative answer to what an explored land tile _is_.
+That split keeps desertification and continuous epoch drift from sharing one visual channel.
 
-That split is required, not stylistic. `TerrainRevision` advances only when a tile's biome,
-`Explored` bit, or visible macro-impact factors change; a grade multiplied into vertex colors would
-dirty all six chunks every turn and reintroduce exactly the per-turn recolor cost that counter
-exists to avoid. It would also overload one channel with two meanings, leaving desertification and
-epoch drift visually indistinguishable. Applied to lighting and chrome instead, the grade is a
-per-frame uniform: no mesh rebuild, no cache invalidation, no revision increment.
+`palette.go` defines the pure `EpochGrade(aridityIndex) -> GradeColors`. `GradeColors` has exactly
+two outputs: water RGBA and HUD-chrome-accent RGBA. Three exact anchors sit at `AridityIndex` `0.0`,
+`0.5`, and `1.0`; hexadecimal colors are eight-bit sRGB `RRGGBBAA` and every alpha is opaque `FF`:
 
-`palette.go` gains a pure `EpochGrade(aridityIndex) -> GradeColors`. `GradeColors` has exactly six
-outputs: directional-light RGBA, directional-light intensity, ambient level, veil RGBA, water RGBA,
-and HUD-chrome-accent RGBA. Three anchor records sit at `AridityIndex` `0.0`, `0.5`, and `1.0`:
+| `AridityIndex` | Water       | HUD accent  |
+| -------------: | ----------- | ----------- |
+|          `0.0` | `#206C9CFF` | `#9E9E48FF` |
+|          `0.5` | `#386884FF` | `#A68042FF` |
+|          `1.0` | `#345474FF` | `#70AACCFF` |
 
-| Anchor             | Character                                                                                 |
-| ------------------ | ----------------------------------------------------------------------------------------- |
-| `0.0` humid        | warm sunlight, higher ambient level, saturated blue water, green-gold chrome              |
-| `0.5` transitional | pale sunlight, middling ambient level, dusty blue water, ochre/olive chrome               |
-| `1.0` glacial      | cool sunlight, lower ambient level, steel-blue water, slate veil, ice-blue chrome accents |
+Interpolation is linear in eight-bit sRGB channel space without gamma conversion and rounds to the
+nearest channel with halves away from zero. The exact segment-midpoint fixtures are:
 
-The selected **naturalistic, restrained** anchors are exact. Each hexadecimal color is eight-bit sRGB
-`RRGGBBAA`; every alpha is opaque `FF`:
+| `AridityIndex` | Water       | HUD accent  |
+| -------------: | ----------- | ----------- |
+|         `0.25` | `#2C6A90FF` | `#A28F45FF` |
+|         `0.75` | `#365E7CFF` | `#8B9587FF` |
 
-| `AridityIndex` | Directional light | Intensity | Ambient | Veil        | Water       | HUD accent  |
-| -------------: | ----------------- | --------: | ------: | ----------- | ----------- | ----------- |
-|          `0.0` | `#FFE8BCFF`       |    `0.94` |  `0.72` | `#485860FF` | `#206C9CFF` | `#9E9E48FF` |
-|          `0.5` | `#F1DAB6FF`       |    `0.82` |  `0.60` | `#505A60FF` | `#386884FF` | `#A68042FF` |
-|          `1.0` | `#CFE0F0FF`       |    `0.70` |  `0.48` | `#4C5868FF` | `#345474FF` | `#70AACCFF` |
-
-Interpolation converts each channel to normalized `[0, 1]`, linearly interpolates in sRGB channel
-space without gamma conversion, rounds to the nearest eight-bit channel with halves away from zero,
-and linearly interpolates the two scalar levels as `float64`. The exact segment-midpoint fixtures are:
-
-| `AridityIndex` | Directional light | Intensity | Ambient | Veil        | Water       | HUD accent  |
-| -------------: | ----------------- | --------: | ------: | ----------- | ----------- | ----------- |
-|         `0.25` | `#F8E1B9FF`       |    `0.88` |  `0.66` | `#4C5960FF` | `#2C6A90FF` | `#A28F45FF` |
-|         `0.75` | `#E0DDD3FF`       |    `0.76` |  `0.54` | `#4E5964FF` | `#365E7CFF` | `#8B9587FF` |
-
-Both scalar levels must be finite and in `[0, 1]`. Build step 8 implements and screenshot-reviews
-these values but does not select replacements. This is a presentation contract rather than a
-cross-platform simulation-hash input; the exact anchor and midpoint fixtures still prevent an
-accidental palette change.
-
-The grade reads the continuous index, not the discrete epoch, so it never steps at a boundary; the
-epoch name changes only the caption. `scene3d.go` applies the grade to light and ambient, while
-`veil.go` and `hud.go` read colors from the same function. Appendix C marks the anchor table Locked
-and points here without duplicating its values; the two epoch thresholds and the hysteresis margin
-are climate configuration and appear separately in C.11.
+Build step 8 implements and screenshot-reviews these values but does not select replacements. This
+is a presentation contract rather than a cross-platform simulation-hash input; the exact anchor and
+midpoint fixtures still prevent an accidental palette change. The grade reads the continuous index,
+not the discrete epoch, so it never steps at a boundary; the epoch name changes only the caption.
+`map.go`, `tile_info.go`, and the timeline read colors from the same function. Appendix C marks the
+anchor table Locked and points here without duplicating its values; the two epoch thresholds and
+the hysteresis margin are climate configuration and appear separately in C.11.
 
 Color is never the sole cue. The current recurring climate-epoch name appears as text in the top bar
 without a date range; the separate campaign era carries its fixed date range. The timeline marker's
 shape, position, and textual date communicate progress without color. `AridityIndex` rides the frame alongside the existing climate
 components so render never reimplements the curve.
 
-### Exploration veil and hidden-map behavior
+### Exploration fog and hidden-map behavior
 
-`veil.go` turns `Tile.Explored` into six bounded chunk-aligned cover meshes. Every unexplored tile
-contributes one opaque top quad at a common `VeilHeight` above the maximum possible terrain height;
-boundary edges add vertical skirts below the minimum terrain height so orbiting the camera cannot
-expose hidden elevation, coastlines, biome color, or side walls from a shallow angle. The worst case
-is two top triangles plus eight skirt triangles per tile, or 10,240 triangles in a 32×32 veil chunk,
-below `MaxTrianglesPerPart = 21_000`. The veil therefore adds at most six bounded mesh parts rather
-than one object per tile.
-
-The veil material is opaque, shadeless, and a quiet blue-grey from `palette.go`, with a restrained
-boundary treatment rather than animated clouds. It needs no transparency sorting, texture asset,
-clock, or RNG. Meshes rebuild only when the explored bitset changes; ordinary biome recolors,
-selection, camera movement, and idle frames do not rebuild them. Newly explored terrain appears in
-the next accepted frame with a short presentation-only fade permitted at the cutout edge, but save,
-load, screenshots, and deterministic state hashes depend only on the authoritative bit, never on a
-fade timer.
+`map.go` renders every `Tile.Explored == false` cell in one fixed opaque near-black color instead of
+its water or biome color. Because fog and terrain occupy the same top-down cell, no elevation,
+coastline, biome, or resource information can leak around an edge. The fog needs no separate mesh,
+transparency sorting, texture asset, animation clock, fade timer, or RNG; a newly explored tile
+appears in the next accepted frame. Save, load, screenshots, and deterministic state hashes depend
+only on the authoritative exploration bit.
 
 Unexplored tiles have no marker, selection ring, biome/resource label, tile inspector, natural-
 shelter cue, fauna summary, destination highlight, or full passage line. Picking may still resolve
@@ -6774,15 +6724,15 @@ catalog, episode resolution, bounded event feed, or computer policy.
 Regional abrupt-climate magnitudes follow the same exploration rule: the current pulse may be named
 globally, but numeric values for wholly unexplored regions are not player-facing.
 
-This is an exploration veil, not tactical fog-of-war. Once a tile is explored, its current terrain,
-public stats, and resident band markers remain visible from anywhere. The camera may orbit or pan
-across the whole rectangular world extent, but unexplored cover reveals no geographic shape beneath
-it. Developer-only `-dumpmap`, `-headless`, and test fixtures may inspect the full authoritative map;
+This is persistent exploration fog, not tactical fog-of-war. Once a tile is explored, its current
+terrain, public stats, and resident band markers remain visible from anywhere. The fixed top-down
+view shows the whole rectangular extent, but unexplored cells reveal no geographic shape beneath
+them. Developer-only `-dumpmap`, `-headless`, and test fixtures may inspect the full authoritative map;
 they are not player-facing discovery paths.
 
 ### Gameplay stats layout
 
-The same 2D HUD layout applies on desktop and web, over the 3D map:
+The same 2D HUD layout applies on desktop and web around the top-down map:
 
 - **Persistent top bar:** total living `HomoSapiens` population across all player bands, campaign
   turn/year, campaign era with its fixed date range, season, and current climate epoch name without
@@ -6913,7 +6863,7 @@ last turn's shortage from survivors or reserves, rerun consumption in the render
 these actuals as a prediction. Detailed future-turn food-output previews remain outside this
 historical report and are not part of the v1 UI contract.
 
-Selection, hover, camera movement, and drawing only inspect the frame. Dirty workforce drafts
+Selection, hover, and drawing only inspect the frame. Dirty workforce drafts
 leave accepted stats unchanged; refreshing a frame follows the existing Apply/Discard and load
 guards. Completed-turn outcomes appear only after the full turn, not during phase 3. Panel
 placement/sizing and responsive details remain presentation work except for the Field Notes contract
@@ -7085,23 +7035,22 @@ validated stored record or the complete default record before enabling those con
 therefore never race the initial read or overwrite stored preferences that the player had not yet
 seen.
 
-### Orbit camera and picking
+### Grid picking
 
-`orbit.go` stores `focus`, `azimuth`, `elevation`, and `distance`, and derives the camera transform
-each frame. Right-drag or `Q`/`E` rotates azimuth; middle-drag or `R`/`F` changes elevation (clamped
-against gimbal flip and sub-horizon views); scroll changes distance; `WASD`/arrows pan the focus.
+After the viewport's exact inverse presentation transform, map picking uses the same constants as
+drawing:
 
-For each chunk, `terrain.go` calls `Mesh.UpdateBounds()` and constructs a
-`tetra3d.BoundingTriangles` from the same mesh, with broadphase enabled and the same transform as
-the visible model. `picking.go` calls `camera.MouseRayTest` with `TestAgainst` set to the collection
-of those six colliders. A `RayHit` against `BoundingTriangles` contains the exact triangle; a
-`map[*tetra3d.Triangle]int` built with the mesh maps both top and wall triangles to their tile (a wall
-belongs to its higher tile).
+```text
+gridX = floor((PointerLogical.x - 20) / 9)
+gridY = floor((PointerLogical.y - 74) / 9)
+TileID = gridY * 96 + gridX
+```
 
-This is more robust than inverting the orbit transform by hand and stays correct at any camera
-angle. Tests shoot known screen/world rays at a top, a side wall, a chunk boundary, ocean, and empty
-space in both detail modes. Rebuilding detail mode must replace the collider collection and lookup
-atomically before the next input update.
+The map rectangle is half-open; points left/above it or at/beyond its right or bottom edges produce
+no tile. The resolved tile is then subject to the exploration and HUD-exclusion rules before any
+selection or command is emitted. Tests cover the four boundaries, representative cells, marker
+centers, highlands, water, and unexplored cells. Because height never changes screen geometry, the
+same cell is drawn, highlighted, marked, and picked at every DPR.
 
 ---
 
@@ -7607,7 +7556,7 @@ state, operation FIFO ordering, and deletion interrupted between tombstone publi
   quantum. CI compares both the ceiling and headroom with `tools/wasm_size_budget.env` at the trusted
   pull-request base or pre-push revision and rejects either value if it increased. The original
   ceiling remains only a bootstrap upper bound; it cannot be used to reverse a later reduction.
-  Ebitengine, Tetra3D, and `text/v2` dominate transfer size, while `wasm-opt -O3` primarily changes
+  Ebitengine and `text/v2` dominate transfer size, while `wasm-opt -O3` primarily changes
   decompressed size and startup, so optimizing application and dependency reachability remains the
   route for reclaiming compressed bytes.
 - `web/` is the complete deployable root. A release artifact contains `index.html`, the optimized
@@ -7655,19 +7604,16 @@ state, operation FIFO ordering, and deletion interrupted between tombstone publi
   failed read applies the §8 defaults and then emits it. Thus no sound can precede settings
   settlement, and a persisted mute always governs the first emitted sound without blocking the
   browser gesture. Construction failure yields a silent no-op manager, never a crash.
-- `-dumpmap` / `-headless` / `-screenshot` / `-turns` / `-terrain-detail` plus verification-only
+- `-dumpmap` / `-headless` / `-screenshot` / `-turns` plus verification-only
   `-seed` / `-policy` / `-checkpoint-json` are registered only in
   `main.go` (`!js`), so the wasm binary does not carry `flag` plumbing it cannot use.
 - **Performance and transfer size are the two web risks, and §12's step 2a measures both before the
-  domain exists.** Mitigations and release floors are in §8. If 96×64 proves too slow in a
-  browser, `MaxRenderScale` bounds high-DPI pixel work and the low-detail mesh is the first geometry
-  fallback — though low detail removes side walls and lighting, not Tetra3D's per-frame CPU vertex
-  transform, so it is a narrower lever than its name suggests. The grid dimension and maximum 32×32
-  render-chunk dimension are separate constants, and
-  the geography rasterizes at any resolution; changing simulation grid size is a later balance
-  decision, not an automatic runtime downgrade. Both risks are properties of the pinned dependency
-  set and the release geometry rather than of game code, which is why step 2a measures them on a
-  skeleton and step 11 only enforces what step 2a already reported.
+  domain exists.** Mitigations and release floors are in §8. `MaxRenderScale` bounds high-DPI pixel
+  work; the terrain and complete presentation caches eliminate unchanged-frame drawing work. The
+  96×64 simulation grid is fixed and must not be reduced automatically when a device is slow. Both
+  risks are properties of the pinned dependency set and release presentation rather than of game
+  code, which is why step 2a measures them on a skeleton and step 11 only enforces what step 2a
+  already reported.
 - **Release CI is cross-platform and ordered.** `.github/workflows/ci.yml` runs for pull requests and
   pushes to `main`. Its native matrix runs `golangci-lint config verify` and `golangci-lint run`
   before `go vet`, `go test`, and the native desktop build on named runner images `ubuntu-24.04`
@@ -7716,7 +7662,7 @@ replay old event sounds. Domain and application tests never touch audio.
 
 `SFXChoiceClick` is requested once for an accepted enabled discrete button, list-row, checkbox, or
 toggle activation. It is not requested for a disabled/rejected activation, slider drag/update,
-keyboard repeat, hover, focus, camera input, or the mute/volume controls. The UI deduplicates by the
+keyboard repeat, hover, focus, map inspection, or the mute/volume controls. The UI deduplicates by the
 accepted input sequence and control ID, so pointer-up plus key activation cannot double-play one
 choice. `SFXSaveComplete` is requested once per successful manual or quick-save `StorageOpID` when
 its completion is polled; autosaves, list/load/delete operations, request acceptance, failures, and
@@ -7806,7 +7752,7 @@ activation/mapping/coefficients, and water-equivalent scoring land with their co
 stock-unit and conversion values are already selected; step 5 implements and verifies them.
 
 1. **Scaffolding first, so the boundaries exist before any code can violate them** — `go.mod` with
-   Ebitengine + Tetra3D, `.golangci.yml`, `internal/archtest`, minimal compiling `doc.go` files for
+   Ebitengine, `.golangci.yml`, `internal/archtest`, minimal compiling `doc.go` files for
    `pkg/gameapi`, `internal/domain`, `internal/application`, `internal/adapters/storage`,
    `internal/adapters/logging`,
    `pkg/render`, `pkg/ui`, `pkg/audio`, and `pkg/app`, plus build-tagged stub entrypoints and
@@ -7863,8 +7809,8 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    - **2a — Cross-platform walking skeleton.** Replace the step-1 no-op entrypoints with the smallest
      real Ebitengine host on desktop and js/wasm, backed by a fake `gameapi.Game` that returns one
      immutable minimal frame. Add the full-window `web/index.html`, `build_web.sh --dev`, and a
-     deliberately minimal Tetra3D scene/camera that clears and draws one visible primitive through
-     the eventual `pkg/render` seam; none of these may import the domain. The desktop smoke opens a
+     deliberately minimal top-down Ebitengine scene that clears and draws one visible grid cell
+     through the eventual `pkg/render` seam; none of these may import the domain. The desktop smoke opens a
      window and exits cleanly. The browser smoke serves `web/`, proves the matching copied
      `wasm_exec.js` instantiates the module, waits for a stable canvas-ready marker, observes no page
      error or unexpected console error, and exits. Introduce the locked browser-test dependency and
@@ -7882,20 +7828,16 @@ stock-unit and conversion values are already selected; step 5 implements and ver
 
      - **Transfer size.** Add `--release` to `build_web.sh` far enough to run the pinned
        `wasm-opt -O3` and record raw, `brotli -q 11`, and `gzip -9` byte counts for the skeleton, and
-       for one variant per major dependency (Ebitengine alone; plus `text/v2`; plus Tetra3D). The
+       for one variant per major dependency (Ebitengine alone; plus `text/v2`). The
        per-dependency attribution is the point: a single total says the budget is missed, while the
        variants say which dependency to argue with. Write the results into `docs/PERFORMANCE.md`
        under a skeleton heading. Step 11 owns the enforced gate; this substep owns knowing the floor.
-     - **Frame rate.** Build a synthetic terrain fixture with the release geometry — six 32×32
-       chunks, 12,288 top-face triangles, one shared material, one directional light, and Tetra3D's
-       default depth pass — driven by the fake frame with no simulation behind it. Run §8's orbit/pan
-       script against it at DPR 1 and DPR 2 in both detail modes on the §8 reference machine and
-       record median FPS. This is the release render workload minus the game: geometry, chunk count,
-       material, and lighting are what §8's floors actually measure, and Tetra3D transforms every
-       vertex on the CPU every frame whether or not a snapshot changed. If the skeleton cannot reach
-       §8's floors, no later optimization of simulation or projection will rescue them, and the
-       chunking, detail-mode, and `MaxRenderScale` decisions must be revisited now rather than after
-       step 8 has built on them.
+     - **Frame rate.** Build a synthetic terrain fixture with the release presentation — all 6,144
+       top-down cells plus the maximum 256 visible band markers — driven by the fake frame with no
+       simulation behind it. Run §8's profile at DPR 1 and DPR 2 on the reference machine and record
+       median FPS. This is the release drawing workload minus the game. If the skeleton cannot reach
+       §8's floors, no later optimization of simulation or projection will rescue it, and the
+       caching or `MaxRenderScale` decisions must be revisited before step 8 builds on them.
 
 3. **Domain geography** — `internal/domain` value types plus `geo.go`, `geodata.go`, `region.go`,
    `grid.go`, and the concrete `worldgen.go` service. Implement the exact §6 coordinate catalogs and
@@ -8208,10 +8150,9 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    `TerrainRevision` starts at `1`. Biome, exploration, or visible macro-impact changes advance it;
    assignment/research-only changes do not; rejected/no-op operations advance nothing and
    publish no frame. A successful load or new campaign with changed rendered inputs advances it.
-   Assert the frame exposes no second cache counter, and that band markers rebuild from the
-   published frame without one. Renderer fixtures use the coarse terrain signal to compare cache-specific
-   inputs, proving a biome-only change does not rebuild the veil and an exploration-only change does
-   not rewrite unchanged biome colors. `OriginalResearchGainPreview` must equal the domain formula
+   Assert the frame exposes no second cache counter, and that band markers draw from the published
+   frame without one. Renderer fixtures prove planning-only frames reuse the tile image, while a
+   terrain revision or changed water grade invalidates it exactly once. `OriginalResearchGainPreview` must equal the domain formula
    capped at the target's remaining cost,
    remain finite and non-negative, and be zero when original research is inactive.
    Exhaustive count-sentinel fixtures map every closed domain enum to `gameapi` and back where the
@@ -8301,36 +8242,36 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    ordering, and the golden future-equivalence invariant — identical future results from identical
    inputs and RNG state — before any UI exists.
 
-8. **3D render layer** — evolve step 2a's retained minimal scene into viewport, fonts, palette,
-   `scene3d`, `terrain`, `veil`, `orbit`, `picking`,
-   `passages`, `markers`, `hud`.
-   Implement and screenshot-review §8's exact three `GradeColors` anchor six-tuples through a
-   step-8 display test harness with injected frames; this harness is not the public desktop
-   `-screenshot` mode. Lock their exact
-   RGBA/scalar values plus the two segment-midpoint interpolation fixtures in `palette.go` tests.
-   Test chunk bounds, worst-case triangle counts, both detail meshes, collider replacement, orbit
-   math, top/wall/boundary triangle→tile lookup, and all open/locked passage-overlay states; verify
-   that `EpochGrade` interpolates continuously across all 401 turns with no discontinuity at either
-   epoch threshold, that it drives only light, ambient, veil, water, and chrome, and that a changing
-   `AridityIndex` alone advances neither `TerrainRevision` nor any terrain or veil rebuild. Assert
-   the recurring climate-epoch name renders as text without a date range while campaign era retains
-   its range, so color is never the sole cue; run the display
-   harness on a machine with a graphics context. Step 10 exposes the retained harness through the
-   desktop `-screenshot` and `-turns` flags for the §13 visual smoke test. Assert the marker layer
-   renders
-   at most one marker for each of the at most 256 bands. Veil tests cover the six-chunk/10,240-
-   triangle bound, opaque common-height tops and boundary skirts, exact explored cutouts, no hidden
-   biome/elevation/marker/full-passage leakage at low orbit angles, ignored hidden picking, and no
-   rebuild on camera, selection, biome-only, or idle frames. Reveal changes rebuild once without RNG.
+8. **Top-down render layer** — evolve step 2a's retained minimal scene into viewport, palette,
+   top-down map, grid picking, exploration fog, passages, markers, timeline, inspectors, and HUD.
+   Implement and screenshot-review §8's exact three `GradeColors` anchor pairs through a step-8
+   display test harness with injected frames; this harness is not the public desktop `-screenshot`
+   mode. Lock their exact RGBA values plus the two segment-midpoint interpolation fixtures in
+   `palette.go` tests. Verify that `EpochGrade` interpolates continuously across all 401 turns with
+   no discontinuity at either epoch threshold and drives only water and chrome. A changing
+   `AridityIndex` alone advances neither `TerrainRevision` nor simulation state, but does invalidate
+   the tile-image cache so graded water cannot become stale. Assert the recurring climate-epoch name
+   renders as text without a date range while campaign era retains its range, so color is never the
+   sole cue; run the display harness on a machine with a graphics context. Step 10 exposes the
+   retained harness through the desktop `-screenshot` and `-turns` flags for the §13 visual smoke
+   test.
+
+   Grid tests cover exact half-open map bounds, representative tile IDs, shared marker/picking
+   centers, every land biome, water, and unexplored cells. Offscreen scenarios assert reachable
+   highlights, migration arrows, passage states, species-distinct markers, and at most one marker for
+   each of the at most 256 bands. Fog tests cover exact explored cutouts, no hidden
+   biome/elevation/marker/full-passage leakage, and ignored hidden picking. A planning-only frame and
+   idle drawing reuse the cached terrain image; a terrain revision or changed water grade rebuilds
+   it exactly once without RNG.
+
    Add table-driven viewport tests at `1`, `1.25`, `1.5`, `2`, and `3` device scale: assert the `2`
    cap, ceiling of fractional render dimensions, invalid/non-finite fallback to `1`, and exact
-   render-pixel↔DIP round trips within one physical pixel. At `960 × 600` DIPs all required controls
-   remain available; one DIP below either bound shows the resize overlay and emits no gameplay or
-   scene action. The same DIP point must hit the same HUD
-   control and map tile at every scale. A changed viewport advances `ViewportRevision` once,
-   reallocates camera and screen-sized presentation targets once, and holds the font cache to the
-   current three faces; an identical layout call does none of those things. Neither case may rebuild
-   terrain/veil/colliders/markers or change an action, simulation revision, save, hash, or RNG state.
+   render-pixel↔logical round trips within one physical pixel. At `960 × 600` DIPs all required
+   controls remain available; one DIP below either bound shows the resize overlay and emits no
+   gameplay or scene action. The same logical point must hit the same HUD control and map tile at
+   every scale. A changed viewport advances `ViewportRevision` once and reallocates screen-sized
+   presentation targets once; an identical layout call does neither. Neither case may rebuild the
+   logical terrain image or change an action, simulation revision, save, hash, or RNG state.
    Screenshot fixtures inject `1×` or `2×` explicitly and record both logical and render dimensions.
    Finish the step by adding the maximum-workload `World.AdvanceTurn` and frame-projection
    benchmarks plus calibration benchmark named in §8, running them repeatedly on
@@ -8638,8 +8579,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
     Validate without retuning the eight starting bands, fixed 50/50 split, authored starting anchors
     and their frozen resolved tile IDs, Toba no-effect marker, Campanian identity/date, and checked-in
     Campanian masks/checksums. Run §8's native benchmarks, automated browser timeouts, and complete
-    reference-machine profile. All four DPR/detail floors must pass; low detail may remain a player
-    fallback but does not excuse a normal-detail failure. Finish with
+    reference-machine profile. Both top-down DPR floors must pass. Finish with
     every benchmark, route policy, reference margin, and browser timeout green. This step calibrates
     but does not publish either target.
 13. **Release closure and publication** — begin only after step 12 and the complete §13 verification
@@ -8903,22 +8843,20 @@ establish all five.
 
 ### Display-required visual smoke test
 
-The screenshot path boots Ebitengine and Tetra3D and therefore requires a real graphics context. It
+The screenshot path boots Ebitengine and therefore requires a real graphics context. It
 is a local/manual check by default, or a separate CI lane configured with a virtual display such as
 Xvfb; it is not part of the headless gate above.
 
 ```bash
 go run . -screenshot /tmp/a2i.png -turns 20
-go run . -screenshot /tmp/a2i-low.png -turns 20 -terrain-detail low
 ```
 
-Boots the real 3D renderer, advances 20 turns through the CLI harness, writes a PNG of the
-framebuffer, and exits. Generate and inspect both normal and low-detail screenshots so chunk seams,
-lighting, biome colors, and side walls are visible rather than merely compiled; the PNGs are test
-outputs, not committed assets.
+Boots the real top-down renderer, advances 20 turns through the CLI harness, writes a PNG of the
+framebuffer, and exits. Inspect the map grid, biome colors, exploration boundary, passage overlays,
+markers, and inspector; the PNG is a test output, not a committed asset.
 
 For a release candidate, run `npm --prefix tools/web-e2e run profile` on the documented reference machine
-against the optimized local bundle in normal and low detail at both DPR 1 and DPR 2. The
+against the optimized local bundle at both DPR 1 and DPR 2. The
 script performs the fixed 30-second post-warm-up sample and emits machine-readable FPS, frame-gap,
 turn-latency, and peak-process-memory results. Copy the results and complete machine/browser identity
 to `docs/PERFORMANCE.md`; §8's floors, not a subjective “feels responsive” judgment, decide whether
@@ -8929,14 +8867,14 @@ display, a real input device, or a human judgement. §12's steps own everything 
 assert, so nothing here re-verifies a numeric fixture by hand — a person clicking through allocator
 arithmetic proves less than the test that already runs on every push, and takes an afternoon.
 
-*Rendering and camera.* Orbit with right-drag, `Q`/`E`, and scroll; change elevation and pan. Chunk
-seams, side walls, lighting, and biome colours must read correctly at every angle in both terrain
-detail modes. Hover top and wall geometry and confirm the tile inspector resolves the tile under the
-pointer, including across a chunk boundary.
+*Top-down rendering and picking.* Biome colours, explored water, fog, reachable highlights, migration
+arrows, and species markers must remain distinct across the grid. Hover representative flat and
+highland cells and confirm the tile inspector resolves the cell under the pointer, including at map
+edges; the tile's elevation appears in the inspector but never shifts its visual or clickable cell.
 
-*The veil, which a screenshot cannot replace.* On a new game, orbit low and all the way around:
-unexplored Eurasian, Sahul, and Beringian terrain must expose no elevation, coastline, biome colour,
-marker, inspector, or full passage line from any angle, and clicks on it must do nothing. Then use
+*Exploration fog, which a screenshot cannot fully exercise.* On a new game, unexplored Eurasian,
+Sahul, and Beringian cells must expose no elevation, coastline, biome colour, marker, inspector, or
+full passage line, and clicks on them must do nothing. Then use
 split and completed-migration fixtures to watch successive frontiers open, confirm remote archaic
 movement reveals nothing, and reload to confirm the uncovered area comes back exact.
 
@@ -8944,7 +8882,7 @@ movement reveals nothing, and reload to confirm the uncovered area comes back ex
 `1.5×`), and `2×`, keep the same logical window size: controls must retain their DIP size while
 text, one-DIP rules, and terrain gain physical-pixel detail. Move the running window between
 differently scaled monitors and resize it — every control and tile must stay under the pointer,
-labels must not clip, and the viewport may change without a simulation revision or a terrain or veil
+labels must not clip, and the viewport may change without a simulation revision or terrain-image
 rebuild. Record logical size, render size, and render scale beside any screenshot kept for
 comparison.
 
@@ -8988,16 +8926,15 @@ browser zoom, orientation, resize, and the boot/new-game/migration/end-turn/quic
 every push, failing on any page error, panic, or unexpected `console.error`. This pass therefore
 covers only what that harness cannot reach or cannot judge.
 
-*Rendering through the WASM path.* Confirm the canvas fills the window, terrain renders, the orbit
-camera responds, and both detail modes pick correctly. This repeats the desktop visual review
-because the browser is a different rendering path, not because the expectations differ. Confirm the
-veil still hides everything beyond East Africa at a shallow orbit and cannot be bypassed by touch
-picking.
+*Rendering through the WASM path.* Confirm the canvas fills the window, terrain renders, and the
+top-down grid picks correctly. This repeats the desktop visual review because the browser is a
+different rendering path, not because the expectations differ. Confirm exploration fog still hides
+everything beyond East Africa and cannot be bypassed by touch picking.
 
 *Restored pixels, which the semantic observer cannot judge.* Using the same post-migration scenario,
 compare the canvas immediately before the quick-save and after reload: the timeline marker/date/era,
 the lowest-ID sapiens band's last-turn food labels and actuals after reselecting it, and the
-revealed-versus-hidden veil boundary must agree. This is a compact visual confirmation only; step 11
+revealed-versus-hidden fog boundary must agree. This is a compact visual confirmation only; step 11
 already proves exact `E2ESummary` equality through the real IndexedDB load path.
 
 *Browser policy, which needs a real gesture.* Audio must start only after the first click, never
@@ -9037,9 +8974,9 @@ savanna and semi-arid desert (`BaselineKCurve(V)` now covers that gradient withi
 permanent ecological scarring or land-restoration technology, the full
 ~30-technology graph (DAG), continental North America beyond western Alaska, streaming
 ambient audio beds, remote log collection or upload, a crash-reporting service, a player-facing log
-viewer, user-configurable log levels, temporary line-of-sight/espionage fog, randomized scouting, textured and sprite
-art, and glTF asset loading (Tetra3D supports it; nothing
-here needs it), native installers, code signing/notarization, package-manager feeds, and automatic
+viewer, user-configurable log levels, temporary line-of-sight/espionage fog, randomized scouting,
+textured and sprite art, glTF assets or model loading, native installers, code signing/notarization,
+package-manager feeds, and automatic
 desktop updates. V1 still publishes the explicitly documented unsigned portable archives in step 13;
 these exclusions prevent those archives from being mistaken for signed installer packages.
 
@@ -9064,13 +9001,6 @@ these exclusions prevent those archives from being mistaken for signed installer
   and [`CursorPosition`](https://pkg.go.dev/github.com/hajimehoshi/ebiten/v2@v2.9.10#CursorPosition)
   already accounts for the returned screen scale. Browser HiDPI is enabled by the default
   [`RunGameOptions.DisableHiDPI == false`](https://pkg.go.dev/github.com/hajimehoshi/ebiten/v2@v2.9.10#RunGameOptions).
-- **Tetra3D v0.18.0** (released 2026-07-11) requires Ebitengine v2.9.7, satisfied by v2.9.10 — no
-  version conflict. API verified: `NewCamera(name, w, h)`, `camera.RenderScene(scene)`,
-  `camera.ColorTexture() *ebiten.Image`, `NewMesh` / `AddMeshPart` / `AddVertices` / `NewVertex`,
-  `NewModel`, `Mesh.UpdateBounds`, `NewBoundingTriangles`, `camera.MouseRayTest`,
-  `MouseRayTestOptions.TestAgainst`, `Material.Shadeless`, and `VertexColorChannel` +
-  `VertexActiveColorChannel`. Its v0.18 display index list is `uint16`, so this design deliberately
-  keeps every mesh part below 21,845 triangles.
 - **golangci-lint v2.12.2**, v2 config format. depguard semantics confirmed: `deny` entries are
   prefix matches unless suffixed `$`; `files` globs must be prefixed `**/`; `list-mode: lax` means
   "allowed unless denied," while `strict` denies every import not explicitly allowed.
@@ -9587,7 +9517,7 @@ the rule forbids, and it is the knife-edge outcome §13 exists to prevent.
 
 `MaxCompressedWasmBytes` carries the same direction rule for a different reason. It is the one
 Policy row that began from a *dependency-skeleton* measurement rather than this game. The first full
-build has now ratcheted it to `4_050_000` bytes, including the selected headroom and quantum. CI
+build has now ratcheted it to `3_650_000` bytes, including the selected headroom and quantum. CI
 compares the live ceiling and headroom with the trusted base revision, so the direction rule is
 mechanical rather than an appeal to reviewers. A ceiling that can only fall is a growth detector;
 one that may rise on demand is a number that records whatever the build happens to weigh.
@@ -9606,7 +9536,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | Go toolchain                              | `1.26.4`                                                       | Locked                                          | §10/§13 |
 | Binaryen toolchain                        | `version_131`; Linux x86-64 SHA-256 `b5bf1f0eaf17c63ee588ff7a5954dc8f6ce2c26989051c66f24dfe9ece3e46db` | Locked | §10 |
 | Compressed-wasm measurement                | `brotli -q 11`; raw and `gzip -9` recorded alongside, not gated | Locked                                         | §10   |
-| `MaxCompressedWasmBytes`                   | `4_050_000` bytes                                              | Policy (tighten only: smaller ceiling)          | §10   |
+| `MaxCompressedWasmBytes`                   | `3_650_000` bytes                                              | Policy (tighten only: smaller ceiling)          | §10   |
 | `CompressedWasmHeadroom`                   | `500_000` bytes above the step-11 measured release build       | Policy (tighten only: smaller headroom)         | §10   |
 | Automated browser ready timeout            | `10` seconds on the optimized loopback-served bundle           | Policy                                          | §8/§10 |
 | Automated browser scripted checkpoint timeout | `5` seconds each                                             | Policy                                          | §8/§10 |
@@ -9617,16 +9547,15 @@ one that may rise on demand is a number that records whatever the build happens 
 | Cross-target checkpoint gate               | identical turn `0/100/200/300/400` hashes and margins on Linux amd64, macOS arm64, Chromium js/wasm | Locked | §7/§13 |
 | Native CI runner matrix                     | `ubuntu-24.04` amd64 / `macos-15` arm64 / `windows-2025` amd64; assert architecture | Policy | §10/§13 |
 | Interactive reference machine/workload     | §8 Mac mini `Mac16,10`, M4/16 GB/macOS 26.6.1; exact checked-in 5 s warm-up + 30 s workload | Policy | §8/§13 |
-| Reference-browser performance floors       | §8: DPR1 normal `20` median FPS; DPR1 low `30`; DPR2 normal `15`; DPR2 low `20`; p95 frame gap `<= 150 ms`; `EndTurn <= 2 s` | Policy | §8/§13 |
+| Reference-browser performance floors       | §8: top-down DPR1 `30` median FPS; DPR2 `20`; p95 frame gap `<= 150 ms`; `EndTurn <= 2 s` | Policy | §8/§13 |
 | GitHub Pages source                        | GitHub Actions repository-project site; no custom domain       | Locked                                          | §10   |
 | GitHub Pages publish trigger               | With step-13 publication wiring present: successful push to `main` after `native` + `web-release` + `cross-target-determinism` + `release-readiness`; no PR | Locked | §10/§12 |
 | Native release trigger and payload         | Annotated SemVer tag; four unsigned portable OS/architecture archives + `SHA256SUMS` | Locked                 | §12   |
-| `MaxTrianglesPerPart`                      | `21_000`                                                       | Locked                                          | §8    |
-| Terrain chunk dimensions                   | `32 × 32`, six chunks                                          | Locked                                          | §8    |
-| Terrain-detail launch default              | Normal                                                         | Policy                                          | §8    |
+| Top-down map rectangle                     | origin `(20, 74)`; `96 × 64` cells of `9 × 9` logical pixels  | Locked                                          | §8    |
+| Top-down drawn tile extent                 | `8.6 × 8.6` logical pixels within each cell                    | Locked                                          | §8    |
 | `MaxRenderScale`                           | `2.0`                                                          | Policy                                          | §8    |
 | Minimum gameplay viewport / narrow breakpoint | `960 × 600 DIPs` / `1,100 DIPs`                            | Policy                                          | §8    |
-| High-DPI coordinate contract               | HUD layout/hits in DIPs; scene target/picking in render pixels | Locked                                          | §8    |
+| High-DPI coordinate contract               | physical input is inverse-mapped once; HUD and grid picking share logical presentation coordinates | Locked | §8 |
 | Browser `DisableHiDPI`                     | `false`                                                        | Locked                                          | §10   |
 | Operational-log target sinks               | Desktop: new temp JSONL file/session; web: JS console          | Locked                                          | §3    |
 | Operational `session_id`                   | 128 random bits; documented timestamp/counter fallback         | Policy                                          | §3    |

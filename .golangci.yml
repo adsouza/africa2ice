@@ -86,7 +86,6 @@ linters:
             - "$gostd"
             - "github.com/adsouza/africa2ice/pkg/gameapi"
             - "github.com/hajimehoshi/ebiten/v2"
-            - "github.com/solarlune/tetra3d"
             - "golang.org/x/image"
         ui-adapter-dependencies:
           list-mode: strict
