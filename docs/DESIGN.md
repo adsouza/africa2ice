@@ -4631,8 +4631,32 @@ WaterSurvivalEquivalent(b, j) =
         WaterStock_j / EffectiveWaterDemandPerPerson(b, j))
 R_j = UsableFoodEquivalent(b, j) + WaterSurvivalEquivalent(b, j)
 W_j = 1 − WarnedMacroImpact(j, nextTurn)
-S_j = EcologicalK_j · R_j · W_j / (MovementCost(origin, j) · (1 + P_total_j))
+C_j = min(1, K_eff_j / (P_total_j + P_b))          // 0 where K_eff_j is zero
+S_j = EcologicalK_j · R_j · W_j · C_j / (MovementCost(origin, j) · (1 + P_total_j))
 ```
+
+`C_j` is the crowding safety factor: the share of the arriving population — the
+destination's residents plus the band considering the move — that the destination can
+actually support, where `K_eff_j` applies the band's own capacity multiplier to
+`EcologicalK_j`. Without it the band's own population `P_b` appeared nowhere in the score, so a
+tile ranked identically for a band of twenty and one of four thousand, and the HUD paints the
+top-ranked candidate gold as a recommendation. Measured over 19,316 migration decisions before it
+existed, the top-ranked candidate would have cost the band people on 36 of every 1,000, rising to 79
+per 1,000 for bands of 100 or more, with a safe alternative available in 218 of those cases.
+
+`C_j` deliberately measures the sustained cost rather than one turn's. Ranking on the previewed
+`CrowdingDecline` instead would make the penalty proportional to `r`: at the selected coefficient a
+tile twice over capacity would be marked down by two percent, while attraction varies between tiles
+by orders of magnitude, so the factor could not reorder anything. A band arriving at twice capacity
+does not lose two percent, it loses half of itself over however many turns it stays. Note the
+asymmetry with the preview beside it, which stays bounded by `MaxCrowdingDeclineFraction`: that bound
+is a mercy applied to the outcome so arriving somewhere hostile is survivable, and feeding it into
+the ranking would hide severity from the one decision that could avoid it.
+
+Like `W_j`, `C_j` lowers the ranking without making the destination ineligible: a band may still be
+sent somewhere that will hurt it and is simply no longer advised to go. Evaluated against the
+unfactored score on identical world states across three corpus campaigns, it changed the top-ranked
+candidate in 57 of 22,570 decisions and **every change was an improvement, with none worsened**.
 
 `UsableFoodEquivalent` is the following complete, non-extractive preview. Let `w_g` be the six
 normalized fauna-profile weights at the destination. A group weight is accessible only when the

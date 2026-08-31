@@ -108,3 +108,76 @@ func TestMigrationCandidatesProjectTheCrowdingDeclineOnArrival(t *testing.T) {
 		t.Fatalf("a 4000-person band projected %v against the 100-person probe's %v; the warning must scale with the band", crowdedTotal, probeTotal)
 	}
 }
+
+// The attraction score must account for who is doing the moving. Every other
+// input describes the destination or the band's technology and traits, so before
+// the crowding safety factor a tile ranked identically for a band of twenty and
+// one of four thousand, and the HUD paints the top-ranked candidate gold as a
+// recommendation.
+//
+// Population is the only input changed here, and it feeds nothing else in the
+// score: the destination's own population, movement cost, capacity, food and
+// water previews are all independent of the size of the band considering the
+// move. Any change in attraction is therefore the safety factor alone, which
+// makes the exact ratio assertable.
+func TestAttractionFallsForBandsTooLargeForTheDestination(t *testing.T) {
+	world, err := NewWorld(17)
+	if err != nil {
+		t.Fatal(err)
+	}
+	band := world.bands[0]
+	foundingPopulation := float64(band.Population)
+	before := map[TileID]MigrationCandidate{}
+	for _, candidate := range world.MigrationCandidates(band.ID) {
+		before[candidate.TileID] = candidate
+	}
+
+	const crowdedPopulation = 4000
+	world.bands[0].Population = crowdedPopulation
+	after := world.MigrationCandidates(band.ID)
+	if len(after) == 0 {
+		t.Fatal("no candidates to test")
+	}
+	penalized := 0
+	for _, candidate := range after {
+		original, ok := before[candidate.TileID]
+		if !ok {
+			t.Fatalf("candidate %d appeared only for the larger band", candidate.TileID)
+		}
+		// Both scores already carry a safety factor, since even a founding band
+		// draws a small penalty on marginal ground, so the assertable quantity is
+		// the ratio between the two survival fractions. The factor is the share of
+		// the arriving population the destination can actually support.
+		arrivalK := float64(candidate.EcologicalK * band.Technology.CapacityMultiplier())
+		survival := supportedShare(arrivalK, float64(candidate.DestinationPopulation)+float64(crowdedPopulation))
+		foundingSurvival := supportedShare(arrivalK, float64(original.DestinationPopulation)+foundingPopulation)
+		want := float64(original.Attraction*survival) / foundingSurvival
+		if math.Abs(candidate.Attraction-want) > 1e-9 {
+			t.Fatalf("tile %d attraction = %v, want %v (original %v, survival %v vs founding %v)",
+				candidate.TileID, candidate.Attraction, want, original.Attraction, survival, foundingSurvival)
+		}
+		if survival < foundingSurvival {
+			penalized++
+			if candidate.Attraction >= original.Attraction {
+				t.Fatalf("tile %d would cost the larger band %v people yet did not rank lower",
+					candidate.TileID, candidate.CrowdingDecline)
+			}
+		}
+	}
+	if penalized == 0 {
+		t.Fatal("no candidate cost the larger band more than the founding one, so the scaling above proves nothing")
+	}
+}
+
+func supportedShare(capacity, arriving float64) float64 {
+	if arriving <= 0 {
+		return 1
+	}
+	if capacity <= 0 {
+		return 0
+	}
+	if share := capacity / arriving; share < 1 {
+		return share
+	}
+	return 1
+}

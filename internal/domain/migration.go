@@ -86,15 +86,6 @@ func (world *World) scoreMigration(band Band, destination TileID, cost float64, 
 	if MacroEpisodeWarned(world.turn) {
 		warningSuitability -= MacroImpactAt(geography, world.turn+1).Intensity
 	}
-	resources := usableFood + waterSurvival
-	attraction := 0.0
-	denominator := float64(cost * (1 + float64(destinationPopulation)))
-	if ecologicalK > 0 && resources > 0 && warningSuitability > 0 && denominator > 0 {
-		attraction = float64(ecologicalK*resources*warningSuitability) / denominator
-	}
-	if math.IsNaN(attraction) || math.IsInf(attraction, 0) || attraction < 0 {
-		attraction = 0
-	}
 	// What the crowding term will cost on arrival. The band joins whoever already
 	// stands there, so the capacity it is measured against is the whole tile's,
 	// matching the phase-3 rule that crowding uses the whole tile while growth
@@ -103,8 +94,50 @@ func (world *World) scoreMigration(band Band, destination TileID, cost float64, 
 	arrivalK := float64(ecologicalK * band.Technology.CapacityMultiplier())
 	crowdingDecline := 0.0
 	arriving := float64(band.Population)
-	if growth := LogisticGrowth(arriving, float64(destinationPopulation)+arriving, arrivalK, 0); growth < 0 {
+	arrivingTotal := float64(destinationPopulation) + arriving
+	if growth := LogisticGrowth(arriving, arrivingTotal, arrivalK, 0); growth < 0 {
 		crowdingDecline = -growth
+	}
+	// The share of the arriving population the destination can actually support.
+	//
+	// This deliberately measures the sustained cost rather than one turn's. The
+	// previewed CrowdingDecline above is a single turn and is bounded by
+	// MaxCrowdingDeclineFraction, which is a mercy applied to the outcome so that
+	// arriving somewhere hostile is survivable. Ranking on that number instead
+	// makes the penalty proportional to r, so at the selected coefficient a tile
+	// twice over capacity would be marked down by two percent while attraction
+	// varies between tiles by orders of magnitude — a factor too weak to reorder
+	// anything, which is the same as not having one. A band arriving at twice
+	// capacity does not lose two percent, it loses half of itself over however
+	// many turns it stays, so the share the tile can carry is what the decision
+	// should weigh.
+	// The fraction of the band that survives its arrival turn. Every other input
+	// to the score describes the destination or the band's technology and traits,
+	// so without this the same tile ranked identically however large the band
+	// considering it was, and the HUD paints the top-ranked candidate gold as a
+	// recommendation. It is a multiplicative safety factor in the same shape as
+	// warningSuitability, and like that factor it lowers the ranking without
+	// making the destination ineligible: a band may still be sent somewhere that
+	// will hurt it, and is simply no longer advised to go.
+	crowdingSurvival := 1.0
+	if arrivingTotal > 0 {
+		crowdingSurvival = 0
+		if arrivalK > 0 {
+			if share := arrivalK / arrivingTotal; share < 1 {
+				crowdingSurvival = share
+			} else {
+				crowdingSurvival = 1
+			}
+		}
+	}
+	resources := usableFood + waterSurvival
+	attraction := 0.0
+	denominator := float64(cost * (1 + float64(destinationPopulation)))
+	if ecologicalK > 0 && resources > 0 && warningSuitability > 0 && denominator > 0 {
+		attraction = float64(ecologicalK*resources*warningSuitability*crowdingSurvival) / denominator
+	}
+	if math.IsNaN(attraction) || math.IsInf(attraction, 0) || attraction < 0 {
+		attraction = 0
 	}
 	return MigrationCandidate{
 		TileID: destination, Cost: cost, Attraction: attraction, EcologicalK: ecologicalK,
