@@ -61,6 +61,31 @@ func TestStateRoundTripIsolatedAndContinuesRNG(t *testing.T) {
 	}
 }
 
+func TestWorldsReuseCanonicalSeedIndependentGrid(t *testing.T) {
+	first, err := NewWorld(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := NewWorld(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := first.ExportState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := RestoreWorld(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.grid != second.grid || first.grid != restored.grid {
+		t.Fatal("world construction rebuilt seed-independent geography")
+	}
+	if first.habitat == second.habitat || first.rng == second.rng {
+		t.Fatal("canonical grid reuse aliased per-world state")
+	}
+}
+
 func TestInitialExplorationIsSapiensOnly(t *testing.T) {
 	world, _ := NewWorld(0)
 	for _, band := range world.Bands() {

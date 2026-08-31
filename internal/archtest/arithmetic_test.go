@@ -478,7 +478,7 @@ var (
 	sharedImporter types.Importer
 )
 
-func stdlibImporter() types.Importer {
+func sourceImporter() types.Importer {
 	importerOnce.Do(func() {
 		sharedImporter = importer.ForCompiler(token.NewFileSet(), "source", nil)
 	})
@@ -493,7 +493,7 @@ func analyzeFixture(t *testing.T, path, source string) arithmeticReport {
 		t.Fatalf("parse fixture %s: %v", path, err)
 	}
 	info := newTypeInfo()
-	config := types.Config{Importer: stdlibImporter()}
+	config := types.Config{Importer: sourceImporter()}
 	if _, err := config.Check(domainPackagePath, fset, []*ast.File{parsed}, info); err != nil {
 		t.Fatalf("fixture %s must type-check before it can be analyzed: %v", path, err)
 	}
@@ -501,8 +501,8 @@ func analyzeFixture(t *testing.T, path, source string) arithmeticReport {
 }
 
 // analyzeDomainPackage type-checks the real internal/domain package. §5 notes
-// this is only cheap because the domain imports nothing but the standard
-// library, which the import backstop above independently enforces.
+// this stays cheap because the domain imports only the standard library and
+// the dependency-free local gameapi policy contract.
 func analyzeDomainPackage(t *testing.T) arithmeticReport {
 	t.Helper()
 	root := repositoryRoot(t)
@@ -528,7 +528,7 @@ func analyzeDomainPackage(t *testing.T) arithmeticReport {
 		visited = append(visited, analyzedFile{path: domainPathPrefix + entry.Name(), file: file})
 	}
 	info := newTypeInfo()
-	config := types.Config{Importer: stdlibImporter()}
+	config := types.Config{Importer: sourceImporter()}
 	if _, err := config.Check(domainPackagePath, fset, parsed, info); err != nil {
 		t.Fatalf("type-check internal/domain: %v", err)
 	}

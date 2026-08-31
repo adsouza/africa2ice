@@ -21,10 +21,20 @@ linters:
           list-mode: strict
           files: ["**/pkg/gameapi/**/*.go"]
           allow: ["$gostd"]
-        domain-is-the-dependency-center:
+        domain-depends-only-on-shared-policy-boundary:
           list-mode: strict
           files: ["**/internal/domain/**/*.go"]
-          allow: ["$gostd"]
+          allow:
+            - "$gostd"
+            - "github.com/adsouza/africa2ice/pkg/gameapi"
+        domain-shared-policy-import-is-confined:
+          list-mode: lax
+          files:
+            - "**/internal/domain/**/*.go"
+            - "!**/internal/domain/policy.go"
+          deny:
+            - pkg: "github.com/adsouza/africa2ice/pkg/gameapi"
+              desc: "only domain/policy.go may read the shared boundary policy"
         application-points-inward:
           list-mode: strict
           files: ["**/internal/application/**/*.go"]

@@ -49,6 +49,30 @@ func TestSplitPlacesDescendantAtChosenOrdinaryDestination(t *testing.T) {
 	}
 }
 
+func TestOddFullReserveSplitRemainsSaveable(t *testing.T) {
+	world, err := NewWorld(3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	band := &world.bands[0]
+	band.Population = 41
+	band.StoredFood = 123
+	// Co-location raises the source above the split-stress gate without making
+	// either band's own durable state invalid.
+	world.bands[1].TileID = band.TileID
+	world.bands[1].Population = 10_000
+	candidate := world.MigrationCandidates(band.ID)[0]
+	if candidate.RequiresPassage {
+		t.Fatal("initial candidate unexpectedly requires a passage")
+	}
+	if err := world.Split(band.ID, candidate.TileID, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := world.ExportState(); err != nil {
+		t.Fatalf("accepted split cannot be saved: %v", err)
+	}
+}
+
 func TestInterbreedRequiresColocationAndOppositeSpecies(t *testing.T) {
 	world, _ := NewWorld(1)
 	if err := world.Interbreed(1, 5, true); err != ErrInvalidInterbreedTarget {

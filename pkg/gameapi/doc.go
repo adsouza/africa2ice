@@ -1,2 +1,3 @@
-// Package gameapi defines the dependency-free driving port and immutable frame DTOs.
+// Package gameapi defines the dependency-free driving port, immutable frame
+// DTOs, and deterministic policy values shared with release verification.
 package gameapi

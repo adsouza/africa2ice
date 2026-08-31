@@ -1,7 +1,5 @@
 package domain
 
-const SplitStressThreshold = 0.67
-
 func (world *World) SetAssignment(id BandID, allocation [AssignmentCount]AssignmentBP, player bool) error {
 	if world.result != CampaignOngoing {
 		return ErrCampaignComplete

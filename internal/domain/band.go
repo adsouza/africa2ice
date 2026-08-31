@@ -1,12 +1,11 @@
 package domain
 
 const (
-	MaxBands                            = 256
-	MaxArchaicBands                     = 96
-	AllocationBasisPoints               = 10_000
-	FoodStorageTurns                    = 3.0
-	FoodSpoilageRate                    = 0.10
-	MinSplitSourcePopulation Population = 40
+	MaxBands              = 256
+	MaxArchaicBands       = 96
+	AllocationBasisPoints = 10_000
+	FoodStorageTurns      = 3.0
+	FoodSpoilageRate      = 0.10
 )
 
 type FoodTurnReport struct {
@@ -93,10 +92,21 @@ func splitBand(parent Band, childID BandID) (Band, Band, error) {
 	}
 	childPopulation := parent.Population / 2
 	sourcePopulation := parent.Population - childPopulation
-	halfFood := FU(float64(parent.StoredFood) / 2)
+	if err := ValidateFU(parent.StoredFood); err != nil {
+		return Band{}, Band{}, err
+	}
+	if float64(parent.StoredFood) > FoodStorageCapacity(parent.Population) {
+		return Band{}, Band{}, ErrInvalidValue
+	}
+	sourceFood := float64(parent.StoredFood) / 2
+	childFood := sourceFood
+	if childCapacity := FoodStorageCapacity(childPopulation); childFood > childCapacity {
+		sourceFood += childFood - childCapacity
+		childFood = childCapacity
+	}
 	left, right := parent, parent
 	left.Population, right.Population = sourcePopulation, childPopulation
-	left.StoredFood, right.StoredFood = halfFood, halfFood
+	left.StoredFood, right.StoredFood = FU(sourceFood), FU(childFood)
 	right.ID = childID
 	left.LastFoodReport, right.LastFoodReport = FoodTurnReport{}, FoodTurnReport{}
 	left.LastMortality, right.LastMortality = MortalityReport{}, MortalityReport{}

@@ -2,6 +2,37 @@ package domain
 
 import "testing"
 
+func BenchmarkNewWorldWarm(b *testing.B) {
+	if _, err := NewWorld(0); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for index := range b.N {
+		if _, err := NewWorld(uint64(index + 1)); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkRestoreWorldWarm(b *testing.B) {
+	world, err := NewWorld(1)
+	if err != nil {
+		b.Fatal(err)
+	}
+	state, err := world.ExportState()
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		if _, err := RestoreWorld(state); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func BenchmarkAdvanceTurnMaximumWorkload(b *testing.B) {
 	state := maximumWorkloadState(b)
 	b.ReportAllocs()

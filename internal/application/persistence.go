@@ -54,7 +54,7 @@ var supportedAlgorithms = AlgorithmVersions{
 	GeographyAlgorithm: "dispersal-map-v3", NaturalShelterMaskAlgorithm: "authored-ellipse-v1",
 	CampaignClockAlgorithm: "four-era-v1", ClimateAlgorithm: "hybrid-abrupt-moisture-v1",
 	TemperatureAlgorithm: "lat-elev-offset-v1", MacroEventAlgorithm: "bounded-regional-v1",
-	ExplorationAlgorithm: "sapiens-frontier-v1", BandAlgorithm: "fixed-half-global-cap-v1",
+	ExplorationAlgorithm: "sapiens-frontier-v1", BandAlgorithm: "capacity-safe-half-global-cap-v2",
 	ArchaicPolicyAlgorithm: "ranked-pressure-v1", AssignmentAlgorithm: "proportional-basis-points-v1",
 	FoodStorageAlgorithm: "population-food-turns-v1", FoodConversionAlgorithm: "normalized-source-v1",
 	ForagingAlgorithm: "linear-shared-flora-v1", HuntingAlgorithm: "linear-shared-fauna-v1",

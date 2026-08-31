@@ -179,8 +179,8 @@ either flagging a case that is easy to get wrong or is redundant.
 
 main / main_js ─┬─► internal/adapters/logging (session lifecycle + platform sink)
                 └─► pkg/app (Ebitengine host + composition)
-                             ├─► internal/application ─► internal/domain
-                             │          └──────────────► pkg/gameapi
+                             ├─► internal/application ─┬─► internal/domain ─► pkg/gameapi
+                             │                        └────────────────────► pkg/gameapi
                              ├─► internal/adapters/storage ─► internal/application
                              ├─► internal/adapters/logging ─┬─► internal/application
                              │                              ├─► pkg/gameapi
@@ -191,14 +191,16 @@ main / main_js ─┬─► internal/adapters/logging (session lifecycle + platf
 ```
 
 This is a domain-driven Clean Architecture, not merely a folder convention. Source dependencies
-point toward the mathematical model. `internal/domain` imports only the standard library;
+point toward the mathematical model. `internal/domain` imports the standard library plus the narrow,
+dependency-free shared policy contract in `pkg/gameapi/policy.go`;
 `internal/application` imports the domain and the adapter-facing `pkg/gameapi` contract; adapters
 implement inward-owned ports and never become dependencies of either inner layer. `pkg/app` is a
 driving adapter and composition root: it wires concrete implementations together and is the only
 long-lived object that holds both the game use-case port and the UI scene stack.
 
 `pkg/gameapi` is the only simulation vocabulary visible to presentation code. It contains commands,
-isolated frame DTOs, and the inbound `Game` port, but no equations or mutable domain objects. Neither
+isolated frame DTOs, the inbound `Game` port, and the few deterministic policy values that the domain
+and release verifier must share, but no mutable domain objects. Neither
 `pkg/gameapi` nor its DTOs are the domain model. The application layer explicitly translates
 `gameapi.Command` values into domain operations and projects domain state into `gameapi.Frame`.
 That deliberate boundary duplication prevents display, wire-format, and framework concerns from
@@ -275,7 +277,7 @@ tools/check_benchmarks.sh calibrated same-runner 25% regression comparison for r
 docs/PERFORMANCE.md      step-2a skeleton size/FPS baseline, release-candidate machine identity, and measured performance record
 THIRD_PARTY_NOTICES.md   reviewed runtime/tooling license notices shipped with native archives
 
-pkg/gameapi/             DRIVING PORT + DTO CONTRACT — stdlib only, no dependencies
+pkg/gameapi/             DRIVING PORT + DTO + SHARED POLICY CONTRACT — stdlib only, no dependencies
   doc.go                 package contract and architectural role
   enums.go               Biome, Season, Tech, HeritableTrait, Species, Region, FaunaGroup, MacroEpisode + String()
   frame.go               Frame, climate/macro summaries, passages/achievements, Tile incl. elevation/temperature/movement/Band/FoodTurnReport/OutcomeReport/Event/MigrationCandidate values — no pointers
@@ -283,8 +285,9 @@ pkg/gameapi/             DRIVING PORT + DTO CONTRACT — stdlib only, no depende
   errors.go              stable ErrorCode/GameError boundary values; no domain types
   game.go                Game inbound port: Snapshot, NewCampaign, Apply, EndTurn, and storage use cases
   storage.go             operations/results, slot constants/kinds, SlotMetadata
+  policy.go              single source for deterministic route/split policy values used by domain + verification
 
-internal/domain/         CORE DOMAIN — one package, stdlib only; no gameapi, application, JSON, or frameworks
+internal/domain/         CORE DOMAIN — one package, stdlib + gameapi policy only; no application, JSON, or frameworks
   doc.go                 package contract and architectural role
   identifiers.go         BandID, TileID, RegionID, PassageID and stable ordering
   concepts.go            domain Species, Biome, Season, Technology, traits, events, and count sentinels
@@ -294,6 +297,7 @@ internal/domain/         CORE DOMAIN — one package, stdlib only; no gameapi, a
   geodata.go             real-coordinate landmasses, height-valued highlands, rivers, natural-shelter regions
   region.go              Region table, destination set, and display names (South Asia, Yellow River Basin, ...)
   worldgen.go            concrete WorldGenerator domain service -> elevation/moisture/natural-shelter grid
+  canonical_grid.go      process-wide immutable seed-independent Grid/biome-history initialization
   biome.go               DESIGN vegetation index V; ClassifyBiome + BaselineKCurve(V) + MovementCurve(V)
   fauna.go               closed region × biome profiles, prey mixes, shared exploitation inputs
   tile.go                stocks, bounded Degradation, CarryingCapacity(), toward-cap Regenerate()
@@ -301,6 +305,7 @@ internal/domain/         CORE DOMAIN — one package, stdlib only; no gameapi, a
   tech.go                band-local research state, T_tech/modifier tables, local diffusion
   genetics.go            bounded heritable state, selection, mutation, and local gene flow
   band.go                Band, assignments, MaxBands=256, atomic Split()
+  policy.go              typed domain aliases over the shared gameapi route/split policy contract
   competition.go         workforce-derived per-tile demand + proportional allocation across species
   archaic.go             deterministic computer policy invoked only within aggregate turn advancement
   passage.go             named Wallacea crossings + climate-derived Beringian land bridge
@@ -770,7 +775,9 @@ co-located interbreeding-candidate lists contain at most
 fauna summaries contain at most `6_144 * FaunaGroupCount` copied weights. Food and outcome reporting
 each add at most 256 fixed-size value copies, not a growing turn history. Terrain colors update only when tile/biome
 state changed; assignment/research-only snapshots update band/HUD data without rebuilding terrain
-colors.
+colors. Migration projection builds the fixed `TileCount` destination-population index once per
+frame and reuses it for every band; the public single-band preview builds one index for its one
+request, while the frame path never clears or rescans that 6,144-entry table per band.
 
 ### The honest limit of this guarantee
 
@@ -813,10 +820,21 @@ linters:
           files: ["**/pkg/gameapi/**/*.go"]
           allow: ["$gostd"]
 
-        domain-is-the-dependency-center:
+        domain-depends-only-on-shared-policy-boundary:
           list-mode: strict
           files: ["**/internal/domain/**/*.go"]
-          allow: ["$gostd"]
+          allow:
+            - "$gostd"
+            - "github.com/adsouza/africa2ice/pkg/gameapi"
+
+        domain-shared-policy-import-is-confined:
+          list-mode: lax
+          files:
+            - "**/internal/domain/**/*.go"
+            - "!**/internal/domain/policy.go"
+          deny:
+            - pkg: "github.com/adsouza/africa2ice/pkg/gameapi"
+              desc: "only domain/policy.go may read the shared boundary policy"
 
         application-points-inward:
           list-mode: strict
@@ -928,6 +946,14 @@ linters:
         - pattern: '^rand\.New$'
           msg: "WorldRNG owns a *rand.PCG directly; *rand.Rand's draw mapping is not a Go compatibility guarantee"
 ```
+
+The domain's one non-stdlib dependency is mechanically confined to `internal/domain/policy.go`;
+`pkg/gameapi/policy.go` is the single source for `MinEstablishedBand`,
+`MinSplitSourcePopulation`, `SplitStressThreshold`, `ReferenceRouteDeparturePopulation`, and the
+capacity-to-reference-route-step function. Domain code gives the count values domain types; the
+release verifier reads the same values directly. This exception exists because forbidding
+verification from importing the domain must not force it to retype balance policy as unlinked
+literals. `pkg/gameapi` remains dependency-free, and neither side owns a second copy.
 
 Four details make these rules architectural rather than cosmetic:
 
@@ -1097,8 +1123,9 @@ and range before converting, take an archtest exemption by name, and carry its o
 fixture — the same admission discipline the `math` allowlist uses, for the same reason.
 
 Two properties make this cheap here rather than a research project. First, the rule needs types, and
-`internal/domain` imports only the standard library — enforced by `domain-is-the-dependency-center`
-above — so `go/types` can check it with a stdlib importer alone. Maintaining the AST-parent stack,
+`internal/domain` imports only the standard library plus dependency-free `pkg/gameapi` — enforced by
+`domain-depends-only-on-shared-policy-boundary` above — so `go/types` can check it with the source importer and no
+third-party dependency graph. Maintaining the AST-parent stack,
 visiting the two product forms, and resolving conversions and package-qualified `math` calls require
 no data-flow framework, `golang.org/x/tools`, or
 `packages.Load`, and therefore do not reintroduce the `go list` build-tag blindness that the import
@@ -1365,7 +1392,7 @@ consume no `WorldRNG`.
 
 **Complete new-world initializer.** `domain.NewWorld(seed)` is a total constructor, not a collection
 of defaults spread across callers. It resolves the checked-in scenario tile IDs in the stable order
-above and creates band IDs `1` through `8`; `NextBandID` is `9`. Every band starts with its exact
+above and creates band IDs `1` through `10`; `NextBandID` is `11`. Every band starts with its exact
 catalog population above, `Health = 1`, `StoredFood = 0`, unavailable all-zero `LastFoodReport` and
 `LastOutcomeReport` values, an all-zero last-mortality breakdown, no acquired technologies, nine zero progress values, no research target, no
 queued spatial or interbreeding intent, and `SpatialActionUsed = false`. The four sapiens bands use
@@ -1384,6 +1411,14 @@ frame. Initialization performs no turn, health, selection, mutation, event, achi
 or policy pass and consumes no `WorldRNG` draw. Validation and one golden new-world fixture assert
 every field above for multiple seeds, including exact band order/IDs, exact PCG bytes, stocks within
 their turn-0 caps, no hidden defaults, and `ExportState`/`RestoreWorld` equality.
+
+Geography, escarpments, passage validation, and the complete 401-turn biome history are independent
+of `WorldSeed` and immutable after generation. A process-level `sync.Once` constructs and validates
+one canonical `Grid`; every `NewWorld` and `RestoreWorld` shares that read-only value. Seed/turn
+habitat, tile resources, bands, exploration, climate, and RNG remain separately owned by each world.
+The first world construction may pay the canonical-generation cost; later new campaigns and the
+synchronous validation portion of every save load must not rebuild it. Tests require pointer reuse
+for the canonical grid while proving per-world habitat and RNG are not aliased.
 
 Chosen over a hand-typed 96×64 ASCII block because it is verifiable by test, self-documenting
 (`{Lat: 12.5, Lon: 43.3} // Bab-el-Mandeb`), and survives a change of grid size.
@@ -3049,10 +3084,13 @@ changes, and the selected 10% spoilage rate, 300 FU leaves 170 after the first m
 the second. The third turn has only 47.7 FU after spoilage, leaving a 52.3-FU shortfall and zero
 reserve. This is food accounting at fixed population, not a prediction of demographic outcomes.
 
-A split divides `StoredFood` exactly `50/50`, conserving the total reserve rather than copying it.
-Population divides as evenly as whole people allow; for an odd parent the source's one-person
-remainder gives it three additional FU of capacity at the selected `FoodStorageTurns = 3`. Therefore
-splitting a within-cap reserve leaves both descendants within their own caps. The source must satisfy the separate
+A split begins from equal `StoredFood` shares, conserving the total reserve rather than copying it.
+Population divides as evenly as whole people allow. For an odd parent at or near its food cap, an
+exact half can exceed the smaller descendant's capacity: population `41` with `123 FU`, for example,
+would give the 20-person descendant `61.5 FU` against a `60 FU` cap. The descendant therefore receives
+`min(StoredFood / 2, FoodStorageCapacity(child))`, and any excess remains with the one-person-larger
+source. The example resolves to `63 / 60 FU`; an even split or a reserve below both caps remains exact
+`50/50`. A valid parent reserve guarantees both results fit and total FU is unchanged. The source must satisfy the separate
 `MinSplitSourcePopulation = 40` eligibility rule. Stored food remains an absolute FU amount, not a saved
 percentage or a number of food-turns. Capacity is derived again from each resulting population.
 
@@ -4782,8 +4820,8 @@ prove the formula, stable tie-break, invariance to tile/band iteration order, bo
 count, zero RNG consumption, and identical rankings before save and after load. A frame therefore
 contains at most `10 * len(Bands) <= 2_560` candidate values.
 
-`SplitBand` is the only operation that increases `len(Bands)`. V1 uses a fixed `50/50` split; the
-command selects a destination but carries no ratio. Before changing population, stored food, IDs,
+`SplitBand` is the only operation that increases `len(Bands)`. The initial release uses a fixed
+near-half split; the command selects a destination but carries no ratio. Before changing population, stored food, IDs,
 revision, spatial-action state, or any queue, it requires
 `Population >= MinSplitSourcePopulation`, where
 `MinSplitSourcePopulation = 2 * MinEstablishedBand = 40`, plus `len(Bands) < MaxBands`, an unused
@@ -4800,12 +4838,14 @@ mutation or RNG consumption and do not consume an ID. An accepted split allocate
 exactly one new monotonic band ID. The original/source band keeps its ID and remains at the origin;
 the newly allocated ID is the descendant placed at the selected destination. It gives the new
 descendant `source population / 2` people using `uint32` integer division and leaves the source with the remainder, while
-giving each descendant exactly half its stored FU. Thus an even count splits evenly and an odd count
-gives the source one extra person. It increases the count by one, copies the exact allocation, health, technology, research,
+starting stored food at equal halves, capping the smaller descendant's share at its derived capacity,
+and leaving any resulting excess with the source. Thus an even count splits evenly and an odd count
+gives the source one extra person and, only when necessary, the food its smaller descendant cannot
+hold. It increases the count by one, copies the exact allocation, health, technology, research,
 and heritable-state values, and marks both descendants' spatial actions used for this planning
 period. The source has no queued intent by precondition and neither descendant receives a new queue.
-Population conservation is exact for every valid whole-person count; stored FU remains continuous
-and is conserved by exact halving. Each
+Population conservation is exact for every valid whole-person count; stored FU remains continuous,
+is conserved exactly, and is within both resulting caps before publication. Each
 descendant begins with at least `MinEstablishedBand = 20` people.
 Before publishing the accepted planning frame, it runs `RevealFromSapiens` for the two surviving
 descendants and unions any newly exposed frontier into the world bitset; this is part of the split's
@@ -4911,7 +4951,7 @@ nothing about the balance accumulated over hundreds. Without a floor, the archai
 most of the budget by mid-campaign and quietly remove the player's central dispersal verb — not as a
 tuning problem but as a structural one, since a sapiens split would then fail on every remaining turn.
 
-`BandAlgorithm: "fixed-half-global-cap-v1"` therefore adds `MaxArchaicBands`, a fixed configuration constant
+`BandAlgorithm: "capacity-safe-half-global-cap-v2"` therefore adds `MaxArchaicBands`, a fixed configuration constant
 with the approved initial playtest value **`96`**. The policy's split branch requires
 `archaic_band_count < MaxArchaicBands` in addition to the global cap. Validation requires
 `1 <= MaxArchaicBands < MaxBands`, which leaves at least `MaxBands - MaxArchaicBands = 160` places
@@ -6109,8 +6149,8 @@ for a band whose previous snapshot has `Stress > SplitStressThreshold`, when
 its population is at least `MinSplitSourcePopulation = 40`, `len(Bands) < MaxBands`, and
 `NextBandID` can allocate another positive ID without wrapping; it
 targets one currently eligible ordinary cardinal or diagonal edge to a habitable land tile and
-divides population as evenly as whole people allow, divides stored food exactly `50/50` without
-loss, and copies the exact
+divides population as evenly as whole people allow, divides stored food equally whenever both shares
+fit and otherwise retains the smaller descendant's overflow with the source without loss, and copies the exact
 proportional allocation and heritable state to both results before the next turn begins. Both
 descendants' spatial actions are spent. Because neither result is the exact band that experienced the
 previous turn, the command clears the display-only last-mortality breakdown, `LastFoodReport`, and
@@ -6125,6 +6165,14 @@ After `ui.EndTurn`, the computer planning batch runs against the final player-pl
 succeeds, the turn proceeds through the five pipeline phases in this order. Spoilage is the first
 operation of phase 1; consumption remains in phase 3 and overflow discard in phase 5. Rejected
 turn requests or failed computer planning do not reach the spoilage checkpoint.
+
+`World.AdvanceTurn` executes that entire batch and pipeline against a private candidate aggregate.
+The candidate owns a copied band slice and a clone of the serialized `WorldRNG`; fixed arrays copy by
+value, and immutable grid data may be shared. Only after all phases, frontier reveal, terminal-result
+selection, and `candidate.validate()` succeed does one assignment replace the live `World`. Any
+planning, arithmetic, RNG, or invariant failure returns without advancing the live turn, resources,
+bands, exploration, result, or RNG position. Validation after mutating the live aggregate is not a
+guard and is forbidden.
 
 1. In stable band-ID order, apply `population-food-turns-v1` spoilage once to each band's
    carried-over `StoredFood`, after all accepted planning and before any harvest or consumption.
@@ -7177,7 +7225,7 @@ world. No JSON tag, slot ID, schema version, or migration branch appears in `int
 `TemperatureAlgorithm: "lat-elev-offset-v1"`,
 `MacroEventAlgorithm: "bounded-regional-v1"`,
 `ExplorationAlgorithm: "sapiens-frontier-v1"`,
-`BandAlgorithm: "fixed-half-global-cap-v1"`,
+`BandAlgorithm: "capacity-safe-half-global-cap-v2"`,
 `ArchaicPolicyAlgorithm: "ranked-pressure-v1"`,
 `AssignmentAlgorithm: "proportional-basis-points-v1"`,
 `FoodStorageAlgorithm: "population-food-turns-v1"`,
@@ -7246,7 +7294,7 @@ reason: `ClassifyBiome` is its only consumer, so it needs no identifier of its o
 `ClimateAlgorithm`. Changing the moisture curve, its precession table, or the aridity weights still
 reclassifies every tile in an existing save, so it carries the same version-bump-and-migration
 obligation. Derived moisture, `AridityIndex`, and `ClimateEpoch` are never serialized. `BandAlgorithm`
-versions the `uint32` population representation and `MaxPopulation`, the fixed 50/50 split,
+versions the `uint32` population representation and `MaxPopulation`, the capacity-safe near-half split,
 `MinSplitSourcePopulation`, `MaxBands = 256`, and `MaxArchaicBands`; the sub-cap constrains the computer policy's split branch only, so a loaded world
 whose archaic count already exceeds a lowered value remains valid and simply takes no further archaic
 splits. `MacroEventAlgorithm` versions eruption
@@ -7993,9 +8041,10 @@ stock-unit and conversion values are already selected; step 5 implements and ver
 
    Implement §7's scenario, workforce, genetics, exploration, and archaic-policy contracts with
    their fixtures as specified there: the complete `NewWorld` field-by-field initializer, including
-   IDs `1`–`8`, `NextBandID = 9`, zero reserves/reports/mortality, exact sapiens/preset assignments,
+   IDs `1`–`10`, `NextBandID = 11`, zero reserves/reports/mortality, exact sapiens/preset assignments,
    `SplitMix64` seed expansion with §7's pinned corpus word pairs, the project-owned `Float64`
-   mapping with its `[0, 1)` and endpoint fixtures, and resources; the four/one/two/one starting bands at `Health = 1.0` with an
+   mapping with its `[0, 1)` and endpoint fixtures, and resources; the four sapiens and six archaic
+   starting bands at `Health = 1.0` with an
    empty technology state, `proportional-basis-points-v1`, the six-value heritable vector with its
    standing-variation profiles and per-trait effect and selection functions, the derived
    `UVExposure` and hypoxia inputs, `rare-emergence-v1`, `sapiens-frontier-v1`, and
@@ -8623,7 +8672,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
     named crossing is required. Run the sapiens reference policy plus `ranked-pressure-v1` across a
     exact `BalanceSeedCorpus` declared by the determinism contract, never exceeding `MaxBands`; the
     reference seed must win, while extinction and dispersal-failed runs remain possible.
-    Validate without retuning the ten starting bands, fixed 50/50 split, authored starting anchors
+    Validate without retuning the ten starting bands, capacity-safe near-half split, authored starting anchors
     and their frozen resolved tile IDs, Toba no-effect marker, Campanian identity/date, and checked-in
     Campanian masks/checksums. Run §8's native benchmarks, automated browser timeouts, and complete
     reference-machine profile. Both top-down DPR floors must pass. Finish with
@@ -8872,7 +8921,7 @@ failure, not a permitted signal.
 The reference policy keeps its route-leading band whole and follows the deterministic time-expanded
 route to the nearest destination. On the final approach only, it holds instead of entering that
 destination while the planning-frame band population is below
-`referenceRouteDeparturePopulation = 5 * MinEstablishedBand / 2 = 50`. The ten-person reserve above
+`ReferenceRouteDeparturePopulation = 5 * MinEstablishedBand / 2 = 50`. The ten-person reserve above
 the required 40-person arrival margin covers ordinary same-turn attrition without pretending to be
 a mathematical guarantee: `CampaignOutcome.FirstDestinationPopulation` records the largest
 post-resolution sapiens band in the destination region newly established on that turn, and the gate
@@ -8882,6 +8931,13 @@ first destination; broad low-population holding can strand it on a marginal tile
 subdivision the reference policy exists to exercise. Non-route reference bands consider migration
 only under split pressure and otherwise use the ranked ordinary candidates. This exercises the same
 always-present derived score exposed by the UI without making that policy a domain restriction.
+
+The time-expanded solver weights a habitable tile from its `BaselineK`: capacities at least
+`100 / 75 / 50 / 25 / 10` cost `1 / 2 / 4 / 8 / 16` respectively, and smaller positive capacities
+cost `32`. `pkg/gameapi.ReferenceRouteStepCost` is the only implementation of that step function;
+the domain route planner and `internal/verification` both call it. The same shared policy file owns
+the `0.67`, `40`, and `50` gates above, so the verification claim and playable rule cannot drift as
+unlinked literals while the verifier remains forbidden from importing the domain.
 
 Unit fixtures separately cover both loss modes. The separate archaic policy is part of the domain
 and must produce the same decisions before and after reload. Separate destination fixtures exercise
@@ -9508,12 +9564,12 @@ Earlier fixtures use explicit values that are never release data.
 | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------- | -------------------------- |
 | `SplitStressThreshold`                                     | `0.67`                                                                                          | Initial | `BandAlgorithm`            |
 | `MinEstablishedBand`                                       | `20`                                                                                            | Initial | `BandAlgorithm`            |
-| `referenceRouteDeparturePopulation`                        | `5 × MinEstablishedBand / 2 = 50`                                                               | Derived | reference route policy     |
+| `ReferenceRouteDeparturePopulation`                        | `5 × MinEstablishedBand / 2 = 50`                                                               | Derived | reference route policy     |
 | `MaxPopulation`                                            | `2^32 - 1` whole people (`uint32`)                                                              | Locked  | `BandAlgorithm`            |
 | New-game band populations                                  | four sapiens `120` in East Africa; one archaic `120` in the Levant; two archaic `60` in Frangistan; Denisovan-representative archaics `12` in Siberia, `12` in Southeast Asia, and `90` in East Asia | Locked  | scenario contract          |
 | New-game geographic anchors                                | §6 exact ten-entry Afar-to-Harbin catalog                                                        | Locked  | scenario contract          |
 | New-game starting tile IDs                                 | deterministic nearest valid tiles generated from the anchors and frozen                         | Step 4  | scenario contract          |
-| Split ratio                                                | `50/50`; odd whole-person remainder stays with source                                           | Locked  | `BandAlgorithm`            |
+| Split ratio                                                | population near-`50/50`, odd person stays with source; stored FU `50/50` unless the smaller descendant's cap binds, then its overflow stays with source | Locked | `BandAlgorithm` |
 | `MinSplitSourcePopulation`                                 | `2 × MinEstablishedBand = 40`                                                                   | Derived | `BandAlgorithm`            |
 | `DestinationRegions`                                       | `{Frangistan, SouthAsia, YellowRiverBasin, Sahul, Beringia}`                                    | Locked  | campaign outcome contract  |
 | Cardinal / diagonal step length                            | `1` / `math.Sqrt2`                                                                              | Locked  | `MovementAlgorithm`        |

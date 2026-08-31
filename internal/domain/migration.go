@@ -27,18 +27,47 @@ type MigrationCandidate struct {
 	RequiresPassage bool
 }
 
+// BandMigrationCandidates associates one stable band ID with its ranked batch.
+type BandMigrationCandidates struct {
+	BandID     BandID
+	Candidates []MigrationCandidate
+}
+
 func (world *World) MigrationCandidates(id BandID) []MigrationCandidate {
 	index := world.bandIndex(id)
 	if index < 0 {
 		return nil
 	}
-	band := world.bands[index]
+	populationByTile := world.populationByTile()
+	return world.migrationCandidates(world.bands[index], &populationByTile)
+}
+
+// MigrationCandidatesByBand scores every band against one shared population
+// index. Frame projection uses this batch form so the TileCount-sized index is
+// built once rather than once per band.
+func (world *World) MigrationCandidatesByBand() []BandMigrationCandidates {
+	populationByTile := world.populationByTile()
+	result := make([]BandMigrationCandidates, len(world.bands))
+	for index, band := range world.bands {
+		result[index] = BandMigrationCandidates{
+			BandID:     band.ID,
+			Candidates: world.migrationCandidates(band, &populationByTile),
+		}
+	}
+	return result
+}
+
+func (world *World) populationByTile() [TileCount]uint64 {
 	populationByTile := [TileCount]uint64{}
 	for _, resident := range world.bands {
 		if resident.Population > 0 {
 			populationByTile[resident.TileID] += uint64(resident.Population)
 		}
 	}
+	return populationByTile
+}
+
+func (world *World) migrationCandidates(band Band, populationByTile *[TileCount]uint64) []MigrationCandidate {
 	result := make([]MigrationCandidate, 0, MaxGridNeighbors+MaxPassageEdgesPerTile)
 	for _, edge := range world.grid.OrdinaryEdges(band.TileID) {
 		if world.habitat[edge.To].BaselineK <= 0 || band.Species == HomoSapiens && !world.IsExplored(edge.To) {

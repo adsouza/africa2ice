@@ -99,8 +99,22 @@ interactive reference Mac are:
 
 | benchmark | median ratio to calibration | bytes/op | allocs/op |
 | --- | ---: | ---: | ---: |
-| maximum turn | 1,529 | 7,206,611 | 43,755 |
-| maximum frame projection | 205 | 3,625,235 | 2,247 |
+| maximum turn | 1,550 | 7,010,038 | 43,756 |
+| maximum frame projection | 134 | 3,635,899 | 2,254 |
+
+The migration-candidate batch changed the maximum frame-projection median on this machine from
+approximately `1.470 ms/op`, `3,626,425 B/op`, and `2,253 allocs/op` immediately before the change
+to `0.945 ms/op`, `3,635,899 B/op`, and `2,254 allocs/op`: about 36% less elapsed time for one small
+outer-batch allocation and 0.3% more bytes. The `ratio_to_calibration` ceiling was consequently
+ratcheted from `260` to `165`; the byte and allocation ceilings already remain within 25% of the new
+measurement.
+
+The seed-independent canonical-grid cache is measured separately because its cold initialization
+happens only once per process and does not belong inside the maximum-turn workload. Three one-second
+samples on this machine put a warm `NewWorld` at `438–439 µs/op` and a warm `RestoreWorld` at
+`111–112 µs/op`; the latter is the synchronous reconstruction work on the save-load path. These
+diagnostic benchmarks are not release gates, but they prevent a future edit from hiding the static
+grid rebuild inside ordinary construction again.
 
 `tools/check_benchmarks.sh` repeats the samples and gates normalized time, bytes, and allocations
 against `testdata/performance_baseline.json`. The checked-in ceilings are no more than 25% above

@@ -68,6 +68,9 @@ func importViolation(file, imported string) string {
 	if strings.HasPrefix(imported, module+"/internal/domain") && category != "domain" && category != "application" {
 		return "only application may import the domain"
 	}
+	if imported == module+"/pkg/gameapi" && category == "domain" && file != "internal/domain/policy.go" {
+		return "only domain/policy.go may import the shared boundary policy"
+	}
 	if strings.HasPrefix(imported, "math/rand") && category == "domain" && !strings.HasSuffix(file, "/rng.go") {
 		return "domain randomness is confined to rng.go"
 	}
@@ -112,8 +115,10 @@ func packageCategory(file string) string {
 
 func allowedImports(category string) ([]string, bool) {
 	switch category {
-	case "gameapi", "domain":
+	case "gameapi":
 		return nil, true
+	case "domain":
+		return []string{module + "/pkg/gameapi"}, true
 	case "application":
 		return []string{module + "/internal/domain", module + "/pkg/gameapi"}, true
 	case "storage":
@@ -159,6 +164,16 @@ func TestVerificationDependencyAllowlist(t *testing.T) {
 				t.Fatalf("disallowed import %q accepted", test.imported)
 			}
 		})
+	}
+}
+
+func TestDomainSharedPolicyImportConfinement(t *testing.T) {
+	imported := module + "/pkg/gameapi"
+	if violation := importViolation("internal/domain/policy.go", imported); violation != "" {
+		t.Fatalf("domain policy import rejected: %s", violation)
+	}
+	if violation := importViolation("internal/domain/turn.go", imported); violation == "" {
+		t.Fatal("gameapi import outside domain policy file was accepted")
 	}
 }
 

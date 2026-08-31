@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"bytes"
+	"math"
 	"reflect"
 	"testing"
 )
@@ -23,6 +25,35 @@ func TestAdvanceTurnPublishesOneCompleteTransition(t *testing.T) {
 		if float64(band.StoredFood) > FoodStorageCapacity(band.Population) {
 			t.Fatal("food cap not enforced")
 		}
+	}
+}
+
+func TestAdvanceTurnRejectsCandidateWithoutCommittingAggregateOrRNG(t *testing.T) {
+	world, err := NewWorld(6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	world.bands[0].Health = Health(math.Float64frombits(0x7ff8000000000000))
+	beforeRNG, err := world.rng.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeTiles := world.tiles
+	beforeExplored := world.exploredTiles
+	beforePopulation := world.bands[0].Population
+
+	if err := world.AdvanceTurn(); err == nil {
+		t.Fatal("invalid candidate transition was accepted")
+	}
+	afterRNG, err := world.rng.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if world.turn != 0 || world.tiles != beforeTiles || world.exploredTiles != beforeExplored || world.bands[0].Population != beforePopulation || !math.IsNaN(float64(world.bands[0].Health)) {
+		t.Fatal("failed transition changed the live aggregate")
+	}
+	if !bytes.Equal(beforeRNG, afterRNG) {
+		t.Fatal("failed transition advanced the live RNG")
 	}
 }
 

@@ -47,6 +47,25 @@ func TestMigrationPreviewDoesNotMutateWorldOrRNG(t *testing.T) {
 	}
 }
 
+func TestBatchedMigrationCandidatesMatchIndividualProjection(t *testing.T) {
+	world, err := NewWorld(19)
+	if err != nil {
+		t.Fatal(err)
+	}
+	batched := world.MigrationCandidatesByBand()
+	if len(batched) != len(world.bands) {
+		t.Fatalf("batch contains %d bands, want %d", len(batched), len(world.bands))
+	}
+	for index, band := range world.bands {
+		if batched[index].BandID != band.ID {
+			t.Fatalf("batch %d identifies band %d, want %d", index, batched[index].BandID, band.ID)
+		}
+		if individual := world.MigrationCandidates(band.ID); !reflect.DeepEqual(batched[index].Candidates, individual) {
+			t.Fatalf("band %d candidates differ between batch and individual projection", band.ID)
+		}
+	}
+}
+
 // A migration candidate must project what the crowding term will cost the band
 // on arrival. Seasonal and chronic rates are already previewed and are the two
 // smallest contributors to population loss; crowding is by far the largest when

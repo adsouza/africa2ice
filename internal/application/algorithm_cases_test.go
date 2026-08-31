@@ -127,10 +127,10 @@ var algorithmCases = []algorithmCase{{
 		return digest(values...)
 	},
 }, {
-	field: "BandAlgorithm", current: "fixed-half-global-cap-v1", unsupported: "dynamic-cap-v2",
+	field: "BandAlgorithm", current: "capacity-safe-half-global-cap-v2", unsupported: "dynamic-cap-v3",
 	probe: func(world *domain.World) string {
 		return eachBand(world, func(band domain.Band) []any {
-			return []any{band.ID, band.Species, band.TileID, band.Population, band.Health}
+			return []any{band.ID, band.Species, band.TileID, band.Population, band.Health, band.StoredFood}
 		})
 	},
 }, {

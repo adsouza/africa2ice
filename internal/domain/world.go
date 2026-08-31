@@ -22,12 +22,9 @@ type World struct {
 }
 
 func NewWorld(seed uint64) (*World, error) {
-	grid, err := (WorldGenerator{}).Generate()
+	grid, err := canonicalGrid()
 	if err != nil {
 		return nil, err
-	}
-	if err := ValidatePassages(grid); err != nil {
-		return nil, fmt.Errorf("%w: passage catalog", err)
 	}
 	habitat, climate, err := BuildHabitat(grid, seed, 0)
 	if err != nil {
@@ -67,12 +64,9 @@ func NewWorld(seed uint64) (*World, error) {
 }
 
 func RestoreWorld(state State) (*World, error) {
-	grid, err := (WorldGenerator{}).Generate()
+	grid, err := canonicalGrid()
 	if err != nil {
 		return nil, err
-	}
-	if err := ValidatePassages(grid); err != nil {
-		return nil, fmt.Errorf("%w: passage catalog", err)
 	}
 	habitat, climate, err := BuildHabitat(grid, state.Seed, state.Turn)
 	if err != nil {

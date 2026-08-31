@@ -28,6 +28,14 @@ func (r *WorldRNG) Float64() float64 {
 
 func (r *WorldRNG) MarshalBinary() ([]byte, error) { return r.pcg.MarshalBinary() }
 
+func (r *WorldRNG) clone() (*WorldRNG, error) {
+	state, err := r.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	return RestoreWorldRNG(state)
+}
+
 func RestoreWorldRNG(state []byte) (*WorldRNG, error) {
 	pcg := rand.NewPCG(0, 0)
 	if err := pcg.UnmarshalBinary(state); err != nil {

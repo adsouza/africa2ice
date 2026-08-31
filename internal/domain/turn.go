@@ -1,7 +1,5 @@
 package domain
 
-const MinEstablishedBand Population = 20
-
 type turnBandWork struct {
 	floraDemand, huntingDemand, megafaunaDemand, waterDemand float64
 	aquaticShare                                             float64
@@ -19,18 +17,36 @@ func (world *World) AdvanceTurn() error {
 	if world.result != CampaignOngoing || world.turn >= MaxCampaignTurn {
 		return ErrCampaignComplete
 	}
+	next := *world
+	next.bands = append([]Band(nil), world.bands...)
+	var err error
+	next.rng, err = world.rng.clone()
+	if err != nil {
+		return err
+	}
+	if err := next.advanceTurn(); err != nil {
+		return err
+	}
+	*world = next
+	return nil
+}
+
+// advanceTurn mutates a private candidate. AdvanceTurn publishes it only after
+// the complete transition passes world validation, so any failure leaves the
+// live aggregate and its RNG position unchanged.
+func (world *World) advanceTurn() error {
 	nextTurn := world.turn + 1
 	nextHabitat, nextClimate, err := BuildHabitat(world.grid, world.seed, nextTurn)
 	if err != nil {
 		return err
 	}
-	planning, err := world.planArchaic()
+	planning, err := world.planArchaicOwned()
 	if err != nil {
 		return err
 	}
 	nextBands := planning.bands
 	nextBandID := planning.nextBandID
-	nextTiles := world.tiles
+	nextTiles := &world.tiles
 	season, _ := SeasonForTurn(nextTurn)
 
 	for index := range nextBands {
@@ -324,7 +340,7 @@ func (world *World) AdvanceTurn() error {
 		}
 	}
 
-	world.turn, world.result, world.bands, world.tiles = nextTurn, result, nextBands, nextTiles
+	world.turn, world.result, world.bands = nextTurn, result, nextBands
 	world.nextBandID = nextBandID
 	world.exploredTiles = planning.exploredTiles
 	world.habitat, world.climate, world.establishedRegions = nextHabitat, nextClimate, established

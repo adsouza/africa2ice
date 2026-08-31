@@ -10,7 +10,7 @@
     "BenchmarkFrameProjectionMaximumWorkload": {
       "allocs_per_op": 2808,
       "bytes_per_op": 4500000,
-      "ratio_to_calibration": 260
+      "ratio_to_calibration": 165
     }
   },
   "sample_count": 5

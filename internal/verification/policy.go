@@ -11,12 +11,6 @@ import (
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 )
 
-const (
-	minSplitPopulation               = 40
-	referenceDestinationReserve      = 50
-	verificationSplitStressThreshold = 0.67
-)
-
 // Policy is one of the five release-verification routes. The reference route
 // covers Frangistan; the other four exercise the longer destination paths.
 type Policy struct {
@@ -81,7 +75,7 @@ func spatialCommands(frame *gameapi.Frame, policy Policy) []gameapi.Command {
 			continue
 		}
 		if band.ID != leader.ID {
-			if policy.Reference && band.Population >= minSplitPopulation && band.Stress > verificationSplitStressThreshold {
+			if policy.Reference && band.Population >= gameapi.MinSplitSourcePopulation && band.Stress > gameapi.SplitStressThreshold {
 				if candidate, ok := mostAttractiveOrdinary(band.MigrationCandidates); ok {
 					commands = append(commands, gameapi.SplitBand{BandID: band.ID, Destination: candidate.TileID})
 				}
@@ -194,7 +188,7 @@ func routeDistances(frame *gameapi.Frame, target gameapi.Region, habitatWeighted
 			}
 			step := 1
 			if habitatWeighted {
-				step = habitatStepCost(frame.Tiles[current].EcologicalK)
+				step = gameapi.ReferenceRouteStepCost(frame.Tiles[current].EcologicalK)
 			}
 			cost := distances[int(current)] + step
 			if cost >= distances[int(neighbor)] {
@@ -205,23 +199,6 @@ func routeDistances(frame *gameapi.Frame, target gameapi.Region, habitatWeighted
 		}
 	}
 	return distances
-}
-
-func habitatStepCost(capacity float64) int {
-	switch {
-	case capacity >= 100:
-		return 1
-	case capacity >= 75:
-		return 2
-	case capacity >= 50:
-		return 4
-	case capacity >= 25:
-		return 8
-	case capacity >= 10:
-		return 16
-	default:
-		return 32
-	}
 }
 
 type routeNode struct {
@@ -267,7 +244,7 @@ func routeChoice(frame *gameapi.Frame, band gameapi.Band, policy Policy, distanc
 		if distance >= currentDistance {
 			continue
 		}
-		if policy.Reference && band.Population < referenceDestinationReserve && tileRegion(frame, candidate.TileID) == policy.Target {
+		if policy.Reference && band.Population < gameapi.ReferenceRouteDeparturePopulation && tileRegion(frame, candidate.TileID) == policy.Target {
 			continue
 		}
 		if !found || distance < bestDistance || distance == bestDistance && betterCandidate(candidate, best) {

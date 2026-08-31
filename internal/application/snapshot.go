@@ -105,7 +105,8 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 		})
 	}
 	allBands := service.world.Bands()
-	for _, band := range allBands {
+	migrationCandidates := service.world.MigrationCandidatesByBand()
+	for bandIndex, band := range allBands {
 		publicBand := gameapi.Band{
 			ID: gameapi.BandID(band.ID), Species: mapSpecies(band.Species), TileID: gameapi.TileID(band.TileID),
 			Population: uint32(band.Population), Health: float64(band.Health), StoredFood: float64(band.StoredFood),
@@ -155,7 +156,7 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 				publicBand.PassageStatuses[passageID] = gameapi.PassageLocked
 			}
 		}
-		for _, candidate := range service.world.MigrationCandidates(band.ID) {
+		for _, candidate := range migrationCandidates[bandIndex].Candidates {
 			destination, _ := grid.Tile(candidate.TileID)
 			seasonalMortalityRate, chronicMortalityRate := domain.Phase3MortalityRates(band, destination, habitat[candidate.TileID], season)
 			publicBand.MigrationCandidates = append(publicBand.MigrationCandidates, gameapi.MigrationCandidate{

@@ -27,13 +27,19 @@ func TestBandSplitConservesState(t *testing.T) {
 }
 
 func TestBandSplitConservesOddWholePersonPopulation(t *testing.T) {
-	parent := Band{ID: 1, Population: 101, Allocation: [AssignmentCount]AssignmentBP{3500, 3000, 1500, 500, 1500}}
+	parent := Band{ID: 1, Population: 41, StoredFood: 123, Allocation: [AssignmentCount]AssignmentBP{3500, 3000, 1500, 500, 1500}}
 	left, right, err := splitBand(parent, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if left.Population != 51 || right.Population != 50 || left.Population+right.Population != parent.Population {
+	if left.Population != 21 || right.Population != 20 || left.Population+right.Population != parent.Population {
 		t.Fatalf("odd split populations = %v/%v", left.Population, right.Population)
+	}
+	if left.StoredFood != 63 || right.StoredFood != 60 || left.StoredFood+right.StoredFood != parent.StoredFood {
+		t.Fatalf("odd split food = %v/%v", left.StoredFood, right.StoredFood)
+	}
+	if float64(left.StoredFood) > FoodStorageCapacity(left.Population) || float64(right.StoredFood) > FoodStorageCapacity(right.Population) {
+		t.Fatal("odd split exceeds a resulting band's food capacity")
 	}
 }
 

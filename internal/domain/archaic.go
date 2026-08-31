@@ -27,6 +27,15 @@ type archaicPlanningResult struct {
 func (world *World) planArchaic() (archaicPlanningResult, error) {
 	scratch := *world
 	scratch.bands = append([]Band(nil), world.bands...)
+	return scratch.planArchaicOwned()
+}
+
+// planArchaicOwned may mutate its receiver's band slice. AdvanceTurn calls it
+// only on the private candidate whose slice it already copied; planArchaic is
+// the isolated wrapper for tests and any caller that has not established that
+// ownership.
+func (world *World) planArchaicOwned() (archaicPlanningResult, error) {
+	scratch := world
 	ids := make([]BandID, 0, len(scratch.bands))
 	for _, band := range scratch.bands {
 		if band.Species == ArchaicHominin && band.Population > 0 {

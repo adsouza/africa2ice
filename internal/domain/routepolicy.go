@@ -52,14 +52,6 @@ var DirectedRoutePolicies = [len(DestinationRegions)]RoutePolicy{
 	{Name: "toward-beringia", Target: Beringia},
 }
 
-// referenceRouteDeparturePopulation is the planning-frame reserve the
-// reference route leader must hold before taking the final step into its first
-// destination. The completed turn can still apply mortality before and after
-// movement, so the policy carries ten people of headroom above the required
-// 2*MinEstablishedBand arrival margin. The viability gate checks the actual
-// post-turn population rather than assuming this reserve guarantees it.
-const referenceRouteDeparturePopulation Population = 5 * MinEstablishedBand / 2
-
 func (policy RoutePolicy) directed() bool { return policy.Target < RegionCount }
 
 // CampaignOutcome is what one (seed, policy) campaign produced. Extinction and
@@ -175,20 +167,7 @@ func buildTemporalRoute(grid *Grid, target Region) (*temporalRoute, error) {
 		for id := range TileCount {
 			if habitat[id].BaselineK > 0 {
 				habitable[turn][id/64] |= uint64(1) << (id % 64)
-				switch capacity := habitat[id].BaselineK; {
-				case capacity >= 100:
-					stepCosts[turn*TileCount+id] = 1
-				case capacity >= 75:
-					stepCosts[turn*TileCount+id] = 2
-				case capacity >= 50:
-					stepCosts[turn*TileCount+id] = 4
-				case capacity >= 25:
-					stepCosts[turn*TileCount+id] = 8
-				case capacity >= 10:
-					stepCosts[turn*TileCount+id] = 16
-				default:
-					stepCosts[turn*TileCount+id] = 32
-				}
+				stepCosts[turn*TileCount+id] = referenceRouteStepCost(habitat[id].BaselineK)
 			}
 		}
 	}
