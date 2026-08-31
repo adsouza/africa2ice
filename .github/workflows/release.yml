@@ -121,13 +121,14 @@ jobs:
           mkdir -p "dist/$archive"
           go build -trimpath -o "dist/$archive/${{ matrix.executable }}" .
           cp LICENSE THIRD_PARTY_NOTICES.md RUNNING.md "dist/$archive/"
-          "dist/$archive/${{ matrix.executable }}" -headless -turns 0 > native-smoke.log
-          grep -q 'Africa 2 Ice session log:' native-smoke.log
           if test "${{ matrix.format }}" = zip; then
             (cd dist && zip -qr "$archive.zip" "$archive")
+            artifact="dist/$archive.zip"
           else
             tar -C dist -czf "dist/$archive.tar.gz" "$archive"
+            artifact="dist/$archive.tar.gz"
           fi
+          ./tools/check_release_archive.sh "$artifact" "${{ matrix.executable }}" "$GITHUB_SHA"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: native-${{ matrix.platform }}-${{ matrix.goarch }}
@@ -140,6 +141,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           pattern: native-*
@@ -151,12 +153,13 @@ jobs:
           test "$(find release -maxdepth 1 -type f | wc -l)" -eq 4
           for archive in release/*; do
             case "$archive" in
-              *.zip) unzip -l "$archive" | grep -q THIRD_PARTY_NOTICES.md ;;
-              *.tar.gz) tar -tzf "$archive" | grep -q THIRD_PARTY_NOTICES.md ;;
+              *-windows-amd64.zip) executable=africa2ice.exe ;;
+              *-linux-amd64.tar.gz | *-macos-amd64.tar.gz | *-macos-arm64.tar.gz) executable=africa2ice ;;
               *) echo "unexpected release payload: $archive" >&2; exit 1 ;;
             esac
+            ./tools/check_release_archive.sh "$archive" "$executable"
           done
-          (cd release && sha256sum * > SHA256SUMS)
+          (cd release && sha256sum africa2ice-* > SHA256SUMS && sha256sum --check SHA256SUMS)
       - name: Publish immutable GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

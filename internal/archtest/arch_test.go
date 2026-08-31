@@ -95,6 +95,8 @@ func packageCategory(file string) string {
 		return "storage"
 	case strings.HasPrefix(file, "internal/adapters/logging/"):
 		return "logging"
+	case strings.HasPrefix(file, "internal/verification/"):
+		return "verification"
 	case strings.HasPrefix(file, "pkg/render/"):
 		return "render"
 	case strings.HasPrefix(file, "pkg/ui/"):
@@ -118,6 +120,8 @@ func allowedImports(category string) ([]string, bool) {
 		return []string{module + "/internal/application", "golang.org/x/sys/windows"}, true
 	case "logging":
 		return []string{module + "/internal/application", module + "/pkg/gameapi", module + "/pkg/ui"}, true
+	case "verification":
+		return []string{module + "/internal/application", module + "/pkg/gameapi"}, true
 	case "render":
 		return []string{module + "/pkg/gameapi", "github.com/hajimehoshi/ebiten/v2", "github.com/solarlune/tetra3d", "golang.org/x/image"}, true
 	case "ui":
@@ -128,6 +132,33 @@ func allowedImports(category string) ([]string, bool) {
 		return []string{module + "/internal/application", module + "/internal/adapters/logging", module + "/internal/adapters/storage", module + "/pkg/gameapi", module + "/pkg/render", module + "/pkg/ui", module + "/pkg/audio", "github.com/hajimehoshi/ebiten/v2"}, true
 	default:
 		return nil, false
+	}
+}
+
+func TestVerificationDependencyAllowlist(t *testing.T) {
+	file := "internal/verification/checkpoint.go"
+	tests := []struct {
+		name     string
+		imported string
+		allowed  bool
+	}{
+		{name: "standard library", imported: "encoding/json", allowed: true},
+		{name: "application port", imported: module + "/internal/application", allowed: true},
+		{name: "public game API", imported: module + "/pkg/gameapi", allowed: true},
+		{name: "domain bypass", imported: module + "/internal/domain", allowed: false},
+		{name: "storage adapter", imported: module + "/internal/adapters/storage", allowed: false},
+		{name: "render adapter", imported: module + "/pkg/render", allowed: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			violation := importViolation(file, test.imported)
+			if test.allowed && violation != "" {
+				t.Fatalf("allowed import %q rejected: %s", test.imported, violation)
+			}
+			if !test.allowed && violation == "" {
+				t.Fatalf("disallowed import %q accepted", test.imported)
+			}
+		})
 	}
 }
 

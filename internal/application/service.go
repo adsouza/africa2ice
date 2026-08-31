@@ -1,6 +1,7 @@
 package application
 
 import (
+	"errors"
 	"time"
 
 	"github.com/adsouza/africa2ice/internal/domain"
@@ -40,6 +41,9 @@ func NewGameServiceWithRepository(seed uint64, repository CampaignRepository) (*
 }
 
 func newGameServiceWithRepositoryAndClock(seed uint64, repository CampaignRepository, clock monotonicClock) (*GameService, error) {
+	if clock == nil {
+		return nil, errors.New("autosave clock is required")
+	}
 	world, err := domain.NewWorld(seed)
 	if err != nil {
 		return nil, err

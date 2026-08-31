@@ -261,6 +261,16 @@ func TestFiveMinuteAutosaveFallbackRequiresANewerRevision(t *testing.T) {
 	}
 }
 
+func TestGameServiceRejectsNilAutosaveClock(t *testing.T) {
+	service, err := newGameServiceWithRepositoryAndClock(31, nil, nil)
+	if err == nil || service != nil {
+		t.Fatalf("nil clock constructor = service %#v, error %v", service, err)
+	}
+	if err.Error() != "autosave clock is required" {
+		t.Fatalf("nil clock error = %q", err)
+	}
+}
+
 func TestAutosaveChoosesEmptyThenOldestCommittedSlot(t *testing.T) {
 	clock := &fakeMonotonicClock{now: time.Unix(1_000, 0)}
 	repository := &repositoryStub{writable: true}

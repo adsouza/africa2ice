@@ -2,6 +2,7 @@ package logging
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"strings"
@@ -15,6 +16,25 @@ import (
 type bufferCloser struct{ bytes.Buffer }
 
 func (buffer *bufferCloser) Close() error { return nil }
+
+func TestSessionStartIncludesBuildAttribution(t *testing.T) {
+	output := &bufferCloser{}
+	session := newSession(strings.NewReader(strings.Repeat("b", 16)), "test", output)
+	line, _, ok := strings.Cut(output.String(), "\n")
+	if !ok {
+		t.Fatalf("session start is not a complete JSON line: %q", output.String())
+	}
+	var record map[string]any
+	if err := json.Unmarshal([]byte(line), &record); err != nil {
+		t.Fatalf("decode session start: %v", err)
+	}
+	for _, key := range []string{"module_version", "vcs_revision", "vcs_modified", "go_version", "goos", "goarch"} {
+		if _, present := record[key]; !present {
+			t.Fatalf("session start missing %q: %s", key, line)
+		}
+	}
+	_ = session.Close()
+}
 
 type countingGame struct {
 	apply, end, snapshots int

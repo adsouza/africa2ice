@@ -101,6 +101,13 @@ linters:
           list-mode: strict
           files: ["**/pkg/audio/**/*.go"]
           allow: ["$gostd", "github.com/hajimehoshi/ebiten/v2"]
+        verification-drives-the-inbound-port:
+          list-mode: strict
+          files: ["**/internal/verification/**/*.go"]
+          allow:
+            - "$gostd"
+            - "github.com/adsouza/africa2ice/internal/application"
+            - "github.com/adsouza/africa2ice/pkg/gameapi"
         ebitengine-host-is-the-composition-root:
           list-mode: strict
           files: ["**/pkg/app/**/*.go"]

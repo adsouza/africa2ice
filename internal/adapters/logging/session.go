@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"io"
 	"log/slog"
+	"runtime"
 	"runtime/debug"
 	"sync/atomic"
 	"time"
@@ -59,8 +60,42 @@ func newSession(entropy io.Reader, target string, writer io.WriteCloser) *Sessio
 	if entropyErr != nil {
 		session.logger.Warn("session.entropy_fallback", "error", entropyErr.Error())
 	}
-	session.logger.Info("session.start")
+	session.logger.Info("session.start", buildInfoAttributes()...)
 	return session
+}
+
+func buildInfoAttributes() []any {
+	moduleVersion := "unknown"
+	vcsRevision := "unknown"
+	var vcsModified any = "unknown"
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if info.Main.Version != "" && info.Main.Version != "(devel)" {
+			moduleVersion = info.Main.Version
+		}
+		for _, setting := range info.Settings {
+			switch setting.Key {
+			case "vcs.revision":
+				if setting.Value != "" {
+					vcsRevision = setting.Value
+				}
+			case "vcs.modified":
+				switch setting.Value {
+				case "true":
+					vcsModified = true
+				case "false":
+					vcsModified = false
+				}
+			}
+		}
+	}
+	return []any{
+		"module_version", moduleVersion,
+		"vcs_revision", vcsRevision,
+		"vcs_modified", vcsModified,
+		"go_version", runtime.Version(),
+		"goos", runtime.GOOS,
+		"goarch", runtime.GOARCH,
+	}
 }
 
 func (session *Session) Close() error {

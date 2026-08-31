@@ -19,9 +19,6 @@ func (service *GameService) resetAutosaveClock() {
 }
 
 func (service *GameService) pollAutosaveClock() {
-	if service.clock == nil {
-		return
-	}
 	now := service.clock.Now()
 	if now.Before(service.nextAutosaveFallback) {
 		return
