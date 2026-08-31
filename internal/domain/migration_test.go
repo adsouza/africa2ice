@@ -64,27 +64,30 @@ func TestMigrationCandidatesProjectTheCrowdingDeclineOnArrival(t *testing.T) {
 	}
 
 	// The projection has to answer "what will taking *this* band there cost",
-	// so it must scale with the band. A founding band of 100 already draws a
-	// small warning on marginal neighbours; a band forty times larger must be
-	// warned about every reachable tile, and far more sharply.
-	band := world.bands[0]
-	founding := world.MigrationCandidates(band.ID)
-	if len(founding) == 0 {
+	// so it must scale with the band. An explicit 100-person probe draws a small
+	// warning on marginal neighbours; a band forty times larger must be warned
+	// about every reachable tile, and far more sharply. Keeping the probe local
+	// to this unit test prevents scenario-balance changes from weakening the
+	// projection contract.
+	bandID := world.bands[0].ID
+	world.bands[0].Population = 100
+	probe := world.MigrationCandidates(bandID)
+	if len(probe) == 0 {
 		t.Fatal("no candidates to test")
 	}
-	foundingTotal, foundingWarned := 0.0, 0
-	for _, candidate := range founding {
-		foundingTotal += candidate.CrowdingDecline
+	probeTotal, probeWarned := 0.0, 0
+	for _, candidate := range probe {
+		probeTotal += candidate.CrowdingDecline
 		if candidate.CrowdingDecline > 0 {
-			foundingWarned++
+			probeWarned++
 		}
 	}
-	if foundingWarned == len(founding) {
-		t.Fatalf("every tile warned a founding band of %d, so the projection is not discriminating", band.Population)
+	if probeWarned == len(probe) {
+		t.Fatal("every tile warned the 100-person probe, so the projection is not discriminating")
 	}
 
 	world.bands[0].Population = 4000
-	crowded := world.MigrationCandidates(band.ID)
+	crowded := world.MigrationCandidates(bandID)
 	projected := 0
 	for _, candidate := range crowded {
 		if candidate.CrowdingDecline > 0 {
@@ -101,7 +104,7 @@ func TestMigrationCandidatesProjectTheCrowdingDeclineOnArrival(t *testing.T) {
 	for _, candidate := range crowded {
 		crowdedTotal += candidate.CrowdingDecline
 	}
-	if crowdedTotal <= foundingTotal {
-		t.Fatalf("a 4000-person band projected %v against the founding band's %v; the warning must scale with the band", crowdedTotal, foundingTotal)
+	if crowdedTotal <= probeTotal {
+		t.Fatalf("a 4000-person band projected %v against the 100-person probe's %v; the warning must scale with the band", crowdedTotal, probeTotal)
 	}
 }

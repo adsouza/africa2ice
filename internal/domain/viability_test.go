@@ -20,9 +20,10 @@ import (
 // rather than inlined so that a future tuning pass changes a documented number
 // and not the shape of the assertion.
 const (
-	// minSurvivingSapiensAtTurn400 is the turn-400 survival margin: a campaign
-	// that reaches the end must still hold at least one establishable band.
-	minSurvivingSapiensAtTurn400 = uint64(MinEstablishedBand)
+	// These are the tighten-only reference-run margins from DESIGN.md §13.
+	maxFirstDestinationTurn       = 350
+	minFirstDestinationPopulation = 2 * MinEstablishedBand
+	minSurvivingSapiensAtTurn400  = uint64(10 * MinEstablishedBand)
 	// minSeedsReachingTargetPerPolicy is the reachability margin: a directed
 	// policy must establish its own destination on at least this many corpus
 	// seeds, so that reachability is a property of the model and not of one
@@ -115,6 +116,8 @@ func summarize(outcomes []CampaignOutcome) string {
 		var bestSapiens, worstSapiens uint64
 		var visited uint16
 		var targetPeak Population
+		firstTurnMin, firstTurnMax := MaxCampaignTurn+1, -1
+		firstPopulationMin, firstPopulationMax := MaxPopulation, Population(0)
 		bestFinalBands, worstFinalBands := 0, int(^uint(0)>>1)
 		worstSapiens = ^uint64(0)
 		established := uint16(0)
@@ -130,6 +133,12 @@ func summarize(outcomes []CampaignOutcome) string {
 			if outcome.TargetReachedTurn >= 0 {
 				reachedTarget++
 			}
+			if outcome.FirstDestinationTurn >= 0 {
+				firstTurnMin = min(firstTurnMin, outcome.FirstDestinationTurn)
+				firstTurnMax = max(firstTurnMax, outcome.FirstDestinationTurn)
+				firstPopulationMin = min(firstPopulationMin, outcome.FirstDestinationPopulation)
+				firstPopulationMax = max(firstPopulationMax, outcome.FirstDestinationPopulation)
+			}
 			established |= outcome.EstablishedRegions
 			visited |= outcome.RegionsVisited
 			targetPeak = max(targetPeak, outcome.TargetPeakBand)
@@ -138,9 +147,14 @@ func summarize(outcomes []CampaignOutcome) string {
 			bestFinalBands = max(bestFinalBands, outcome.FinalEstablishedBands)
 			worstFinalBands = min(worstFinalBands, outcome.FinalEstablishedBands)
 		}
+		if firstTurnMax < 0 {
+			firstTurnMin = -1
+			firstPopulationMin = 0
+		}
 		fmt.Fprintf(&report,
-			"\n  %-19s victory=%d extinction=%d dispersalFailed=%d targetReached=%d/%d finalSapiens=[%d..%d] finalEstablishedBands=[%d..%d] regionsEverEstablished=%s regionsVisited=%s targetPeakBand=%d",
+			"\n  %-19s victory=%d extinction=%d dispersalFailed=%d targetReached=%d/%d firstDestinationTurn=[%d..%d] firstDestinationPopulation=[%d..%d] finalSapiens=[%d..%d] finalEstablishedBands=[%d..%d] regionsEverEstablished=%s regionsVisited=%s targetPeakBand=%d",
 			name, victories, extinctions, failures, reachedTarget, len(byPolicy[name]),
+			firstTurnMin, firstTurnMax, firstPopulationMin, firstPopulationMax,
 			worstSapiens, bestSapiens, worstFinalBands, bestFinalBands,
 			establishedRegionList(established), establishedRegionList(visited), targetPeak)
 	}
@@ -213,15 +227,17 @@ func TestDomainViabilityGate(t *testing.T) {
 	t.Log(report)
 
 	reachedByPolicy := map[string]int{}
-	referenceReachedADestination := 0
+	referenceReachedWithMargin := 0
 	referenceSurvivedToTurn400 := 0
 	referenceSubdivided := 0
 	for _, outcome := range outcomes {
 		if outcome.TargetReachedTurn >= 0 {
 			reachedByPolicy[outcome.Policy.Name]++
 		}
-		if outcome.Policy.Name == ReferenceRoutePolicy.Name && outcome.FirstDestinationTurn >= 0 {
-			referenceReachedADestination++
+		if outcome.Policy.Name == ReferenceRoutePolicy.Name &&
+			outcome.FirstDestinationTurn >= 0 && outcome.FirstDestinationTurn <= maxFirstDestinationTurn &&
+			outcome.FirstDestinationPopulation >= minFirstDestinationPopulation {
+			referenceReachedWithMargin++
 		}
 		if outcome.Policy.Name == ReferenceRoutePolicy.Name && outcome.Result != CampaignExtinction && outcome.FinalSapiens >= minSurvivingSapiensAtTurn400 {
 			referenceSurvivedToTurn400++
@@ -231,9 +247,9 @@ func TestDomainViabilityGate(t *testing.T) {
 		}
 	}
 
-	if referenceReachedADestination == 0 {
-		t.Errorf("the reference policy reached no destination region on any of the %d corpus seeds%s",
-			len(BalanceSeedCorpus), report)
+	if referenceReachedWithMargin != len(BalanceSeedCorpus) {
+		t.Errorf("the reference policy reached a first destination by turn %d with at least %d people on %d/%d corpus seeds%s",
+			maxFirstDestinationTurn, minFirstDestinationPopulation, referenceReachedWithMargin, len(BalanceSeedCorpus), report)
 	}
 	for _, policy := range DirectedRoutePolicies {
 		if reachedByPolicy[policy.Name] < minSeedsReachingTargetPerPolicy {
@@ -242,7 +258,8 @@ func TestDomainViabilityGate(t *testing.T) {
 		}
 	}
 	if referenceSurvivedToTurn400 == 0 {
-		t.Errorf("the reference policy retained no turn-400 survival margin of %d sapiens%s", minSurvivingSapiensAtTurn400, report)
+		t.Errorf("the reference policy retained no turn-400 survival margin of %d sapiens%s",
+			minSurvivingSapiensAtTurn400, report)
 	}
 	if referenceSubdivided == 0 {
 		t.Errorf("the reference policy ended no campaign with more than the %d founding bands still established, so the model grows its founders in place rather than dispersing%s",

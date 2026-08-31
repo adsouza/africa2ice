@@ -68,7 +68,7 @@ var highlands = []highlandFeature{
 	{polygonFeature{"EthiopianHighlands", []coordinate{c(33*10, 15*10), c(43*10, 15*10), c(43*10, 4*10), c(33*10, 4*10)}}, 2.00},
 	{polygonFeature{"Zagros", []coordinate{c(43*10, 38*10), c(57*10, 38*10), c(57*10, 27*10), c(43*10, 27*10)}}, 1.50},
 	{polygonFeature{"Caucasus", []coordinate{c(37*10, 46*10), c(51*10, 46*10), c(51*10, 39*10), c(37*10, 39*10)}}, 2.00},
-	{polygonFeature{"Himalaya", []coordinate{c(69*10, 37*10), c(101*10, 37*10), c(101*10, 26*10), c(69*10, 26*10)}}, 3.00},
+	{polygonFeature{"HimalayaTibetanPlateau", []coordinate{c(69*10, 37*10), c(105*10, 37*10), c(105*10, 34*10), c(101*10, 34*10), c(101*10, 26*10), c(69*10, 26*10)}}, 3.00},
 	{polygonFeature{"Alps", []coordinate{c(4*10, 49*10), c(17*10, 49*10), c(17*10, 43*10), c(4*10, 43*10)}}, 2.00},
 	{polygonFeature{"Urals", []coordinate{c(54*10, 68*10), c(69*10, 68*10), c(69*10, 50*10), c(54*10, 50*10)}}, 1.25},
 	{polygonFeature{"Altai", []coordinate{c(79*10, 54*10), c(99*10, 54*10), c(99*10, 43*10), c(79*10, 43*10)}}, 2.00},

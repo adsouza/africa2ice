@@ -63,7 +63,7 @@ func CampaignOverviewFieldNote() render.FieldNote {
 		Introduction: "The campaign begins in East Africa.",
 		Context:      "It is 80,000 years before present;\nthe map reveals as sapiens expand.",
 		GameEffect:   "Outlined tiles are reachable; arrows\nchoose and Enter queues migration.",
-		Hint:         "Archaic hominins are computer-controlled.",
+		Hint:         "Archaic hominins—including a Tibetan\nDenisovan band—are computer-controlled.",
 	}
 }
 

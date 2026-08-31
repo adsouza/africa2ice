@@ -40,7 +40,7 @@ func NewWorld(seed uint64) (*World, error) {
 	if resolved != StartingTileIDs {
 		return nil, fmt.Errorf("%w: starting tile fixture changed", ErrInvalidValue)
 	}
-	world := &World{seed: seed, result: CampaignOngoing, nextBandID: 9, rng: NewWorldRNG(seed), grid: grid, habitat: habitat, climate: climate}
+	world := &World{seed: seed, result: CampaignOngoing, nextBandID: BandID(len(StartingAnchors) + 1), rng: NewWorldRNG(seed), grid: grid, habitat: habitat, climate: climate}
 	season, _ := SeasonForTurn(0)
 	for id := range TileCount {
 		geography, _ := grid.Tile(TileID(id))
@@ -56,7 +56,7 @@ func NewWorld(seed uint64) (*World, error) {
 		if !ok {
 			return nil, fmt.Errorf("%w: missing starting traits", ErrInvalidValue)
 		}
-		world.bands = append(world.bands, Band{ID: BandID(index + 1), Species: anchor.Species, TileID: StartingTileIDs[index], Population: 100, Health: 1, Allocation: allocation, Heritable: traits})
+		world.bands = append(world.bands, Band{ID: BandID(index + 1), Species: anchor.Species, TileID: StartingTileIDs[index], Population: anchor.Population, Health: 1, Allocation: allocation, Heritable: traits})
 	}
 	world.revealInitialEastAfrica()
 	world.revealFromSapiens()

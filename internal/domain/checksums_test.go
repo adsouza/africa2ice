@@ -22,12 +22,12 @@ const (
 	landMaskChecksum        = 0xec6d44777830a4ad
 	waterMaskChecksum       = 0x58579657ea665905
 	regionMaskChecksum      = 0x711cc3239db7432f
-	highlandMaskChecksum    = 0x7081e38666d808ee
+	highlandMaskChecksum    = 0x206e2e94b18cb711
 	riverMaskChecksum       = 0xaed4591799a1b706
 	coastalMaskChecksum     = 0x1f43bb03f1d038b9
-	elevationChecksum       = 0x34057ee445996565
+	elevationChecksum       = 0x55e2e631a779654d
 	naturalShelterChecksum  = 0x3d9a7aac56ee8ad9
-	baseMoistureChecksum    = 0x47c8f50f3377f4fa
+	baseMoistureChecksum    = 0xc2893007e359e3c5
 	latitudeTableChecksum   = 0xf15ec7fbe87b9a7b
 	orbitalTableChecksum    = 0x31dccd8a94047833
 	seasonalTableChecksum   = 0x18a2c4d6211e0ab8

@@ -25,3 +25,9 @@ func TestTechnologyFieldNotesCoverTheClosedCatalog(t *testing.T) {
 		t.Fatal("out-of-range technology has Field Notes")
 	}
 }
+
+func TestCampaignOverviewIdentifiesTheDenisovanBand(t *testing.T) {
+	if note := CampaignOverviewFieldNote(); !strings.Contains(note.Hint, "Denisovan") {
+		t.Fatalf("campaign overview does not identify the Denisovan band: %#v", note)
+	}
+}

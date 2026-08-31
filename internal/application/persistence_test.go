@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/adsouza/africa2ice/internal/domain"
@@ -59,8 +60,12 @@ func TestSaveStateRejectsNonUint32Population(t *testing.T) {
 	service, _ := NewGameService(29)
 	save, _ := service.ExportSaveState()
 	encoded, _ := EncodeSaveState(save)
+	populationToken := []byte(`"population":` + strconv.FormatUint(uint64(domain.StartingAnchors[0].Population), 10))
+	if !bytes.Contains(encoded, populationToken) {
+		t.Fatalf("first starting population token %q is absent", populationToken)
+	}
 	for _, invalid := range []string{"99.5", "-1", "4294967296"} {
-		payload := bytes.Replace(encoded, []byte(`"population":100`), []byte(`"population":`+invalid), 1)
+		payload := bytes.Replace(encoded, populationToken, []byte(`"population":`+invalid), 1)
 		if _, err := DecodeSaveState(payload); err == nil {
 			t.Fatalf("saved population %s was accepted", invalid)
 		}
@@ -75,7 +80,7 @@ func TestWholeNumberPopulationJSONRemainsCompatible(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if decoded.Bands[0].Population != 100 {
+	if decoded.Bands[0].Population != uint32(domain.StartingAnchors[0].Population) {
 		t.Fatalf("population = %d", decoded.Bands[0].Population)
 	}
 }

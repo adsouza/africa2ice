@@ -1,24 +1,25 @@
 package domain
 
 type StartingAnchor struct {
-	Species Species
-	Region  Region
-	Name    string
-	Point   GeoPoint
+	Species    Species
+	Region     Region
+	Name       string
+	Point      GeoPoint
+	Population Population
 }
 
 var StartingAnchors = [...]StartingAnchor{
-	{HomoSapiens, EastAfrica, "Afar", g(41.0, 11.5)},
-	{HomoSapiens, EastAfrica, "Lake Turkana", g(36.0, 3.5)},
-	{HomoSapiens, EastAfrica, "Lake Victoria Rift", g(33.0, -1.0)},
-	{HomoSapiens, EastAfrica, "Southern East African Rift", g(35.0, -7.0)},
-	{ArchaicHominin, Levant, "Northern Levant", g(36.0, 34.5)},
-	{ArchaicHominin, Levant, "Southern Levant", g(35.0, 31.5)},
-	{ArchaicHominin, Frangistan, "Balkans", g(22.0, 43.0)},
-	{ArchaicHominin, Frangistan, "Iberia", g(-4.0, 40.0)},
+	{Species: HomoSapiens, Region: EastAfrica, Name: "Afar", Point: g(41.0, 11.5), Population: 120},
+	{Species: HomoSapiens, Region: EastAfrica, Name: "Lake Turkana", Point: g(36.0, 3.5), Population: 120},
+	{Species: HomoSapiens, Region: EastAfrica, Name: "Lake Victoria Rift", Point: g(33.0, -1.0), Population: 120},
+	{Species: HomoSapiens, Region: EastAfrica, Name: "Southern East African Rift", Point: g(35.0, -7.0), Population: 120},
+	{Species: ArchaicHominin, Region: Levant, Name: "Northern Levant", Point: g(36.0, 34.5), Population: 120},
+	{Species: ArchaicHominin, Region: Frangistan, Name: "Balkans", Point: g(22.0, 43.0), Population: 60},
+	{Species: ArchaicHominin, Region: Frangistan, Name: "Iberia", Point: g(-4.0, 40.0), Population: 60},
+	{Species: ArchaicHominin, Region: YellowRiverBasin, Name: "Baishiya Karst Cave (Denisovan)", Point: g(102.57, 35.45), Population: 150},
 }
 
-var StartingTileIDs = [len(StartingAnchors)]TileID{3098, 3480, 3671, 3960, 1944, 2040, 1459, 1639}
+var StartingTileIDs = [len(StartingAnchors)]TileID{3098, 3480, 3671, 3960, 1944, 1459, 1639, 1877}
 
 func ResolveStartingTiles(grid *Grid, habitat *Habitat) ([len(StartingAnchors)]TileID, error) {
 	var result [len(StartingAnchors)]TileID

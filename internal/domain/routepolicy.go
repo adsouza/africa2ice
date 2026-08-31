@@ -52,6 +52,14 @@ var DirectedRoutePolicies = [len(DestinationRegions)]RoutePolicy{
 	{Name: "toward-beringia", Target: Beringia},
 }
 
+// referenceRouteDeparturePopulation is the planning-frame reserve the
+// reference route leader must hold before taking the final step into its first
+// destination. The completed turn can still apply mortality before and after
+// movement, so the policy carries ten people of headroom above the required
+// 2*MinEstablishedBand arrival margin. The viability gate checks the actual
+// post-turn population rather than assuming this reserve guarantees it.
+const referenceRouteDeparturePopulation Population = 5 * MinEstablishedBand / 2
+
 func (policy RoutePolicy) directed() bool { return policy.Target < RegionCount }
 
 // CampaignOutcome is what one (seed, policy) campaign produced. Extinction and
@@ -74,6 +82,9 @@ type CampaignOutcome struct {
 	// FirstDestinationTurn is the turn a destination region first held an
 	// established sapiens band, or -1 if none ever did.
 	FirstDestinationTurn int
+	// FirstDestinationPopulation is the largest post-resolution sapiens band
+	// among the destination regions newly established on that turn.
+	FirstDestinationPopulation Population
 	// TargetReachedTurn is the same for the policy's own target, or -1.
 	TargetReachedTurn int
 	// FinalEstablishedBands is how many sapiens bands still hold at least
@@ -375,7 +386,8 @@ func RunPolicyCampaign(seed uint64, policy RoutePolicy) (CampaignOutcome, error)
 			if band.ID != routedBandID {
 				bandRoute = nil
 			}
-			choice, ok := policy.choose(candidates, band, bandRoute, world.Turn())
+			protectFirstDestination := !policy.directed() && outcome.FirstDestinationTurn < 0
+			choice, ok := policy.choose(candidates, band, bandRoute, world.Turn(), protectFirstDestination)
 			if ok {
 				previous[band.ID] = band.TileID
 				if err := world.QueueMigration(band.ID, choice, true); err != nil {
@@ -389,9 +401,19 @@ func RunPolicyCampaign(seed uint64, policy RoutePolicy) (CampaignOutcome, error)
 		}
 		outcome.TurnsCompleted = world.Turn()
 		established := world.EstablishedRegions()
+		newDestinations := established & destinations &^ outcome.EstablishedRegions
 		outcome.EstablishedRegions = established
-		if outcome.FirstDestinationTurn < 0 && established&destinations != 0 {
+		if outcome.FirstDestinationTurn < 0 && newDestinations != 0 {
 			outcome.FirstDestinationTurn = world.Turn()
+			for _, band := range world.Bands() {
+				if band.Species != HomoSapiens || band.Population < MinEstablishedBand {
+					continue
+				}
+				geography, _ := grid.Tile(band.TileID)
+				if newDestinations&(1<<geography.Region) != 0 && band.Population > outcome.FirstDestinationPopulation {
+					outcome.FirstDestinationPopulation = band.Population
+				}
+			}
 		}
 		if outcome.TargetReachedTurn < 0 && policy.directed() && established&(1<<policy.Target) != 0 {
 			outcome.TargetReachedTurn = world.Turn()
@@ -475,7 +497,7 @@ func better(candidate, incumbent MigrationCandidate) bool {
 // move among the habitable candidates that minimize its time-expanded route.
 // If waiting is at least as fast, it holds position until climate or a named
 // passage opens rather than wandering away from the route.
-func (policy RoutePolicy) choose(candidates []MigrationCandidate, band Band, route *temporalRoute, turn int) (TileID, bool) {
+func (policy RoutePolicy) choose(candidates []MigrationCandidate, band Band, route *temporalRoute, turn int, protectFirstDestination bool) (TileID, bool) {
 	reference, referenceFound := MigrationCandidate{}, false
 	for _, candidate := range candidates {
 		if candidate.EcologicalK <= 0 {
@@ -521,6 +543,13 @@ func (policy RoutePolicy) choose(candidates []MigrationCandidate, band Band, rou
 		waitCost = waitStep + waitNext
 	}
 	if closerFound && closerCost <= waitCost {
+		// Only the reference policy holds for population, and only before the
+		// final step into its first destination. A blanket reserve can trap the
+		// leader on a marginal tile later in the campaign and suppress the
+		// subdivision this policy exists to exercise.
+		if protectFirstDestination && !policy.directed() && route.cost(turn+1, closer.TileID) == 0 && band.Population < referenceRouteDeparturePopulation {
+			return 0, false
+		}
 		return closer.TileID, true
 	}
 	return 0, false

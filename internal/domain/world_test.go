@@ -14,21 +14,21 @@ func TestNewWorldInitializer(t *testing.T) {
 		t.Fatalf("new world state: turn=%d result=%d", world.Turn(), world.Result())
 	}
 	bands := world.Bands()
-	if len(bands) != 8 {
+	if len(bands) != len(StartingAnchors) {
 		t.Fatalf("bands = %d", len(bands))
 	}
-	var sapiens, archaic float64
+	var sapiens, archaic uint64
 	for index, band := range bands {
-		if band.ID != BandID(index+1) || band.TileID != StartingTileIDs[index] || band.Population != 100 || band.Health != 1 || band.StoredFood != 0 {
+		if band.ID != BandID(index+1) || band.TileID != StartingTileIDs[index] || band.Population != StartingAnchors[index].Population || band.Health != 1 || band.StoredFood != 0 {
 			t.Fatalf("band %d: %#v", index, band)
 		}
 		if band.Species == HomoSapiens {
-			sapiens += float64(band.Population)
+			sapiens += uint64(band.Population)
 		} else {
-			archaic += float64(band.Population)
+			archaic += uint64(band.Population)
 		}
 	}
-	if sapiens != 400 || archaic != 400 || world.nextBandID != 9 {
+	if sapiens != 480 || archaic != 390 || world.nextBandID != BandID(len(StartingAnchors)+1) {
 		t.Fatalf("scenario totals sapiens=%v archaic=%v next=%d", sapiens, archaic, world.nextBandID)
 	}
 }

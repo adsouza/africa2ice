@@ -1130,7 +1130,7 @@ conversion, so a violation reads as a specific edit rather than a category of si
 - **Water/negative polygons:** the Mediterranean, Red Sea, Persian Gulf, Caspian, Black Sea, the
   deep-water Wallacea gaps between Sunda and Sahul, and the Bering Strait. The last two are named
   route gaps rather than coastlines accidentally erased by coarse rasterization.
-- **Height-valued highland polygons:** Atlas, Ethiopian Highlands, Zagros, Caucasus, Himalaya, Alps,
+- **Height-valued highland polygons:** Atlas, Ethiopian Highlands, Zagros, Caucasus, Himalaya / Tibetan Plateau, Alps,
   Urals, Altai, Central Range of New Guinea, and Alaska Range, using the authored kilometre values
   below.
 - **River polylines:** Nile, Niger, Congo, Zambezi, Tigris–Euphrates, Indus, Ganges, Danube, Yellow
@@ -1186,7 +1186,7 @@ Highland rings use the same polygon rule and the heights in the next table:
 | Ethiopian Highlands | `(33,15), (43,15), (43,4), (33,4)` |
 | Zagros | `(43,38), (57,38), (57,27), (43,27)` |
 | Caucasus | `(37,46), (51,46), (51,39), (37,39)` |
-| Himalaya | `(69,37), (101,37), (101,26), (69,26)` |
+| Himalaya / Tibetan Plateau | `(69,37), (105,37), (105,34), (101,34), (101,26), (69,26)` |
 | Alps | `(4,49), (17,49), (17,43), (4,43)` |
 | Urals | `(54,68), (69,68), (69,50), (54,50)` |
 | Altai | `(79,54), (99,54), (99,43), (79,43)` |
@@ -1255,7 +1255,7 @@ strict Mountainous Highlands threshold.
 |            1 | Ethiopian Highlands         |        `2.00` |
 |            2 | Zagros                      |        `1.50` |
 |            3 | Caucasus                    |        `2.00` |
-|            4 | Himalaya                    |        `3.00` |
+|            4 | Himalaya / Tibetan Plateau |        `3.00` |
 |            5 | Alps                        |        `2.00` |
 |            6 | Urals                       |        `1.25` |
 |            7 | Altai                       |        `2.00` |
@@ -1277,7 +1277,7 @@ land and all water therefore sit at the model's `0 km` reference. There is no ra
 interpolation, slope, depression, sea-level change, or separate render-only height field in v1.
 
 The catalog, strict threshold, land clipping, and maximum-overlap rule belong to
-`GeographyAlgorithm: "dispersal-map-v1"`. The resulting fixed tile elevations drive temperature,
+`GeographyAlgorithm: "dispersal-map-v2"`. The resulting fixed tile elevations drive temperature,
 biome classification, orographic moisture, altitude UV, hypoxia pressure, and the 3D mesh, but are
 derived geography rather than mutable or serialized campaign state. The Initial values may be tuned
 before release; afterward, changing any height, mask, threshold, or overlap rule changes downstream
@@ -1294,16 +1294,23 @@ fixtures classify synthetic elevations `1 ulp` below, exactly at, and `1 ulp` ab
 choosing arbitrary cells after the raster exists. They are broad gameplay starting areas, not claims
 that each band represents a population at one exact archaeological site:
 
-| Stable order | Band profile                 | Geographic anchor          | Latitude | Longitude |
-| -----------: | ---------------------------- | -------------------------- | -------: | --------: |
-|            0 | `HomoSapiens`, East Africa   | Afar                       | `11.5°N` |  `41.0°E` |
-|            1 | `HomoSapiens`, East Africa   | Lake Turkana               |  `3.5°N` |  `36.0°E` |
-|            2 | `HomoSapiens`, East Africa   | Lake Victoria Rift         |  `1.0°S` |  `33.0°E` |
-|            3 | `HomoSapiens`, East Africa   | Southern East African Rift |  `7.0°S` |  `35.0°E` |
-|            4 | `ArchaicHominin`, Levant     | Northern Levant            | `34.5°N` |  `36.0°E` |
-|            5 | `ArchaicHominin`, Levant     | Southern Levant            | `31.5°N` |  `35.0°E` |
-|            6 | `ArchaicHominin`, Frangistan | Balkans                    | `43.0°N` |  `22.0°E` |
-|            7 | `ArchaicHominin`, Frangistan | Iberia                     | `40.0°N` |   `4.0°W` |
+| Stable order | Band profile                            | Geographic anchor                 | Population | Latitude | Longitude |
+| -----------: | --------------------------------------- | --------------------------------- | ---------: | -------: | --------: |
+|            0 | `HomoSapiens`, East Africa              | Afar                              |      `120` | `11.5°N` |  `41.0°E` |
+|            1 | `HomoSapiens`, East Africa              | Lake Turkana                      |      `120` |  `3.5°N` |  `36.0°E` |
+|            2 | `HomoSapiens`, East Africa              | Lake Victoria Rift                |      `120` |  `1.0°S` |  `33.0°E` |
+|            3 | `HomoSapiens`, East Africa              | Southern East African Rift        |      `120` |  `7.0°S` |  `35.0°E` |
+|            4 | `ArchaicHominin`, Levant                | Northern Levant                   |      `120` | `34.5°N` |  `36.0°E` |
+|            5 | `ArchaicHominin`, Frangistan            | Balkans                           |       `60` | `43.0°N` |  `22.0°E` |
+|            6 | `ArchaicHominin`, Frangistan            | Iberia                            |       `60` | `40.0°N` |   `4.0°W` |
+|            7 | `ArchaicHominin`, Yellow River Basin    | Baishiya Karst Cave (Denisovan)   |      `150` | `35.45°N` | `102.57°E` |
+
+The Baishiya Karst Cave anchor represents a Denisovan population within the shared
+`ArchaicHominin` simulation type. It establishes an eastern, high-altitude archaic presence without
+introducing separate Neanderthal and Denisovan mechanics, technology graphs, or computer policies.
+The location and turn-0 presence are evidence-shaped: Denisovan occupation is attested around
+100,000 and 60,000 years ago at this 3,280-metre Tibetan Plateau site
+([Xia et al. 2024](https://www.nature.com/articles/s41586-024-07612-9)).
 
 After step 4 can classify turn-0 habitat, an authoring generator projects each anchor to fractional
 grid coordinates and processes this stable order. Its candidates are unused tiles that are land,
@@ -1318,8 +1325,8 @@ consume no `WorldRNG`.
 
 **Complete new-world initializer.** `domain.NewWorld(seed)` is a total constructor, not a collection
 of defaults spread across callers. It resolves the checked-in scenario tile IDs in the stable order
-above and creates band IDs `1` through `8`; `NextBandID` is `9`. Every band starts with population
-`100`, `Health = 1`, `StoredFood = 0`, unavailable all-zero `LastFoodReport` and
+above and creates band IDs `1` through `8`; `NextBandID` is `9`. Every band starts with its exact
+catalog population above, `Health = 1`, `StoredFood = 0`, unavailable all-zero `LastFoodReport` and
 `LastOutcomeReport` values, an all-zero last-mortality breakdown, no acquired technologies, nine zero progress values, no research target, no
 queued spatial or interbreeding intent, and `SpatialActionUsed = false`. The four sapiens bands use
 the exact initial assignment vector `3500 / 3000 / 1500 / 500 / 1500` in assignment-enum order;
@@ -1445,7 +1452,7 @@ change visible without storing per-tile cave state in the save.
 The rating is immutable geography, independent of world seed, current biome, climate, degradation,
 and resident population. It is not inferred merely from elevation or a biome label: a biome change
 must not create or remove caves. World generation and load reconstruction use projection/land data
-under `GeographyAlgorithm: "dispersal-map-v1"` and shelter catalog/raster rules under
+under `GeographyAlgorithm: "dispersal-map-v2"` and shelter catalog/raster rules under
 `NaturalShelterMaskAlgorithm`, consume no `WorldRNG`, and validate finite in-range ratings. After
 release, changing the table, mask equation, or rating changes the natural-shelter-mask identifier;
 changing projection or land changes both identifiers because it changes the rasterized mask. Either
@@ -1588,9 +1595,10 @@ derived bound, version identifier, fixture, and migration named by the checklist
 
 `Species` has two simulated values in this slice: `HomoSapiens` and `ArchaicHominin`, but only
 `HomoSapiens` is player-controlled. New-world scenario data deterministically places sapiens bands
-as four bands of `100` people on four distinct East African land tiles, for `400` total sapiens.
-It places two archaic bands of `100` on distinct Levant tiles and two of `100` on distinct
-Frangistan tiles, for `400` total archaics. Step 4 resolves §6's eight geographic anchors and freezes
+as four bands of `120` people on four distinct East African land tiles, for `480` total sapiens.
+It places one archaic band of `120` in the Levant, two of `60` on distinct Frangistan tiles, and one
+Denisovan-representative band of `150` at the Baishiya Karst Cave anchor in the Yellow River Basin,
+for `390` total archaics and `870` people overall. Step 4 resolves §6's eight geographic anchors and freezes
 the exact generated tile IDs after validating their region, land, and turn-0 habitability; placement
 and population consume no RNG.
 Every new-game band of either
@@ -4301,6 +4309,7 @@ inclusive `[0, 1]` values for every starting profile. Values below follow stable
 | `HomoSapiens`, East Africa   | `0.10 / 0.00 / 0.45 / 0.55 / 0.85 / 0.40` |
 | `ArchaicHominin`, Levant     | `0.45 / 0.00 / 0.60 / 0.25 / 0.65 / 0.55` |
 | `ArchaicHominin`, Frangistan | `0.75 / 0.10 / 0.55 / 0.00 / 0.45 / 0.65` |
+| `ArchaicHominin`, Yellow River Basin | `0.80 / 0.35 / 0.60 / 0.05 / 0.50 / 0.65` |
 
 These are initial game-balance abstractions rather than population-genetic estimates. A split copies
 the parent's exact vector
@@ -7122,7 +7131,7 @@ world. No JSON tag, slot ID, schema version, or migration branch appears in `int
 
 `SaveState.SchemaVersion` starts at `1`. The state includes `WorldSeed`,
 `CampaignClockAlgorithm: "four-era-v1"`,
-`GeographyAlgorithm: "dispersal-map-v1"`, `ClimateAlgorithm: "hybrid-abrupt-moisture-v1"`,
+`GeographyAlgorithm: "dispersal-map-v2"`, `ClimateAlgorithm: "hybrid-abrupt-moisture-v1"`,
 `NaturalShelterMaskAlgorithm: "authored-ellipse-v1"`,
 `TemperatureAlgorithm: "lat-elev-offset-v1"`,
 `MacroEventAlgorithm: "bounded-regional-v1"`,
@@ -7890,7 +7899,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    The combined acceptance contract implements §§6–7's clock, climate, habitat, and macro-event
    contracts with their fixtures as specified there: `four-era-v1`'s exact
    80,000/50,000/35,000/25,000/20,000 BP endpoints and 300/150/100/50-year spans;
-   `dispersal-map-v1`'s authored elevation catalog and strict highland threshold;
+   `dispersal-map-v2`'s authored elevation catalog and strict highland threshold;
    `lat-elev-offset-v1` with its 64-row table and checksum; the orbital, seasonal, and precession
    tables under that same bit-pattern, tolerance, and checksum discipline; the abrupt-pulse catalog
    and the shared regional climate-response table; `BeringiaOpenFraction` and its attainability
@@ -7950,7 +7959,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    their fixtures as specified there: the complete `NewWorld` field-by-field initializer, including
    IDs `1`–`8`, `NextBandID = 9`, zero reserves/reports/mortality, exact sapiens/preset assignments,
    `SplitMix64` seed expansion with §7's pinned corpus word pairs, the project-owned `Float64`
-   mapping with its `[0, 1)` and endpoint fixtures, and resources; the four/two/two starting bands at `Health = 1.0` with an
+   mapping with its `[0, 1)` and endpoint fixtures, and resources; the four/one/two/one starting bands at `Health = 1.0` with an
    empty technology state, `proportional-basis-points-v1`, the six-value heritable vector with its
    standing-variation profiles and per-trait effect and selection functions, the derived
    `UVExposure` and hypoxia inputs, `rare-emergence-v1`, `sapiens-frontier-v1`, and
@@ -8086,9 +8095,10 @@ stock-unit and conversion values are already selected; step 5 implements and ver
 
    - **5e — Mandatory domain viability gate.** Before application or persistence work begins, run the
      complete turn loop through the same fixed seed corpus and deterministic sapiens route policies
-     used by the final balance gate. Prove the reference policy reaches one destination by the
-     current margin, retains the establishment and turn-400 survival margins, ends more subdivided
-     than the scenario was founded with, and never exceeds `MaxBands`; separately prove Frangistan,
+     used by the final balance gate. On every corpus seed, prove the reference policy reaches one
+     destination by the current turn and establishing-population margins. Across the corpus, also
+     prove it retains the establishment and turn-400 survival margins, ends more subdivided than the
+     scenario was founded with, and never exceeds `MaxBands`; separately prove Frangistan,
      South Asia, the Yellow River Basin, Sahul, and Beringia are reachable.
 
      The **subdivision margin** requires the reference policy to end at least one corpus campaign
@@ -8823,13 +8833,24 @@ Every supported target gates on these margins and uploads the checkpoint record.
 `cross-target-determinism` job then requires exact agreement; architecture divergence is a release
 failure, not a permitted signal.
 
-Unit fixtures separately
-cover both loss modes. The sapiens reference policy chooses to
-consider migration only for stressed bands and uses the first ranked candidate; this exercises the
-same always-present derived score exposed by the UI without making that policy a domain
-restriction. The separate archaic policy is part of the domain and must produce the same decisions
-before and after reload. Separate destination fixtures exercise every destination because a single
-400-turn reference run need not and should not be forced to establish all five.
+The reference policy keeps its route-leading band whole and follows the deterministic time-expanded
+route to the nearest destination. On the final approach only, it holds instead of entering that
+destination while the planning-frame band population is below
+`referenceRouteDeparturePopulation = 5 * MinEstablishedBand / 2 = 50`. The ten-person reserve above
+the required 40-person arrival margin covers ordinary same-turn attrition without pretending to be
+a mathematical guarantee: `CampaignOutcome.FirstDestinationPopulation` records the largest
+post-resolution sapiens band in the destination region newly established on that turn, and the gate
+requires the actual value to be at least `2 * MinEstablishedBand` on every corpus seed. The reserve
+does not constrain directed reachability policies, ordinary migration, or the route leader after its
+first destination; broad low-population holding can strand it on a marginal tile and suppress the
+subdivision the reference policy exists to exercise. Non-route reference bands consider migration
+only under split pressure and otherwise use the ranked ordinary candidates. This exercises the same
+always-present derived score exposed by the UI without making that policy a domain restriction.
+
+Unit fixtures separately cover both loss modes. The separate archaic policy is part of the domain
+and must produce the same decisions before and after reload. Separate destination fixtures exercise
+every destination because a single 400-turn reference run need not and should not be forced to
+establish all five.
 
 ### Display-required visual smoke test
 
@@ -8952,7 +8973,7 @@ levels, persistent camps or shelter inventories, guard rosters or separate secur
 roles, sanitation stocks or tracked infections/epidemics, individual cave ownership/capacity/occupancy,
 separately simulated animal-species populations, selective prey depletion/extinction or replacement,
 species-wide research pools, species-specific technology graphs (DAGs), detailed Neanderthal/Denisovan
-subspecies modeling, individual genomes/pedigrees/sex-linked inheritance, background random genetic
+subspecies mechanics beyond the authored representative anchors, individual genomes/pedigrees/sex-linked inheritance, background random genetic
 drift, targeted trait-by-trait breeding, the sickle-cell `HbS` allele with its Hardy-Weinberg
 genotype shares, malaria-protection/anemia tradeoff, and region × biome `FalciparumPressure` table,
 any other genotype-decomposed trait, additional named loci beyond the six-value catalog,
@@ -9457,9 +9478,10 @@ Earlier fixtures use explicit values that are never release data.
 | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------- | -------------------------- |
 | `SplitStressThreshold`                                     | `0.67`                                                                                          | Initial | `BandAlgorithm`            |
 | `MinEstablishedBand`                                       | `20`                                                                                            | Initial | `BandAlgorithm`            |
+| `referenceRouteDeparturePopulation`                        | `5 × MinEstablishedBand / 2 = 50`                                                               | Derived | reference route policy     |
 | `MaxPopulation`                                            | `2^32 - 1` whole people (`uint32`)                                                              | Locked  | `BandAlgorithm`            |
-| New-game band populations                                  | four sapiens `100` in East Africa; two archaic `100` in Levant; two archaic `100` in Frangistan | Locked  | scenario contract          |
-| New-game geographic anchors                                | §6 exact eight-entry Afar-to-Iberia catalog                                                     | Locked  | scenario contract          |
+| New-game band populations                                  | four sapiens `120` in East Africa; one archaic `120` in the Levant; two archaic `60` in Frangistan; one Denisovan-representative archaic `150` in the Yellow River Basin | Locked  | scenario contract          |
+| New-game geographic anchors                                | §6 exact eight-entry Afar-to-Baishiya catalog                                                    | Locked  | scenario contract          |
 | New-game starting tile IDs                                 | deterministic nearest valid tiles generated from the anchors and frozen                         | Step 4  | scenario contract          |
 | Split ratio                                                | `50/50`; odd whole-person remainder stays with source                                           | Locked  | `BandAlgorithm`            |
 | `MinSplitSourcePopulation`                                 | `2 × MinEstablishedBand = 40`                                                                   | Derived | `BandAlgorithm`            |
