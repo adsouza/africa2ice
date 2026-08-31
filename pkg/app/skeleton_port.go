@@ -18,6 +18,7 @@ func newSkeletonPort() *skeletonPort {
 }
 
 func (p *skeletonPort) Snapshot() (*gameapi.Frame, error)             { frame := p.frame; return &frame, nil }
+func (*skeletonPort) StateHash() (string, error)                      { return "walking-skeleton", nil }
 func (p *skeletonPort) NewCampaign() (*gameapi.Frame, error)          { return p.Snapshot() }
 func (p *skeletonPort) Apply(gameapi.Command) (*gameapi.Frame, error) { return p.Snapshot() }
 func (p *skeletonPort) EndTurn() (*gameapi.Frame, error)              { return p.Snapshot() }

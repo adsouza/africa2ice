@@ -5,6 +5,19 @@ import (
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 )
 
+// ProjectSaveState restores and projects a validated save without installing
+// it into a running service. It is used by the display-only maximum-render
+// browser fixture; callers receive the same immutable boundary frame as an
+// accepted load would publish.
+func ProjectSaveState(state SaveState) (*gameapi.Frame, error) {
+	world, err := state.RestoreWorld()
+	if err != nil {
+		return nil, err
+	}
+	service := &GameService{world: world, worldRevision: state.WorldRevision, terrainRevision: 1}
+	return service.projectFrame()
+}
+
 func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 	date, err := domain.CampaignDate(service.world.Turn())
 	if err != nil {

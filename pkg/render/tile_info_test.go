@@ -62,7 +62,7 @@ func TestTileLiveabilityComparesCurrentAndArrowTarget(t *testing.T) {
 		t.Fatalf("target risks = %v/%v", target.seasonalRisk, target.chronicRisk)
 	}
 	lines := liveabilityLines(target)
-	for _, expected := range []string{"Food stock 160/280 FU", "Water 90/120 WU", "Seasonal 0.30% · chronic 0.40%", "Shelter 40%", "travel ×1.25"} {
+	for _, expected := range []string{"1.0 km", "Food stock 160/280 FU", "Water 90/120 WU", "Capacity 120/140", "Seasonal 0.30% · chronic 0.40%", "Shelter 40%", "travel ×1.25"} {
 		if !strings.Contains(strings.Join(lines[:], "\n"), expected) {
 			t.Fatalf("target details %q do not contain %q", lines, expected)
 		}
@@ -142,8 +142,8 @@ func TestTileLiveabilityCallsOutArchaicBandsWithoutLeakingThroughFog(t *testing.
 func tileInfoFixture() *gameapi.Frame {
 	return &gameapi.Frame{
 		Tiles: []gameapi.Tile{
-			{ID: 0, Land: true, Explored: true, Biome: gameapi.Savanna, Region: gameapi.EastAfrica, BaselineK: 100, EcologicalK: 90, FloraStock: 60, FloraCap: 120, FaunaStock: 40, FaunaCap: 80, WaterStock: 70, WaterCap: 100, LocalTemperatureC: 25, NaturalShelter: 0.2, MovementCost: 1},
-			{ID: 1, Land: true, Explored: true, Biome: gameapi.CoastalShrubland, Region: gameapi.RestOfAfrica, BaselineK: 140, EcologicalK: 120, Degradation: 0.1, FloraStock: 70, FloraCap: 130, FaunaStock: 90, FaunaCap: 150, WaterStock: 90, WaterCap: 120, LocalTemperatureC: 23, NaturalShelter: 0.4, MovementCost: 1.25},
+			{ID: 0, Land: true, Explored: true, Biome: gameapi.Savanna, Region: gameapi.EastAfrica, BaselineK: 100, EcologicalK: 90, FloraStock: 60, FloraCap: 120, FaunaStock: 40, FaunaCap: 80, WaterStock: 70, WaterCap: 100, LocalTemperatureC: 25, ElevationKm: 0.2, NaturalShelter: 0.2, MovementCost: 1},
+			{ID: 1, Land: true, Explored: true, Biome: gameapi.CoastalShrubland, Region: gameapi.RestOfAfrica, BaselineK: 140, EcologicalK: 120, Degradation: 0.1, FloraStock: 70, FloraCap: 130, FaunaStock: 90, FaunaCap: 150, WaterStock: 90, WaterCap: 120, LocalTemperatureC: 23, ElevationKm: 1.0, NaturalShelter: 0.4, MovementCost: 1.25},
 			{ID: 2, Land: true, Explored: false, Biome: gameapi.GlacialTundra, Region: gameapi.Beringia, BaselineK: 999, FloraStock: 999, WaterStock: 999},
 			{ID: 3, Land: false, Explored: true},
 		},

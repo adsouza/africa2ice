@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	gameaudio "github.com/adsouza/africa2ice/pkg/audio"
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/adsouza/africa2ice/pkg/ui"
 )
@@ -18,7 +19,49 @@ type gameStub struct {
 	newCampaigns   int
 }
 
+type soundRecorder struct {
+	played  []gameaudio.Sound
+	masters []struct {
+		volume float64
+		muted  bool
+	}
+}
+
+func (recorder *soundRecorder) Play(sound gameaudio.Sound) {
+	recorder.played = append(recorder.played, sound)
+}
+
+func (recorder *soundRecorder) SetMaster(volume float64, muted bool) {
+	recorder.masters = append(recorder.masters, struct {
+		volume float64
+		muted  bool
+	}{volume: volume, muted: muted})
+}
+
+type settingsStoreStub struct {
+	reads       []uint64
+	writes      []ui.UISettingsCompletion
+	completions []ui.UISettingsCompletion
+}
+
+func (store *settingsStoreStub) BeginRead(revision uint64) error {
+	store.reads = append(store.reads, revision)
+	return nil
+}
+
+func (store *settingsStoreStub) BeginWrite(revision uint64, settings ui.UISettings) error {
+	store.writes = append(store.writes, ui.UISettingsCompletion{Operation: ui.UISettingsWrite, Revision: revision, Settings: settings})
+	return nil
+}
+
+func (store *settingsStoreStub) Poll() []ui.UISettingsCompletion {
+	result := store.completions
+	store.completions = nil
+	return result
+}
+
 func (stub *gameStub) Snapshot() (*gameapi.Frame, error) { return stub.frame, nil }
+func (*gameStub) StateHash() (string, error)             { return "test-hash", nil }
 
 func (stub *gameStub) NewCampaign() (*gameapi.Frame, error) {
 	stub.newCampaigns++
@@ -83,6 +126,90 @@ func TestKeyboardMigrationPreviewCanTurnIntoReachableCorner(t *testing.T) {
 	}
 }
 
+func TestAcceptedPlanningSaveCompletionAndNewAcuteEventRequestDistinctSounds(t *testing.T) {
+	frame := migrationPreviewFrame()
+	stub := &gameStub{frame: frame}
+	sounds := &soundRecorder{}
+	game := NewWithSound(stub, sounds)
+
+	if !game.apply(gameapi.ResearchTech{BandID: 7, Tech: gameapi.Firecraft}) {
+		t.Fatal("accepted planning command was rejected")
+	}
+	stub.results = []gameapi.StorageResult{{Operation: gameapi.StorageSave, OperationID: 4, Slot: 99}}
+	game.pollStorage()
+	after := cloneAppFrame(frame)
+	after.Turn++
+	after.Events = append(after.Events, gameapi.Event{Turn: after.Turn, Kind: gameapi.EventAcuteIncident})
+	game.acceptCompletedTurn(after)
+
+	want := []gameaudio.Sound{gameaudio.SFXChoiceClick, gameaudio.SFXSaveComplete, gameaudio.SFXEventTrigger}
+	if len(sounds.played) != len(want) {
+		t.Fatalf("played sounds = %v, want %v", sounds.played, want)
+	}
+	for index := range want {
+		if sounds.played[index] != want[index] {
+			t.Fatalf("played sounds = %v, want %v", sounds.played, want)
+		}
+	}
+
+	game.acceptCompletedTurn(after)
+	if len(sounds.played) != len(want) {
+		t.Fatalf("unchanged event feed replayed a sound: %v", sounds.played)
+	}
+}
+
+func TestPresentationSettingsInstallAtomicallyAndCoalesceWrites(t *testing.T) {
+	store := &settingsStoreStub{}
+	sounds := &soundRecorder{}
+	game := newGameWithPresentation(&gameStub{frame: migrationPreviewFrame()}, sounds, store)
+	if !game.settingsLoading || len(store.reads) != 1 || len(sounds.masters) != 0 {
+		t.Fatalf("initial settings state = loading %t reads %v masters %v", game.settingsLoading, store.reads, sounds.masters)
+	}
+	loaded := ui.UISettings{SchemaVersion: 1, FieldNotesVisible: false, MasterVolume: 0.8, Muted: true}
+	store.completions = []ui.UISettingsCompletion{{Operation: ui.UISettingsRead, Revision: 1, Settings: loaded}}
+	game.pollUISettings()
+	if game.settingsLoading || game.settings != loaded || game.fieldNotesVisible || len(sounds.masters) != 1 || sounds.masters[0].volume != 0.8 || !sounds.masters[0].muted {
+		t.Fatalf("installed settings = loading %t record %#v visible %t masters %v", game.settingsLoading, game.settings, game.fieldNotesVisible, sounds.masters)
+	}
+
+	first := loaded
+	first.MasterVolume = 0.4
+	game.updateUISettings(first)
+	latest := first
+	latest.MasterVolume = 0.2
+	latest.Muted = false
+	game.updateUISettings(latest)
+	if len(store.writes) != 1 || game.pendingSettings == nil || *game.pendingSettings != latest {
+		t.Fatalf("coalesced writes = starts %v pending %#v", store.writes, game.pendingSettings)
+	}
+	store.completions = []ui.UISettingsCompletion{store.writes[0]}
+	game.pollUISettings()
+	if len(store.writes) != 2 || store.writes[1].Settings != latest || !game.settingsWriteActive {
+		t.Fatalf("latest write was not started after completion: %v", store.writes)
+	}
+	if game.settings != latest || sounds.masters[len(sounds.masters)-1].volume != 0.2 || sounds.masters[len(sounds.masters)-1].muted {
+		t.Fatalf("live settings rolled back = %#v masters %v", game.settings, sounds.masters)
+	}
+}
+
+func TestRenderProfileFrameDoesNotReplaceAcceptedApplicationFrame(t *testing.T) {
+	accepted := migrationPreviewFrame()
+	profile := &gameapi.Frame{Turn: 300, Bands: make([]gameapi.Band, 256)}
+	game := New(&gameStub{frame: accepted})
+	game.SetRenderProfileFrame(profile)
+	if game.displayFrame() != profile || game.frame != accepted {
+		t.Fatalf("render profile crossed drawing seam: display %p accepted %p", game.displayFrame(), game.frame)
+	}
+}
+
+func cloneAppFrame(frame *gameapi.Frame) *gameapi.Frame {
+	clone := *frame
+	clone.Tiles = append([]gameapi.Tile(nil), frame.Tiles...)
+	clone.Bands = append([]gameapi.Band(nil), frame.Bands...)
+	clone.Events = append([]gameapi.Event(nil), frame.Events...)
+	return &clone
+}
+
 func TestKeyboardMigrationDoesNotReplaceQueuedSpatialAction(t *testing.T) {
 	frame := migrationPreviewFrame()
 	frame.Bands[0].SpatialActionUsed = true
@@ -123,6 +250,47 @@ func TestBandSelectionCyclesForwardAndBackwardWithWraparound(t *testing.T) {
 	game.selectPreviousSapiens()
 	if game.selectedBand != 7 {
 		t.Fatalf("previous selection = %d, want sapiens band 7", game.selectedBand)
+	}
+}
+
+func TestWorkforceDraftPreservesExplicitSharesUntilValidApplyOrDiscard(t *testing.T) {
+	frame := migrationPreviewFrame()
+	frame.Bands[0].AllocationBP = [gameapi.AssignmentCount]uint16{2_000, 2_000, 2_000, 2_000, 2_000}
+	frame.Bands = append(frame.Bands, gameapi.Band{ID: 9, Species: gameapi.HomoSapiens, AllocationBP: frame.Bands[0].AllocationBP})
+	stub := &gameStub{frame: frame}
+	game := New(stub)
+
+	game.editAssignmentDraft(100)
+	if !game.assignmentDraftDirty() || game.assignmentDraftValid() || stub.appliedCommand != nil {
+		t.Fatalf("first independent edit = dirty %t valid %t command %T", game.assignmentDraftDirty(), game.assignmentDraftValid(), stub.appliedCommand)
+	}
+	game.applyAssignmentDraft()
+	if stub.appliedCommand != nil || game.notice != "Workforce allocation must total exactly 100%" {
+		t.Fatalf("invalid apply = command %T notice %q", stub.appliedCommand, game.notice)
+	}
+	game.selectNextSapiens()
+	if game.selectedBand != 7 {
+		t.Fatalf("dirty draft allowed selection to change to %d", game.selectedBand)
+	}
+
+	game.assignmentRole = gameapi.HuntingAndFishing
+	game.editAssignmentDraft(-100)
+	if !game.assignmentDraftValid() {
+		t.Fatalf("balanced explicit draft = %v", game.assignmentDraft)
+	}
+	game.applyAssignmentDraft()
+	command, ok := stub.appliedCommand.(gameapi.SetAssignment)
+	if !ok || command.AllocationBP != ([gameapi.AssignmentCount]uint16{2_100, 1_900, 2_000, 2_000, 2_000}) {
+		t.Fatalf("applied assignment = %#v", stub.appliedCommand)
+	}
+	if game.assignmentDraftDirty() {
+		t.Fatal("successful Apply left the draft dirty")
+	}
+
+	game.editAssignmentDraft(100)
+	game.discardAssignmentDraft()
+	if game.assignmentDraftDirty() || game.assignmentDraft != game.assignmentBaseline {
+		t.Fatalf("discarded assignment = draft %v baseline %v", game.assignmentDraft, game.assignmentBaseline)
 	}
 }
 
@@ -214,6 +382,32 @@ func TestStartupResumeLoadsNewestQuickOrAutosave(t *testing.T) {
 	}
 	if game.fieldNote.Topic != "WELCOME" || game.breakthroughFrames != 0 {
 		t.Fatalf("loaded game retained a stale breakthrough: %#v for %d frames", game.fieldNote, game.breakthroughFrames)
+	}
+}
+
+func TestManualSlotShortcutsUseExplicitSlotsAndFreezeARequestedLoad(t *testing.T) {
+	stub := &gameStub{frame: migrationPreviewFrame()}
+	game := New(stub)
+	game.beginManualSave(2)
+	if stub.savedSlot != 2 || game.notice != "Saving Manual 2…" {
+		t.Fatalf("manual save = slot %d notice %q", stub.savedSlot, game.notice)
+	}
+	game.beginManualLoad(3)
+	if stub.loadedSlot != 3 || game.pendingManualLoadID == 0 || game.notice != "Loading Manual 3…" {
+		t.Fatalf("manual load = slot %d pending %d notice %q", stub.loadedSlot, game.pendingManualLoadID, game.notice)
+	}
+	operationID := game.pendingManualLoadID
+	stub.results = []gameapi.StorageResult{{Operation: gameapi.StorageLoad, OperationID: operationID, Slot: 3, ReplacementFrame: migrationPreviewFrame()}}
+	game.pollStorage()
+	if game.pendingManualLoadID != 0 || game.notice != "Loaded Manual 3" {
+		t.Fatalf("manual load completion = pending %d notice %q", game.pendingManualLoadID, game.notice)
+	}
+
+	game.editAssignmentDraft(100)
+	stub.loadedSlot = 0
+	game.beginManualLoad(1)
+	if stub.loadedSlot != 0 || game.notice != "Apply or discard workforce changes before loading" {
+		t.Fatalf("dirty draft load = slot %d notice %q", stub.loadedSlot, game.notice)
 	}
 }
 

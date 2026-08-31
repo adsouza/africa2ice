@@ -5,6 +5,7 @@ import (
 
 	"github.com/adsouza/africa2ice/internal/adapters/logging"
 	"github.com/adsouza/africa2ice/internal/application"
+	gameaudio "github.com/adsouza/africa2ice/pkg/audio"
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/adsouza/africa2ice/pkg/render"
 	"github.com/adsouza/africa2ice/pkg/ui"
@@ -20,9 +21,11 @@ const (
 
 type Game struct {
 	port                   gameapi.Game
+	sound                  gameaudio.SoundManager
 	frame                  *gameapi.Frame
 	scene                  *render.MapScene
 	onFirstDraw            func()
+	onFramePublished       func(string)
 	firstDrawDone          bool
 	selectedBand           gameapi.BandID
 	notice                 string
@@ -39,6 +42,19 @@ type Game struct {
 	startupRestoreSlot     int
 	pendingQuickSaveIDs    map[gameapi.StorageOpID]struct{}
 	windowClosingRequested bool
+	pendingManualLoadID    gameapi.StorageOpID
+	settingsStore          ui.UISettingsStore
+	settings               ui.UISettings
+	settingsLoading        bool
+	settingsRevision       uint64
+	settingsWriteActive    bool
+	pendingSettings        *ui.UISettings
+	assignmentDraft        [gameapi.AssignmentCount]uint16
+	assignmentBaseline     [gameapi.AssignmentCount]uint16
+	assignmentDraftBand    gameapi.BandID
+	assignmentRole         gameapi.WorkforceRole
+	hasAssignmentDraft     bool
+	profileDisplayFrame    *gameapi.Frame
 }
 
 func NewWalkingSkeleton() *Game {
@@ -47,14 +63,37 @@ func NewWalkingSkeleton() *Game {
 }
 
 func New(port gameapi.Game) *Game {
+	return NewWithSound(port, gameaudio.NoopManager{})
+}
+
+func NewWithSound(port gameapi.Game, sound gameaudio.SoundManager) *Game {
+	return newGameWithPresentation(port, sound, nil)
+}
+
+func newGameWithPresentation(port gameapi.Game, sound gameaudio.SoundManager, settingsStore ui.UISettingsStore) *Game {
 	frame, _ := port.Snapshot()
+	if sound == nil {
+		sound = gameaudio.NoopManager{}
+	}
+	settings := ui.DefaultUISettings()
 	game := &Game{
-		port: port, frame: frame, scene: render.NewMapScene(), fieldNotesVisible: true,
+		port: port, sound: sound, frame: frame, scene: render.NewMapScene(), fieldNotesVisible: true,
 		fieldNote: ui.CampaignOverviewFieldNote(),
 		notice:    "Outlined tiles are reachable — arrows choose, Enter confirms", noticeFrames: 300,
 		pendingQuickSaveIDs: make(map[gameapi.StorageOpID]struct{}),
+		settingsStore:       settingsStore, settings: settings,
+	}
+	if settingsStore == nil {
+		sound.SetMaster(settings.MasterVolume, settings.Muted)
+	} else if err := settingsStore.BeginRead(1); err != nil {
+		sound.SetMaster(settings.MasterVolume, settings.Muted)
+		game.notice = "Preferences could not be loaded; using defaults"
+	} else {
+		game.settingsLoading = true
+		game.settingsRevision = 1
 	}
 	game.ensureSelection()
+	game.syncAssignmentDraft(true)
 	return game
 }
 
@@ -63,11 +102,19 @@ func NewGame(seed uint64, session *logging.Session) (*Game, error) {
 	if err != nil {
 		return nil, err
 	}
+	repository = logging.DecorateCampaignRepository(session, repository)
 	service, err := application.NewGameServiceWithRepository(seed, repository)
 	if err != nil {
 		return nil, err
 	}
-	game := New(logging.DecorateGame(session, service))
+	sound := gameaudio.NewLazyManager()
+	settingsStore, settingsErr := newUISettingsStore()
+	settingsStore = logging.DecorateUISettingsStore(session, settingsStore)
+	game := newGameWithPresentation(logging.DecorateGame(session, service), sound, settingsStore)
+	if settingsErr != nil {
+		sound.SetMaster(ui.DefaultUISettings().MasterVolume, ui.DefaultUISettings().Muted)
+		game.showNotice("Preferences are unavailable; using defaults")
+	}
 	if shouldResumeSavedGameOnStartup() {
 		game.beginStartupResume()
 	}
@@ -76,6 +123,7 @@ func NewGame(seed uint64, session *logging.Session) (*Game, error) {
 
 func (g *Game) Update() error {
 	g.scene.Update()
+	g.pollUISettings()
 	if g.noticeFrames > 0 {
 		g.noticeFrames--
 		if g.noticeFrames == 0 {
@@ -106,6 +154,21 @@ func (g *Game) Update() error {
 	if modifier && inpututil.IsKeyJustPressed(ebiten.KeyS) {
 		g.beginQuickSave()
 	}
+	for index, key := range [...]ebiten.Key{ebiten.KeyF1, ebiten.KeyF2, ebiten.KeyF3} {
+		if !inpututil.IsKeyJustPressed(key) {
+			continue
+		}
+		slot := index + 1
+		if ebiten.IsKeyPressed(ebiten.KeyShift) {
+			g.beginManualLoad(slot)
+		} else {
+			g.beginManualSave(slot)
+		}
+		break
+	}
+	if g.pendingManualLoadID != 0 {
+		return nil
+	}
 	if g.frame.CampaignResult != gameapi.Ongoing {
 		mouseStartsCampaign := false
 		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
@@ -117,15 +180,73 @@ func (g *Game) Update() error {
 		return nil
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyTab) {
-		g.clearMigrationPreview()
-		if ebiten.IsKeyPressed(ebiten.KeyShift) {
-			g.selectPreviousSapiens()
+		if g.assignmentDraftDirty() {
+			g.showNotice("Apply or discard workforce changes")
 		} else {
-			g.selectNextSapiens()
+			g.clearMigrationPreview()
+			if ebiten.IsKeyPressed(ebiten.KeyShift) {
+				g.selectPreviousSapiens()
+			} else {
+				g.selectNextSapiens()
+			}
 		}
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyF) {
-		g.fieldNotesVisible = !g.fieldNotesVisible
+		if g.settingsLoading {
+			g.showNotice("Loading preferences…")
+		} else {
+			settings := g.settings
+			settings.FieldNotesVisible = !settings.FieldNotesVisible
+			g.updateUISettings(settings)
+		}
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyM) {
+		if g.settingsLoading {
+			g.showNotice("Loading preferences…")
+		} else {
+			settings := g.settings
+			settings.Muted = !settings.Muted
+			g.updateUISettings(settings)
+			if settings.Muted {
+				g.showNotice("Sound muted")
+			} else {
+				g.showNotice(fmt.Sprintf("Sound unmuted at %.0f%%", settings.MasterVolume*100))
+			}
+		}
+	}
+	for _, volumeKey := range [...]struct {
+		key   ebiten.Key
+		delta float64
+	}{{key: ebiten.KeyMinus, delta: -0.1}, {key: ebiten.KeyEqual, delta: 0.1}} {
+		if inpututil.IsKeyJustPressed(volumeKey.key) {
+			if g.settingsLoading {
+				g.showNotice("Loading preferences…")
+			} else {
+				settings := g.settings
+				settings.MasterVolume += volumeKey.delta
+				g.updateUISettings(settings)
+				g.showNotice(fmt.Sprintf("Master volume %.0f%%", g.settings.MasterVolume*100))
+			}
+			break
+		}
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyW) && g.hasAssignmentDraft {
+		g.assignmentRole = (g.assignmentRole + 1) % gameapi.AssignmentCount
+	}
+	for _, edit := range [...]struct {
+		key   ebiten.Key
+		delta int
+	}{{key: ebiten.KeyBracketLeft, delta: -100}, {key: ebiten.KeyBracketRight, delta: 100}} {
+		if inpututil.IsKeyJustPressed(edit.key) {
+			g.editAssignmentDraft(edit.delta)
+			break
+		}
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyA) {
+		g.applyAssignmentDraft()
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyD) {
+		g.discardAssignmentDraft()
 	}
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		g.handleMapClick()
@@ -172,6 +293,10 @@ func (g *Game) Update() error {
 		}
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) && g.frame.CampaignResult == gameapi.Ongoing {
+		if g.assignmentDraftDirty() {
+			g.showNotice("Apply or discard workforce changes before ending the turn")
+			return nil
+		}
 		if g.hasMigrationPreview {
 			g.showNotice("Press Enter to queue the migration, or Esc to clear it before ending the turn.")
 			return nil
@@ -186,12 +311,75 @@ func (g *Game) Update() error {
 	return nil
 }
 
+func (g *Game) pollUISettings() {
+	if g.settingsStore == nil {
+		return
+	}
+	for _, completion := range g.settingsStore.Poll() {
+		switch completion.Operation {
+		case ui.UISettingsRead:
+			if !g.settingsLoading || completion.Revision != g.settingsRevision {
+				continue
+			}
+			g.settingsLoading = false
+			g.settings = ui.NormalizeUISettings(completion.Settings)
+			g.fieldNotesVisible = g.settings.FieldNotesVisible
+			g.sound.SetMaster(g.settings.MasterVolume, g.settings.Muted)
+			if completion.Err != nil {
+				g.showNotice("Preferences could not be loaded; using defaults")
+			}
+		case ui.UISettingsWrite:
+			if !g.settingsWriteActive || completion.Revision != g.settingsRevision {
+				continue
+			}
+			g.settingsWriteActive = false
+			if completion.Err != nil {
+				g.showNotice("Preferences could not be saved")
+			}
+			if g.pendingSettings != nil {
+				pending := *g.pendingSettings
+				g.pendingSettings = nil
+				if pending != completion.Settings {
+					g.startUISettingsWrite(pending)
+				}
+			}
+		}
+	}
+}
+
+func (g *Game) updateUISettings(settings ui.UISettings) {
+	settings = ui.NormalizeUISettings(settings)
+	g.settings = settings
+	g.fieldNotesVisible = settings.FieldNotesVisible
+	g.sound.SetMaster(settings.MasterVolume, settings.Muted)
+	if g.settingsStore == nil {
+		return
+	}
+	if g.settingsWriteActive {
+		pending := settings
+		g.pendingSettings = &pending
+		return
+	}
+	g.startUISettingsWrite(settings)
+}
+
+func (g *Game) startUISettingsWrite(settings ui.UISettings) {
+	g.settingsRevision++
+	if err := g.settingsStore.BeginWrite(g.settingsRevision, settings); err != nil {
+		g.showNotice("Preferences could not be saved")
+		return
+	}
+	g.settingsWriteActive = true
+}
+
 func (g *Game) Draw(screen *ebiten.Image) {
 	fieldNote := g.fieldNote
 	fieldNote.Celebration = g.breakthroughFrames > 0
-	g.scene.Draw(screen, g.frame, g.selectedBand, render.MigrationPreview{
+	g.scene.SetWorkforceDraft(g.workforceDraftForRender())
+	displayFrame := g.displayFrame()
+	g.scene.Draw(screen, displayFrame, g.selectedBand, render.MigrationPreview{
 		BandID: g.migrationPreviewBand, TileID: g.migrationPreviewTile, Visible: g.hasMigrationPreview,
-	}, g.notice, fieldNote, g.fieldNotesVisible, ui.CampaignEndScene(g.frame))
+	}, g.notice, fieldNote, g.fieldNotesVisible, ui.CampaignEndScene(displayFrame))
 	if !g.firstDrawDone {
 		g.firstDrawDone = true
 		if g.onFirstDraw != nil {
@@ -207,9 +395,18 @@ type technologyDiscovery struct {
 
 func (g *Game) acceptCompletedTurn(frame *gameapi.Frame) {
 	discoveries := newTechnologyDiscoveries(g.frame, frame, g.selectedBand)
+	newestEvent, hasNewEvent := newestAddedEvent(g.frame, frame)
+	if completedTurnAddedAcuteEvent(g.frame, frame) {
+		g.sound.Play(gameaudio.SFXEventTrigger)
+	}
 	g.frame = frame
+	g.publishFrame()
 	g.ensureSelection()
+	g.syncAssignmentDraft(false)
 	if len(discoveries) == 0 {
+		if hasNewEvent {
+			g.fieldNote = ui.EventFieldNote(newestEvent)
+		}
 		return
 	}
 	first := discoveries[0]
@@ -225,6 +422,46 @@ func (g *Game) acceptCompletedTurn(frame *gameapi.Frame) {
 	}
 	g.notice = message
 	g.noticeFrames = 300
+}
+
+func newestAddedEvent(previous, current *gameapi.Frame) (gameapi.Event, bool) {
+	if current == nil || len(current.Events) == 0 {
+		return gameapi.Event{}, false
+	}
+	seen := make(map[gameapi.Event]struct{})
+	if previous != nil {
+		for _, event := range previous.Events {
+			seen[event] = struct{}{}
+		}
+	}
+	for index := len(current.Events) - 1; index >= 0; index-- {
+		event := current.Events[index]
+		if _, existed := seen[event]; !existed {
+			return event, true
+		}
+	}
+	return gameapi.Event{}, false
+}
+
+func completedTurnAddedAcuteEvent(previous, current *gameapi.Frame) bool {
+	if current == nil {
+		return false
+	}
+	previousCount := 0
+	if previous != nil {
+		for _, event := range previous.Events {
+			if event.Kind == gameapi.EventAcuteIncident {
+				previousCount++
+			}
+		}
+	}
+	currentCount := 0
+	for _, event := range current.Events {
+		if event.Kind == gameapi.EventAcuteIncident {
+			currentCount++
+		}
+	}
+	return currentCount > previousCount
 }
 
 func newTechnologyDiscoveries(previous, current *gameapi.Frame, preferredBand gameapi.BandID) []technologyDiscovery {
@@ -264,6 +501,36 @@ func newTechnologyDiscoveries(previous, current *gameapi.Frame, preferredBand ga
 
 func (g *Game) SetFirstDrawCallback(callback func()) { g.onFirstDraw = callback }
 
+func (g *Game) SetTerrainDetail(detail render.TerrainDetailMode) {
+	g.scene.SetTerrainDetail(detail)
+}
+
+// SetRenderProfileFrame installs the browser's validated maximum-render
+// fixture only at the drawing seam. Simulation commands, storage, hashes, and
+// the semantic E2E observer continue to use the accepted live frame.
+func (g *Game) SetRenderProfileFrame(frame *gameapi.Frame) { g.profileDisplayFrame = frame }
+
+func (g *Game) displayFrame() *gameapi.Frame {
+	if g.profileDisplayFrame != nil {
+		return g.profileDisplayFrame
+	}
+	return g.frame
+}
+
+// SetFramePublishedCallback installs the opt-in semantic browser-test
+// observer. The callback receives only a bounded encoding of the frame already
+// held by the host; it cannot issue commands or request another snapshot.
+func (g *Game) SetFramePublishedCallback(callback func(string)) {
+	g.onFramePublished = callback
+	g.publishFrame()
+}
+
+func (g *Game) publishFrame() {
+	if g.onFramePublished != nil {
+		g.onFramePublished(e2eSummaryJSON(g.frame))
+	}
+}
+
 // requestInterbreed answers the interbreed key in every case. It previously
 // short-circuited on an empty candidate list, so the advertised control did
 // nothing at all and gave no reason — and a successful one was equally silent.
@@ -302,6 +569,81 @@ func (g *Game) selected() *gameapi.Band {
 	return nil
 }
 
+func (g *Game) syncAssignmentDraft(force bool) {
+	band := g.selected()
+	if band == nil || band.Species != gameapi.HomoSapiens {
+		g.hasAssignmentDraft = false
+		return
+	}
+	if !force && g.hasAssignmentDraft && g.assignmentDraftBand == band.ID && g.assignmentDraftDirty() {
+		return
+	}
+	g.assignmentDraftBand = band.ID
+	g.assignmentDraft = band.AllocationBP
+	g.assignmentBaseline = band.AllocationBP
+	g.hasAssignmentDraft = true
+	if g.assignmentRole >= gameapi.AssignmentCount {
+		g.assignmentRole = gameapi.Foraging
+	}
+}
+
+func (g *Game) assignmentDraftDirty() bool {
+	return g.hasAssignmentDraft && g.assignmentDraft != g.assignmentBaseline
+}
+
+func (g *Game) assignmentDraftValid() bool {
+	if !g.hasAssignmentDraft {
+		return false
+	}
+	var total uint32
+	for _, points := range g.assignmentDraft {
+		total += uint32(points)
+	}
+	return total == 10_000
+}
+
+func (g *Game) editAssignmentDraft(delta int) {
+	if !g.hasAssignmentDraft || g.assignmentRole >= gameapi.AssignmentCount {
+		return
+	}
+	value := int(g.assignmentDraft[g.assignmentRole]) + delta
+	value = min(max(value, 0), 10_000)
+	g.assignmentDraft[g.assignmentRole] = uint16(value)
+	if g.assignmentDraftDirty() {
+		g.showNotice("Workforce draft changed — total must equal 100%; A applies, D discards")
+	}
+}
+
+func (g *Game) applyAssignmentDraft() {
+	if !g.assignmentDraftDirty() {
+		return
+	}
+	if !g.assignmentDraftValid() {
+		g.showNotice("Workforce allocation must total exactly 100%")
+		return
+	}
+	command := gameapi.SetAssignment{BandID: g.assignmentDraftBand, AllocationBP: g.assignmentDraft}
+	if g.apply(command) {
+		g.syncAssignmentDraft(true)
+		g.showNotice("Workforce allocation applied")
+	}
+}
+
+func (g *Game) discardAssignmentDraft() {
+	if !g.assignmentDraftDirty() {
+		return
+	}
+	g.assignmentDraft = g.assignmentBaseline
+	g.showNotice("Workforce changes discarded")
+}
+
+func (g *Game) workforceDraftForRender() render.WorkforceDraft {
+	return render.WorkforceDraft{
+		Visible: g.hasAssignmentDraft, BandID: g.assignmentDraftBand, AllocationBP: g.assignmentDraft,
+		SelectedRole: g.assignmentRole, Dirty: g.assignmentDraftDirty(), Valid: g.assignmentDraftValid(),
+	}
+}
+
 func (g *Game) ensureSelection() {
 	if selected := g.selected(); selected != nil && selected.Species == gameapi.HomoSapiens {
 		return
@@ -330,6 +672,10 @@ func (g *Game) selectSapiens(offset int) {
 	if g.frame == nil {
 		return
 	}
+	if g.assignmentDraftDirty() {
+		g.showNotice("Apply or discard workforce changes")
+		return
+	}
 	bandIDs := make([]gameapi.BandID, 0, len(g.frame.Bands))
 	selectedIndex := -1
 	for _, band := range g.frame.Bands {
@@ -347,10 +693,20 @@ func (g *Game) selectSapiens(offset int) {
 	}
 	if selectedIndex < 0 {
 		g.selectedBand = bandIDs[0]
+		g.syncAssignmentDraft(true)
+		g.refreshBandFieldNote()
 		return
 	}
 	selectedIndex = (selectedIndex + offset + len(bandIDs)) % len(bandIDs)
 	g.selectedBand = bandIDs[selectedIndex]
+	g.syncAssignmentDraft(true)
+	g.refreshBandFieldNote()
+}
+
+func (g *Game) refreshBandFieldNote() {
+	if band := g.selected(); band != nil {
+		g.fieldNote = ui.BandContextFieldNote(g.frame, band)
+	}
 }
 
 func (g *Game) handleMapClick() {
@@ -361,7 +717,13 @@ func (g *Game) handleMapClick() {
 	g.clearMigrationPreview()
 	for _, band := range g.frame.Bands {
 		if band.Species == gameapi.HomoSapiens && band.TileID == tileID {
+			if band.ID != g.selectedBand && g.assignmentDraftDirty() {
+				g.showNotice("Apply or discard workforce changes")
+				return
+			}
 			g.selectedBand = band.ID
+			g.syncAssignmentDraft(true)
+			g.refreshBandFieldNote()
 			return
 		}
 	}
@@ -432,7 +794,9 @@ func (g *Game) tryQueueMigration(band *gameapi.Band, tileID gameapi.TileID) bool
 func (g *Game) apply(command gameapi.Command) bool {
 	if frame, err := g.port.Apply(command); err == nil {
 		g.frame = frame
+		g.publishFrame()
 		g.ensureSelection()
+		g.sound.Play(gameaudio.SFXChoiceClick)
 		return true
 	} else {
 		g.showNotice(ui.ErrorMessage(err))
@@ -447,11 +811,15 @@ func (g *Game) startNewCampaign() {
 		return
 	}
 	g.frame = frame
+	g.publishFrame()
 	g.selectedBand = 0
 	g.ensureSelection()
+	g.hasAssignmentDraft = false
+	g.syncAssignmentDraft(true)
 	g.fieldNote = ui.CampaignOverviewFieldNote()
 	g.breakthroughFrames = 0
 	g.clearMigrationPreview()
+	g.sound.Play(gameaudio.SFXChoiceClick)
 	g.showNotice("New campaign begun")
 }
 
@@ -468,6 +836,28 @@ func (g *Game) beginQuickSave() {
 		return
 	}
 	g.pendingQuickSaveIDs[operationID] = struct{}{}
+}
+
+func (g *Game) beginManualSave(slot int) {
+	if _, err := g.port.BeginSave(slot); err != nil {
+		g.showNotice("Save failed: " + ui.ErrorMessage(err))
+		return
+	}
+	g.showNotice(fmt.Sprintf("Saving Manual %d…", slot))
+}
+
+func (g *Game) beginManualLoad(slot int) {
+	if g.assignmentDraftDirty() {
+		g.showNotice("Apply or discard workforce changes before loading")
+		return
+	}
+	operationID, err := g.port.BeginLoad(slot)
+	if err != nil {
+		g.showNotice("Load failed: " + ui.ErrorMessage(err))
+		return
+	}
+	g.pendingManualLoadID = operationID
+	g.showNotice(fmt.Sprintf("Loading Manual %d…", slot))
 }
 
 func (g *Game) beginStartupResume() {
@@ -488,6 +878,7 @@ func (g *Game) pollStorage() {
 
 		isStartupList := g.startupRestorePending && result.Operation == gameapi.StorageList && result.OperationID == g.startupRestoreListID
 		isStartupLoad := g.startupRestorePending && result.Operation == gameapi.StorageLoad && result.OperationID == g.startupRestoreLoadID
+		isManualLoad := result.Operation == gameapi.StorageLoad && result.OperationID == g.pendingManualLoadID
 		if isStartupList {
 			g.startupRestoreListID = 0
 			if result.Err == nil {
@@ -511,14 +902,20 @@ func (g *Game) pollStorage() {
 
 		if result.ReplacementFrame != nil {
 			g.frame = result.ReplacementFrame
+			g.publishFrame()
 			g.fieldNote = ui.CampaignOverviewFieldNote()
 			g.breakthroughFrames = 0
 			g.clearMigrationPreview()
 			g.ensureSelection()
+			g.hasAssignmentDraft = false
+			g.syncAssignmentDraft(true)
 		}
 		if isStartupLoad {
 			g.startupRestorePending = false
 			g.startupRestoreLoadID = 0
+		}
+		if isManualLoad {
+			g.pendingManualLoadID = 0
 		}
 		if result.Err != nil {
 			if isStartupLoad {
@@ -535,9 +932,14 @@ func (g *Game) pollStorage() {
 				g.showNotice(fmt.Sprintf("Autosave restored — Auto %d", g.startupRestoreSlot-100))
 			}
 			g.startupRestoreSlot = 0
+		case isManualLoad:
+			g.showNotice(fmt.Sprintf("Loaded Manual %d", result.Slot))
 		case result.Operation == gameapi.StorageLoad:
 			g.showNotice("Game loaded")
+		case result.Operation == gameapi.StorageSave && result.Slot >= 1 && result.Slot <= 3:
+			g.showNotice(fmt.Sprintf("Saved Manual %d", result.Slot))
 		case result.Operation == gameapi.StorageSave && result.Slot == 99:
+			g.sound.Play(gameaudio.SFXSaveComplete)
 			g.showNotice("Quick-saved")
 		case result.Operation == gameapi.StorageSave && result.Slot >= 101 && result.Slot <= 103:
 			g.showNotice("Autosaved")

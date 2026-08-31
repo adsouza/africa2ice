@@ -31,3 +31,16 @@ func TestCampaignOverviewIdentifiesTheDenisovanBand(t *testing.T) {
 		t.Fatalf("campaign overview does not identify the Denisovan band: %#v", note)
 	}
 }
+
+func TestBandAndEventContextNotesUseAcceptedFrameValues(t *testing.T) {
+	frame := &gameapi.Frame{Tiles: []gameapi.Tile{{ID: 0, Region: gameapi.EastAfrica, Biome: gameapi.Savanna, FloraStock: 20, FloraCap: 40, FaunaStock: 30, FaunaCap: 50, WaterStock: 10, WaterCap: 15, EcologicalK: 80, NaturalShelter: 0.25}}}
+	band := &gameapi.Band{ID: 7, TileID: 0, Population: 120, Health: 0.9, StoredFood: 6.5}
+	note := BandContextFieldNote(frame, band)
+	if !strings.Contains(note.Topic, "BAND 7") || !strings.Contains(note.Introduction, "120 people") || !strings.Contains(note.GameEffect, "Food 50/90") {
+		t.Fatalf("band context note = %#v", note)
+	}
+	event := EventFieldNote(gameapi.Event{Turn: 4, Kind: gameapi.EventAcuteIncident, BandID: 7, Summary: "A predator attacked."})
+	if event.Topic != gameapi.EventAcuteIncident.String() || event.Introduction != "A predator attacked." || !strings.Contains(event.Context, "turn 4") {
+		t.Fatalf("event note = %#v", event)
+	}
+}

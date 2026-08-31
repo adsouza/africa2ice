@@ -40,12 +40,14 @@ type tileLiveabilitySummary struct {
 	waterStock         float64
 	waterCap           float64
 	ecologicalK        float64
+	baselineK          float64
 	degradation        float64
 	seasonalRisk       float64
 	chronicRisk        float64
 	crowdingDecline    float64
 	hasRisk            bool
 	temperatureC       float64
+	elevationKm        float64
 	naturalShelter     float64
 	movementCost       float64
 	visibleMacroImpact gameapi.MacroImpactSummary
@@ -123,8 +125,10 @@ func summarizeTile(frame *gameapi.Frame, tileID gameapi.TileID, heading string) 
 	summary.waterStock = tile.WaterStock
 	summary.waterCap = tile.WaterCap
 	summary.ecologicalK = tile.EcologicalK
+	summary.baselineK = tile.BaselineK
 	summary.degradation = tile.Degradation
 	summary.temperatureC = tile.LocalTemperatureC
+	summary.elevationKm = tile.ElevationKm
 	summary.naturalShelter = tile.NaturalShelter
 	summary.movementCost = tile.MovementCost
 	summary.visibleMacroImpact = tile.VisibleMacroImpact
@@ -153,11 +157,11 @@ func liveabilityLines(summary tileLiveabilitySummary) [9]string {
 		return lines
 	}
 	lines[0] = summary.biome
-	lines[1] = fmt.Sprintf("%s · %.0f°C", summary.region, summary.temperatureC)
+	lines[1] = fmt.Sprintf("%s · %.0f°C · %.1f km", summary.region, summary.temperatureC, summary.elevationKm)
 	lines[2] = fmt.Sprintf("Food stock %.0f/%.0f FU", summary.foodStock, summary.foodCap)
 	lines[3] = fmt.Sprintf("Plants %.0f · animals %.0f", summary.floraStock, summary.faunaStock)
 	lines[4] = fmt.Sprintf("Water %.0f/%.0f WU", summary.waterStock, summary.waterCap)
-	lines[5] = fmt.Sprintf("Capacity %.0f · degraded %.0f%%", summary.ecologicalK, summary.degradation*100)
+	lines[5] = fmt.Sprintf("Capacity %.0f/%.0f · degraded %.0f%%", summary.ecologicalK, summary.baselineK, summary.degradation*100)
 	lines[archaicPresenceLineIndex] = formatArchaicPresence(summary.archaicBandCount, summary.archaicPopulation)
 	switch {
 	case summary.crowdingDecline > 0:

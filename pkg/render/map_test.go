@@ -150,6 +150,35 @@ func TestMapSceneDrawsTerrainVisibilityBandsAndPassagesOffscreen(t *testing.T) {
 	}
 }
 
+func TestMapSceneCachesTerrainForAnAcceptedFrame(t *testing.T) {
+	frame := representativeRenderFrame()
+	screen := ebiten.NewImage(1280, 720)
+	defer screen.Deallocate()
+	scene := NewMapScene()
+
+	scene.Draw(screen, frame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{})
+	scene.Draw(screen, frame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{})
+	if scene.terrainRebuilds != 1 {
+		t.Fatalf("terrain rebuilds for unchanged accepted frame = %d, want 1", scene.terrainRebuilds)
+	}
+	if !scene.frameCached || scene.frameKey.frame != frame {
+		t.Fatal("complete immutable presentation frame was not cached")
+	}
+
+	nextFrame := cloneRenderFrame(frame)
+	nextFrame.WorldRevision++
+	scene.Draw(screen, nextFrame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{})
+	if scene.terrainRebuilds != 2 {
+		t.Fatalf("terrain rebuilds after accepted frame replacement = %d, want 2", scene.terrainRebuilds)
+	}
+
+	scene.SetTerrainDetail(TerrainDetailLow)
+	scene.Draw(screen, nextFrame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{})
+	if scene.terrainRebuilds != 3 {
+		t.Fatalf("terrain rebuilds after detail change = %d, want 3", scene.terrainRebuilds)
+	}
+}
+
 func TestMapSceneDrawsQueuedAndPreviewMigrationsOffscreen(t *testing.T) {
 	baseFrame := representativeRenderFrame()
 	base := renderMapOffscreen(t, baseFrame, 7, MigrationPreview{}, FieldNote{}, false, EndScene{}, "")

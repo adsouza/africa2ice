@@ -16,6 +16,8 @@ func DecorateGame(session *Session, next gameapi.Game) gameapi.Game {
 
 func (decorator *gameDecorator) Snapshot() (*gameapi.Frame, error) { return decorator.next.Snapshot() }
 
+func (decorator *gameDecorator) StateHash() (string, error) { return decorator.next.StateHash() }
+
 func (decorator *gameDecorator) NewCampaign() (*gameapi.Frame, error) {
 	id, started := decorator.session.start("game", "new_campaign")
 	frame, err := decorator.next.NewCampaign()

@@ -17,6 +17,8 @@ const (
 	mapOriginX             = 20
 	mapOriginY             = 74
 	mapTileSize            = 9
+	mapPixelWidth          = TerrainGridWidth * mapTileSize
+	mapPixelHeight         = TerrainGridHeight * mapTileSize
 	mapLegendOriginY       = 48
 	mapLegendHeight        = 25
 	bandListOriginY        = 230
@@ -29,6 +31,7 @@ const (
 	interbreedPanelLineY   = 446
 	fieldNotesPanelOriginY = 462
 	fieldNotesPanelHeight  = 138
+	workforcePanelOriginY  = 604
 )
 
 var (
@@ -37,13 +40,47 @@ var (
 )
 
 type MapScene struct {
-	faceSource *text.GoTextFaceSource
+	faceSource      *text.GoTextFaceSource
+	detail          TerrainDetailMode
+	terrainImage    *ebiten.Image
+	terrainFrame    *gameapi.Frame
+	terrainDetail   TerrainDetailMode
+	terrainRebuilds uint64
+	frameImage      *ebiten.Image
+	frameKey        mapFrameKey
+	frameWidth      int
+	frameHeight     int
+	frameCached     bool
+	workforce       WorkforceDraft
+}
+
+type mapFrameKey struct {
+	frame             *gameapi.Frame
+	selectedBand      gameapi.BandID
+	preview           MigrationPreview
+	notice            string
+	fieldNote         FieldNote
+	fieldNotesVisible bool
+	ending            EndScene
+	detail            TerrainDetailMode
+	workforce         WorkforceDraft
 }
 
 type MigrationPreview struct {
 	BandID  gameapi.BandID
 	TileID  gameapi.TileID
 	Visible bool
+}
+
+// WorkforceDraft is UI-local editor state. Accepted allocations continue to
+// come from the frame until the complete draft is explicitly applied.
+type WorkforceDraft struct {
+	Visible      bool
+	BandID       gameapi.BandID
+	AllocationBP [gameapi.AssignmentCount]uint16
+	SelectedRole gameapi.WorkforceRole
+	Dirty        bool
+	Valid        bool
 }
 
 // FieldNote is UI-local presentation content. It is never simulation or save
@@ -67,18 +104,49 @@ func NewMapScene() *MapScene {
 
 func (scene *MapScene) Update() {}
 
+func (scene *MapScene) SetTerrainDetail(detail TerrainDetailMode) {
+	if detail == TerrainDetailNormal || detail == TerrainDetailLow {
+		scene.detail = detail
+	}
+}
+
+func (scene *MapScene) SetWorkforceDraft(draft WorkforceDraft) { scene.workforce = draft }
+
 func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, fieldNote FieldNote, fieldNotesVisible bool, ending EndScene) {
-	screen.Fill(color.RGBA{R: 15, G: 22, B: 29, A: 255})
 	if frame == nil {
+		screen.Fill(color.RGBA{R: 15, G: 22, B: 29, A: 255})
 		return
 	}
+	key := mapFrameKey{
+		frame: frame, selectedBand: selectedBand, preview: preview, notice: notice,
+		fieldNote: fieldNote, fieldNotesVisible: fieldNotesVisible, ending: ending, detail: scene.detail,
+		workforce: scene.workforce,
+	}
+	width, height := screen.Bounds().Dx(), screen.Bounds().Dy()
+	if scene.frameCached && scene.frameKey == key && scene.frameWidth == width && scene.frameHeight == height {
+		// Production disables Ebitengine's automatic screen clear. Leaving an
+		// unchanged screen untouched lets the engine skip GPU work entirely for
+		// this turn-based presentation.
+		return
+	}
+	if scene.frameImage != nil {
+		scene.frameImage.Deallocate()
+	}
+	scene.frameImage = ebiten.NewImage(width, height)
+	scene.drawFrame(scene.frameImage, frame, selectedBand, preview, notice, fieldNote, fieldNotesVisible, ending)
+	scene.frameKey = key
+	scene.frameWidth = width
+	scene.frameHeight = height
+	scene.frameCached = true
+	screen.DrawImage(scene.frameImage, nil)
+}
+
+func (scene *MapScene) drawFrame(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, fieldNote FieldNote, fieldNotesVisible bool, ending EndScene) {
+	screen.Fill(color.RGBA{R: 15, G: 22, B: 29, A: 255})
 	grade := EpochGrade(frame.Climate.AridityIndex)
 	scene.drawTimeline(screen, frame, grade)
 	scene.drawMapLegend(screen, frame.Climate.AridityIndex)
-	for _, tile := range frame.Tiles {
-		tileColor := tileColorForRender(tile, frame.Climate.AridityIndex)
-		vector.FillRect(screen, mapOriginX+float32(tile.X*mapTileSize), mapOriginY+float32(tile.Y*mapTileSize), mapTileSize-0.4, mapTileSize-0.4, tileColor, false)
-	}
+	scene.drawTerrain(screen, frame)
 	scene.drawReachableTiles(screen, frame, selectedBand)
 	for _, passage := range frame.Passages {
 		lineColor, visible := passageColorForRender(frame, passage)
@@ -120,6 +188,41 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 		vector.FillRect(screen, 28, 610, 650, 30, color.RGBA{R: 26, G: 38, B: 45, A: 240}, false)
 		scene.drawText(screen, notice, 40, 617, 14, color.RGBA{R: 239, G: 220, B: 178, A: 255})
 	}
+}
+
+// drawTerrain caches the immutable terrain layer for the lifetime of an
+// accepted frame. A frame is replaced whenever application state changes, so
+// this avoids issuing thousands of vector draw calls on every display refresh
+// without risking stale exploration or climate colors.
+func (scene *MapScene) drawTerrain(screen *ebiten.Image, frame *gameapi.Frame) {
+	if scene.terrainImage == nil || scene.terrainFrame != frame || scene.terrainDetail != scene.detail {
+		if scene.terrainImage != nil {
+			scene.terrainImage.Deallocate()
+		}
+		scene.terrainImage = ebiten.NewImage(mapPixelWidth, mapPixelHeight)
+		scene.terrainImage.Fill(unexploredTileColor)
+		tileExtent := float32(mapTileSize - 0.4)
+		if scene.detail == TerrainDetailLow {
+			tileExtent = mapTileSize
+		}
+		for _, tile := range frame.Tiles {
+			vector.FillRect(
+				scene.terrainImage,
+				float32(tile.X*mapTileSize),
+				float32(tile.Y*mapTileSize),
+				tileExtent,
+				tileExtent,
+				tileColorForRender(tile, frame.Climate.AridityIndex),
+				false,
+			)
+		}
+		scene.terrainFrame = frame
+		scene.terrainDetail = scene.detail
+		scene.terrainRebuilds++
+	}
+	options := &ebiten.DrawImageOptions{}
+	options.GeoM.Translate(mapOriginX, mapOriginY)
+	screen.DrawImage(scene.terrainImage, options)
 }
 
 func (scene *MapScene) drawMigrationPreview(screen *ebiten.Image, frame *gameapi.Frame, preview MigrationPreview) {
@@ -347,6 +450,7 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 		}
 	}
 	scene.drawTileInspector(screen, frame, selectedBand, preview)
+	scene.drawWorkforceDraft(screen)
 	if fieldNotesVisible {
 		panelColor, headingColor := fieldNotePanelColors(fieldNote.Celebration)
 		heading := "FIELD NOTES"
@@ -385,14 +489,45 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 		}
 		scene.drawText(screen, label, panelX+18, 574, 12, labelColor)
 	}
-	scene.drawText(screen, "Click: migrate · Arrows: choose · Enter: queue", panelX+18, 620, 12, color.White)
-	scene.drawText(screen, "Tab/Shift+Tab: bands · Space: turn", panelX+18, 642, 12, color.White)
+	scene.drawText(screen, "Click: migrate · Arrows: choose · Enter: queue", panelX+18, 636, 10.5, color.White)
+	scene.drawText(screen, "Tab/Shift+Tab: bands · Space: turn", panelX+18, 652, 10.5, color.White)
 	spatialHint := "N: split"
 	if actor := selectedBandInFrame(frame, selectedBand); actor != nil {
 		spatialHint = spatialControlHint(interbreedStatus(*actor))
 	}
-	scene.drawText(screen, spatialHint, panelX+18, 664, 12, color.White)
-	scene.drawText(screen, "Ctrl/Cmd+S: quick-save", panelX+18, 684, 12, color.White)
+	scene.drawText(screen, spatialHint, panelX+18, 668, 10.5, color.White)
+	scene.drawText(screen, "Quick-save Ctrl/Cmd+S · Manual F1–F3 · Shift+F1–F3 load", panelX+18, 684, 8.2, color.White)
+}
+
+func (scene *MapScene) drawWorkforceDraft(screen *ebiten.Image) {
+	if !scene.workforce.Visible {
+		return
+	}
+	const panelX = float32(922)
+	var total uint32
+	labels := [...]string{"F", "H", "T", "M", "S"}
+	parts := ""
+	for role, points := range scene.workforce.AllocationBP {
+		total += uint32(points)
+		marker := " "
+		if gameapi.WorkforceRole(role) == scene.workforce.SelectedRole {
+			marker = "›"
+		}
+		parts += fmt.Sprintf("%s%s %.0f  ", marker, labels[role], float64(points)/100)
+	}
+	status := "accepted"
+	statusColor := color.RGBA{R: 121, G: 195, B: 137, A: 255}
+	if scene.workforce.Dirty {
+		status = "DIRTY"
+		statusColor = color.RGBA{R: 245, G: 202, B: 92, A: 255}
+	}
+	if !scene.workforce.Valid {
+		status = fmt.Sprintf("%+.0f%%", (float64(total)-10_000)/100)
+		statusColor = color.RGBA{R: 232, G: 112, B: 92, A: 255}
+	}
+	scene.drawText(screen, "WORKFORCE · W role · [/] edit · A apply · D discard", panelX+8, workforcePanelOriginY, 7.2, color.RGBA{R: 167, G: 184, B: 181, A: 255})
+	scene.drawText(screen, parts, panelX+8, workforcePanelOriginY+13, 7.8, color.White)
+	scene.drawText(screen, status, panelX+276, workforcePanelOriginY+13, 7.8, statusColor)
 }
 
 func fieldNotePanelColors(celebration bool) (color.RGBA, color.RGBA) {

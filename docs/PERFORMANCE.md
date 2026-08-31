@@ -19,23 +19,23 @@ Measured 2026-08-30 from a full `./build_web.sh --release` build — stripped, t
 
 | measurement            |      bytes |
 |------------------------|-----------:|
-| raw                    | 20,464,212 |
-| `brotli -q 11` (gated) |  3,513,110 |
-| `gzip -9`              |  5,107,877 |
+| raw                    | 21,999,936 |
+| `brotli -q 11` (gated) |  3,746,982 |
+| `gzip -9`              |  5,219,150 |
 
-**`wasm-opt` costs transfer size here rather than saving it.** Measuring the same build with and
-without the optimizer settles §2's claim that `wasm-opt -O3` "is not the size lever it looks like":
+**`wasm-opt` is primarily a decompressed-size optimization.** Measuring the same build with and
+without the optimizer shows a modest compressed improvement rather than a second-order transfer-size lever:
 
 |                         |        raw |     brotli |      gzip |
 |-------------------------|-----------:|-----------:|----------:|
-| stripped, no `wasm-opt` | 22,861,922 |  3,502,025 | 4,905,180 |
-| `wasm-opt -O3`          | 20,464,212 |  3,513,110 | 5,107,877 |
-| change                  |     −10.5% | **+0.32%** | **+4.1%** |
+| stripped, no `wasm-opt` | 24,167,737 |  3,872,152 | 5,376,437 |
+| `wasm-opt -O3`          | 21,999,936 |  3,746,982 | 5,219,150 |
+| change                  |     −8.97% |  **−3.23%** | **−2.93%** |
 
-The optimizer removes about a tenth of the decompressed module — which is what it is for, and what
-startup cost tracks — while leaving the compressed stream fractionally *larger*, because the
-transformations that shrink the module also make it slightly less compressible. Keep `wasm-opt` for
-decompressed size and startup; do not expect it to reclaim transfer-size headroom.
+The optimizer removes about nine percent of the decompressed module and about three percent of both
+compressed streams in the current dependency graph. Keep `wasm-opt` for decompressed size, startup,
+and this smaller transfer benefit; application/dependency reachability remains the route for larger
+transfer-size reductions.
 
 **Provenance.** Built with Homebrew Binaryen **132** on darwin/arm64. Appendix C Locks the toolchain
 at `version_131` and records a SHA-256 for the Linux x86-64 tarball only, so this is a close
@@ -53,19 +53,31 @@ that job fails and names the exact replacement value.
 original ceiling was set from a dependency skeleton rather than from this game and, as §10 puts it,
 was "generous enough that it would pass without ever constraining anything."
 
-The ratchet's `50_000` quantum earned itself immediately: the pre-`wasm-opt` estimate and the real
-optimized build differ by 11,085 bytes, and both round to the same ceiling. A target computed to the
-exact byte would have failed the gate on that difference alone.
+The ratchet's `50_000` quantum prevents small toolchain and compression drift from churning the
+checked-in ceiling. A target computed to the exact byte would turn harmless variation into failures.
 
 ## Frame rate
 
-**Not yet measured.** §8 requires four mandatory profiles — normal and low terrain detail at DPR 1
-and DPR 2 — each sustaining its median FPS floor over the 30-second `tools/web-e2e/profile.mjs`
-orbit/pan script against the `testdata/performance_profile_save.json` maximum-render fixture.
+The checked-in `testdata/performance_profile_save.json` is a valid schema-v1 turn-300 save with all
+6,144 tiles explored, 256 live bands, and the 96-band archaic sub-cap. The Playwright harness injects
+that exact save into the drawing seam while simulation actions and the semantic observer remain on
+the ordinary live campaign. Each locked configuration receives a five-second warmup and a 30-second
+sample with one successful `EndTurn` every five seconds.
 
-None of that machinery exists yet: the 3D render layer is build step 8, the profile script and
-render fixture are step 13, and neither has been built. There is nothing to measure and no number to
-record. Nothing here may be filled in from a development impression.
+Measured 2026-08-31 from the optimized artifact in pinned Chromium `151.0.7922.34`:
+
+| detail | DPR | median FPS | required floor | p95 frame gap | maximum `EndTurn` latency | JS heap |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| normal | 1 | 59.88 | 20 | 16.8 ms | 33.74 ms | 26.0 MB |
+| low | 1 | 59.88 | 30 | 16.8 ms | 30.32 ms | 26.0 MB |
+| normal | 2 | 59.88 | 15 | 16.8 ms | 36.42 ms | 26.0 MB |
+| low | 2 | 59.88 | 20 | 16.8 ms | 38.67 ms | 26.0 MB |
+
+All four floors, the 150 ms p95 frame-gap ceiling, and the two-second turn-latency ceiling pass.
+The key optimization is appropriate to a turn-based presentation: production disables automatic
+screen clearing, caches one complete immutable presentation frame, and leaves the screen untouched
+until either the accepted frame or UI-local presentation key changes. This lets Ebitengine skip idle
+GPU work rather than continually redrawing an unchanged high-DPI canvas.
 
 ### Reference machine identity
 
@@ -79,17 +91,26 @@ match for the specified configuration:
 | Memory           | 16 GB                                  | 16 GB                        |
 | OS               | macOS 26.6.1                           | macOS 26.6.1 (build 25G76)   |
 
-The exact browser version used by a release candidate is recorded here when the first profile is
-actually run; the pinned Playwright Chromium the profile depends on is not yet introduced.
+Browser verification and profiling pin Playwright `1.62.1` and Chromium `151.0.7922.34`.
 
 ## Native benchmark baseline
 
-**Not yet recorded**, because the benchmarks it would summarise do not exist. Build step 8 owns the
-maximum-workload `World.AdvanceTurn` and frame-projection benchmarks (6,144 tiles, 256 bands) plus
-the fixed pure-Go calibration benchmark, and `tools/check_benchmarks.sh` compares the median
-target/calibration ratio and bytes/op against `testdata/performance_baseline.json`.
+The maximum-workload `World.AdvanceTurn` and frame-projection benchmarks now exercise exactly 6,144
+tiles and 256 bands, alongside the fixed pure-Go calibration benchmark. Five-sample medians on the
+interactive reference Mac are:
 
-Note that this baseline **is** recordable in CI once those benchmarks exist:
+| benchmark | median ratio to calibration | bytes/op | allocs/op |
+| --- | ---: | ---: | ---: |
+| maximum turn | 1,529 | 7,206,611 | 43,755 |
+| maximum frame projection | 205 | 3,625,235 | 2,247 |
+
+`tools/check_benchmarks.sh` repeats the samples and gates normalized time, bytes, and allocations
+against `testdata/performance_baseline.json`. The checked-in ceilings are no more than 25% above
+these reviewed local medians. The `release-readiness` job repeats the same gate on
+`NativeBenchmarkReference`; its GitHub runner image and medians become the authoritative release
+record when that job first runs.
+
+The CI reference baseline is recordable because
 `NativeBenchmarkReference` is defined as the GitHub-hosted `ubuntu-24.04` `linux/amd64` runner, and
 normalising against a calibration benchmark in the same process is precisely what makes a shared
 runner a legitimate reference — §8 keeps unnormalized wall-clock time as telemetry to avoid "a gate

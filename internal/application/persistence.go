@@ -2,6 +2,7 @@ package application
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -275,4 +276,21 @@ func finite(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value
 
 func (service *GameService) ExportSaveState() (SaveState, error) {
 	return SaveStateFromWorld(service.world, service.worldRevision)
+}
+
+// StateHash returns the canonical campaign-state hash. The normalized save
+// payload is the application-owned durable representation, so repository
+// metadata, timestamps, operation IDs, and presentation state cannot affect
+// this value.
+func (service *GameService) StateHash() (string, error) {
+	state, err := service.ExportSaveState()
+	if err != nil {
+		return "", err
+	}
+	payload, err := json.Marshal(state)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(payload)
+	return fmt.Sprintf("%x", sum), nil
 }

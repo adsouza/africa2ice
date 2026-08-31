@@ -2,6 +2,7 @@ package gameapi
 
 type CampaignUseCases interface {
 	Snapshot() (*Frame, error)
+	StateHash() (string, error)
 	NewCampaign() (*Frame, error)
 	Apply(Command) (*Frame, error)
 	EndTurn() (*Frame, error)

@@ -21,8 +21,8 @@ jobs:
             arch: amd64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: 1.26.4
           cache: true
@@ -39,17 +39,31 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
       - run: go build ./...
+      - name: Produce deterministic reference checkpoints
+        shell: bash
+        run: go run . -headless -turns 400 -seed 0x9e3779b97f4a7c15 -policy reference -checkpoint-json reference-checkpoints.json > reference-headless.log
+      - name: Upload native reference checkpoints
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: reference-checkpoints-${{ runner.os }}-${{ matrix.arch }}
+          path: reference-checkpoints.json
+          if-no-files-found: error
 
   web-release:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: 1.26.4
           cache: true
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: tools/web-e2e/package-lock.json
       - name: Install pinned Binaryen and Brotli
         shell: bash
         run: |
@@ -60,6 +74,18 @@ jobs:
           tar -xzf binaryen.tar.gz
           echo "$PWD/binaryen-version_131/bin" >> "$GITHUB_PATH"
       - run: ./build_web.sh --release
+      - name: Install pinned browser test tooling
+        run: npm --prefix tools/web-e2e ci
+      - name: Install pinned Chromium
+        run: npm --prefix tools/web-e2e run install-browser
+      - name: Exercise Go IndexedDB tests in Chromium
+        run: node tools/run_wasm_go_tests.mjs
+      - name: Produce Chromium reference checkpoints
+        run: node tools/run_wasm_checkpoint.mjs
+      - name: Run staged-browser smoke
+        run: npm --prefix tools/web-e2e test
+      - name: Profile locked browser detail and DPR matrix
+        run: npm --prefix tools/web-e2e run profile
       - name: Validate deploy root
         shell: bash
         run: |
@@ -81,21 +107,86 @@ jobs:
       # passes throws the measurement away exactly when it is most wanted.
       - name: Record the size measurement
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: wasm-size-${{ github.sha }}
           path: wasm-size.json
           if-no-files-found: warn
-      - uses: actions/configure-pages@v5
+      - name: Upload Chromium reference checkpoints
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: reference-checkpoints-Chromium-wasm
+          path: reference-checkpoints.json
+          if-no-files-found: error
+      - name: Upload tested web release bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: web-release-bundle
+          path: web
+          if-no-files-found: error
+      - name: Upload browser performance profile
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: browser-performance-${{ github.sha }}
+          path: performance-profile.json
+          if-no-files-found: error
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           path: web
 
+  cross-target-determinism:
+    needs: [native, web-release]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: reference-checkpoints-*
+          path: checkpoints
+      - name: Require byte-identical checkpoint records
+        shell: bash
+        run: |
+          linux=checkpoints/reference-checkpoints-Linux-amd64/reference-checkpoints.json
+          macos=checkpoints/reference-checkpoints-macOS-arm64/reference-checkpoints.json
+          windows=checkpoints/reference-checkpoints-Windows-amd64/reference-checkpoints.json
+          chromium=checkpoints/reference-checkpoints-Chromium-wasm/reference-checkpoints.json
+          test -s "$linux" && test -s "$macos" && test -s "$windows" && test -s "$chromium"
+          cmp "$linux" "$macos"
+          cmp "$linux" "$windows"
+          cmp "$linux" "$chromium"
+
+  release-readiness:
+    needs: [native, web-release, cross-target-determinism]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: 1.26.4
+          cache: true
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: tools/web-e2e/package-lock.json
+      - name: Install graphics and browser dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: web-release-bundle
+          path: web
+      - run: npm --prefix tools/web-e2e ci
+      - run: npm --prefix tools/web-e2e run install-browser
+      - name: Re-run route and benchmark readiness gates
+        run: ./tools/check_release_readiness.sh
+      - name: Re-run smoke against the tested optimized bundle
+        run: npm --prefix tools/web-e2e test
+
   deploy-pages:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [native, web-release]
+    needs: [native, web-release, cross-target-determinism, release-readiness]
     runs-on: ubuntu-24.04
     permissions:
       pages: write
@@ -109,4 +200,21 @@ jobs:
     steps:
       - name: Deploy GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+      - name: Smoke deployed Pages artifact
+        shell: bash
+        run: |
+          base="${{ steps.deployment.outputs.page_url }}"
+          for path in "" main.wasm wasm_exec.js; do
+            for attempt in 1 2 3 4 5; do
+              if curl --fail --silent --show-error --location --output /tmp/pages-body --dump-header /tmp/pages-headers "${base}${path}"; then
+                break
+              fi
+              test "$attempt" -lt 5
+              sleep 2
+            done
+            test -s /tmp/pages-body
+            if test "$path" = main.wasm; then
+              grep -iq '^content-type: application/wasm' /tmp/pages-headers
+            fi
+          done

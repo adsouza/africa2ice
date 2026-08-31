@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"io"
 	"log/slog"
+	"runtime/debug"
 	"sync/atomic"
 	"time"
 )
@@ -16,6 +17,28 @@ type Session struct {
 	started   time.Time
 	operation atomic.Uint64
 	closed    atomic.Bool
+}
+
+const maxPanicStackBytes = 16 * 1024
+
+// GuardPanic records one bounded worker/entrypoint panic and re-panics with the
+// original value. Install it after the session Close defer so the panic record
+// is flushed before the sink closes during stack unwinding.
+func GuardPanic(session *Session) {
+	value := recover()
+	if value == nil {
+		return
+	}
+	if session != nil {
+		stack := debug.Stack()
+		clipped := false
+		if len(stack) > maxPanicStackBytes {
+			stack = stack[:maxPanicStackBytes]
+			clipped = true
+		}
+		session.logger.Error("panic", "value", value, "stack", string(stack), "stack_clipped", clipped)
+	}
+	panic(value)
 }
 
 func newSession(entropy io.Reader, target string, writer io.WriteCloser) *Session {

@@ -1,0 +1,17 @@
+{
+  "benchmark_count": 3,
+  "calibration": "BenchmarkCalibration",
+  "maximums": {
+    "BenchmarkAdvanceTurnMaximumWorkload": {
+      "allocs_per_op": 50000,
+      "bytes_per_op": 8000000,
+      "ratio_to_calibration": 1900
+    },
+    "BenchmarkFrameProjectionMaximumWorkload": {
+      "allocs_per_op": 2808,
+      "bytes_per_op": 4500000,
+      "ratio_to_calibration": 260
+    }
+  },
+  "sample_count": 5
+}

@@ -84,3 +84,27 @@ func TechnologyFieldNote(technology gameapi.Tech, bandID gameapi.BandID, discove
 		Hint:         entry.hint,
 	}, true
 }
+
+func BandContextFieldNote(frame *gameapi.Frame, band *gameapi.Band) render.FieldNote {
+	if frame == nil || band == nil || int(band.TileID) >= len(frame.Tiles) {
+		return CampaignOverviewFieldNote()
+	}
+	tile := frame.Tiles[band.TileID]
+	return render.FieldNote{
+		Topic:        fmt.Sprintf("BAND %d · %s", band.ID, tile.Region),
+		Introduction: fmt.Sprintf("%d people · %.1f%% health · %.1f FU stored", band.Population, band.Health*100, band.StoredFood),
+		Context:      fmt.Sprintf("The band occupies %s in the\n%s region.", tile.Biome, tile.Region),
+		GameEffect:   fmt.Sprintf("Food %.0f/%.0f · water %.0f/%.0f\ncapacity %.0f · shelter %.0f%%", tile.FloraStock+tile.FaunaStock, tile.FloraCap+tile.FaunaCap, tile.WaterStock, tile.WaterCap, tile.EcologicalK, tile.NaturalShelter*100),
+		Hint:         "Compare the cyan target inspector before\ncommitting a migration.",
+	}
+}
+
+func EventFieldNote(event gameapi.Event) render.FieldNote {
+	return render.FieldNote{
+		Topic:        event.Kind.String(),
+		Introduction: event.Summary,
+		Context:      fmt.Sprintf("Recorded on turn %d for band %d.", event.Turn, event.BandID),
+		GameEffect:   "The accepted frame already includes this\nevent's simulation consequences.",
+		Hint:         "Review population, health, and mortality\nchanges in the selected-band panel.",
+	}
+}

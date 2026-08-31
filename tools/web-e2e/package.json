@@ -1,0 +1,13 @@
+{
+  "name": "africa2ice-web-e2e",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "install-browser": "playwright install --with-deps chromium",
+    "profile": "node profile.mjs",
+    "test": "node smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}
