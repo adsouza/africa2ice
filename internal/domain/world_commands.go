@@ -105,6 +105,12 @@ func (world *World) Split(id BandID, destination TileID, player bool) error {
 	if !adjacent {
 		return ErrSplitDestinationNotAdjacent
 	}
+	// Checked before the terrain is inspected, and enforced here rather than
+	// left to the caller: Split reveals its destination, so without this the
+	// aggregate would hand a player the fog-of-war gate QueueMigration applies.
+	if player && !world.IsExplored(destination) {
+		return ErrSplitDestinationUnexplored
+	}
 	if destination >= TileCount || world.habitat[destination].BaselineK <= 0 {
 		return ErrSplitDestinationUninhabitable
 	}

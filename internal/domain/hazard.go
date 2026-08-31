@@ -166,20 +166,24 @@ const (
 
 const MaxAcuteProbability = 0.25
 
-var acuteBiomeBase = [BiomeCount][4]float64{
-	RiverineWoodland:     {0.015, 0.035, 0.030, 0.010},
-	Savanna:              {0.025, 0.015, 0.010, 0.015},
-	CoastalShrubland:     {0.015, 0.020, 0.040, 0.015},
-	MountainousHighlands: {0.015, 0.010, 0.020, 0.045},
-	SemiAridDesert:       {0.010, 0.010, 0.010, 0.040},
-	GlacialTundra:        {0.020, 0.010, 0.010, 0.055},
+// acuteBiomeBase and acuteSeasonFactor are indexed by AcuteKind, so they are
+// sized by AcuteKindCount and the compiler checks that every kind has a column.
+// AcuteCrossingMishap carries a zero base because crossing risk is not
+// environmental: it enters entirely through workRisk and passageAcuteRisk.
+var acuteBiomeBase = [BiomeCount][AcuteKindCount]float64{
+	RiverineWoodland:     {AcutePredation: 0.015, AcuteDiseaseOutbreak: 0.035, AcuteFloodStorm: 0.030, AcuteExposureFall: 0.010},
+	Savanna:              {AcutePredation: 0.025, AcuteDiseaseOutbreak: 0.015, AcuteFloodStorm: 0.010, AcuteExposureFall: 0.015},
+	CoastalShrubland:     {AcutePredation: 0.015, AcuteDiseaseOutbreak: 0.020, AcuteFloodStorm: 0.040, AcuteExposureFall: 0.015},
+	MountainousHighlands: {AcutePredation: 0.015, AcuteDiseaseOutbreak: 0.010, AcuteFloodStorm: 0.020, AcuteExposureFall: 0.045},
+	SemiAridDesert:       {AcutePredation: 0.010, AcuteDiseaseOutbreak: 0.010, AcuteFloodStorm: 0.010, AcuteExposureFall: 0.040},
+	GlacialTundra:        {AcutePredation: 0.020, AcuteDiseaseOutbreak: 0.010, AcuteFloodStorm: 0.010, AcuteExposureFall: 0.055},
 }
 
-var acuteSeasonFactor = [SeasonCount][4]float64{
-	SeasonWarm:    {1.0, 1.2, 1.2, 0.8},
-	SeasonCooling: {1.0, 1.0, 1.0, 1.0},
-	SeasonCold:    {0.9, 0.8, 0.8, 1.3},
-	SeasonWarming: {1.0, 1.0, 1.1, 1.0},
+var acuteSeasonFactor = [SeasonCount][AcuteKindCount]float64{
+	SeasonWarm:    {1.0, 1.2, 1.2, 0.8, AcuteCrossingMishap: 1.0},
+	SeasonCooling: {1.0, 1.0, 1.0, 1.0, AcuteCrossingMishap: 1.0},
+	SeasonCold:    {0.9, 0.8, 0.8, 1.3, AcuteCrossingMishap: 1.0},
+	SeasonWarming: {1.0, 1.0, 1.1, 1.0, AcuteCrossingMishap: 1.0},
 }
 
 var acutePartition = [AcuteKindCount][protectionClassCount]float64{
@@ -240,10 +244,7 @@ func acuteTechnologyMitigation(band Band, kind AcuteKind, class protectionClass)
 func AcuteProbabilities(band Band, tile TileGeography, habitat HabitatTile, season Season, workRisk [AcuteKindCount]float64, crossed bool, passage PassageID, kinContacts int) [AcuteKindCount]float64 {
 	result := [AcuteKindCount]float64{}
 	for kind := AcuteKind(0); kind < AcuteKindCount; kind++ {
-		environmentWeight := 0.0
-		if kind != AcuteCrossingMishap {
-			environmentWeight = float64(acuteBiomeBase[habitat.Biome][kind] * acuteSeasonFactor[season][kind])
-		}
+		environmentWeight := float64(acuteBiomeBase[habitat.Biome][kind] * acuteSeasonFactor[season][kind])
 		for class := protectionClass(0); class < protectionClassCount; class++ {
 			base := float64(environmentWeight * acutePartition[kind][class])
 			if class == protectionUncovered {

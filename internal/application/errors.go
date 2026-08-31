@@ -28,6 +28,8 @@ func mapDomainError(err error) error {
 		code = gameapi.ErrSplitDestinationNotAdjacent
 	case errors.Is(err, domain.ErrSplitDestinationUninhabitable):
 		code = gameapi.ErrSplitDestinationUninhabitable
+	case errors.Is(err, domain.ErrSplitDestinationUnexplored):
+		code = gameapi.ErrSplitDestinationUnexplored
 	case errors.Is(err, domain.ErrBandLimitReached):
 		code = gameapi.ErrBandLimitReached
 	case errors.Is(err, domain.ErrBandIDExhausted):

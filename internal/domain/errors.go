@@ -15,6 +15,7 @@ var (
 	ErrSplitPopulationTooLow         = errors.New("population is too low to split")
 	ErrSplitDestinationNotAdjacent   = errors.New("split destination is not adjacent land")
 	ErrSplitDestinationUninhabitable = errors.New("split destination is uninhabitable")
+	ErrSplitDestinationUnexplored    = errors.New("split destination is unexplored")
 	ErrBandLimitReached              = errors.New("band limit reached")
 	ErrBandIDExhausted               = errors.New("band identifier exhausted")
 	ErrMissingTechnologyPrerequisite = errors.New("missing technology prerequisite")

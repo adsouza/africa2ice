@@ -91,7 +91,14 @@ func ResearchGain(workers float64) float64 {
 	return float64(MaxResearchPerTurn * q)
 }
 
-func (state *TechnologyState) ApplyResearch(workers float64) float64 {
+// PlannedResearchGain is what one turn of toolcraft adds to the band's current
+// research target: the production curve, capped by what the target still needs.
+// It returns zero when there is nothing to research.
+//
+// The turn pipeline computes this during resolution but applies it later, in
+// applyKnowledgeAndGenetics, where it lands alongside whatever the same
+// technology gained from contact with neighbouring bands.
+func (state TechnologyState) PlannedResearchGain(workers float64) float64 {
 	if !state.HasTarget || state.Target >= TechCount || state.Has(state.Target) || !state.PrerequisitesMet(state.Target) {
 		return 0
 	}
@@ -100,13 +107,26 @@ func (state *TechnologyState) ApplyResearch(workers float64) float64 {
 	if gain > remaining {
 		gain = remaining
 	}
-	state.Progress[state.Target] += gain
-	if state.Progress[state.Target] >= ResearchCost[state.Target] {
-		state.Progress[state.Target] = ResearchCost[state.Target]
-		state.Acquired |= 1 << state.Target
-		state.HasTarget = false
-	}
 	return gain
+}
+
+// AdvanceResearch adds gain to one technology's progress, acquiring it and
+// clearing the research target once the cost is met. It is the only place
+// progress becomes ownership, so research and knowledge diffusion complete a
+// technology by the same rule.
+func (state *TechnologyState) AdvanceResearch(technology Technology, gain float64) {
+	if technology >= TechCount || state.Has(technology) || !state.PrerequisitesMet(technology) {
+		return
+	}
+	progress := state.Progress[technology] + gain
+	if progress >= ResearchCost[technology] {
+		progress = ResearchCost[technology]
+		state.Acquired |= 1 << technology
+		if state.HasTarget && state.Target == technology {
+			state.HasTarget = false
+		}
+	}
+	state.Progress[technology] = progress
 }
 
 func (state TechnologyState) CapacityMultiplier() float64 {

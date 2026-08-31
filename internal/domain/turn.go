@@ -188,13 +188,7 @@ func (world *World) advanceTurn() error {
 			NutritionDelta: nutritionDelta, WaterHealthLoss: waterHealthLoss,
 			DiseaseHealthLoss: diseaseHealthLoss, GeneticBurdenHealthLoss: geneticHealthLoss,
 		}
-		if band.Technology.HasTarget && !band.Technology.Has(band.Technology.Target) && band.Technology.PrerequisitesMet(band.Technology.Target) {
-			work[index].researchGain = ResearchGain(band.Workers(Toolcraft))
-			remaining := ResearchCost[band.Technology.Target] - band.Technology.Progress[band.Technology.Target]
-			if work[index].researchGain > remaining {
-				work[index].researchGain = remaining
-			}
-		}
+		work[index].researchGain = band.Technology.PlannedResearchGain(band.Workers(Toolcraft))
 		work[index].selection = SelectionDeltas(*band, geography, nextHabitat[band.TileID], season, work[index].animalFoodShare)
 		effectiveK := float64(float64(nextHabitat[band.TileID].BaselineK*(1-nextTiles[band.TileID].Degradation)) * band.Technology.CapacityMultiplier())
 		effectiveK = float64(effectiveK * macroImpacts[band.TileID].HabitatFactor)

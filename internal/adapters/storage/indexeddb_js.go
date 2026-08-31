@@ -346,13 +346,7 @@ func (repository *IndexedDBRepository) list() ([]application.SaveMetadata, error
 
 func indexedMetadataFor(slot application.SlotID, sequence uint64, generation string, state application.SaveState) application.SaveMetadata {
 	metadata := application.SaveMetadata{SlotID: slot, CommitSequence: sequence, Generation: generation, SchemaVersion: state.SchemaVersion, CampaignClockAlgorithm: state.CampaignClockAlgorithm, WorldRevision: state.WorldRevision, Turn: state.Turn, SavedAt: time.Now().UTC()}
-	for _, band := range state.Bands {
-		if band.Species == 0 {
-			metadata.SapiensPopulation += uint64(band.Population)
-		} else {
-			metadata.ArchaicPopulation += uint64(band.Population)
-		}
-	}
+	metadata.SapiensPopulation, metadata.ArchaicPopulation = state.PopulationBySpecies()
 	return metadata
 }
 

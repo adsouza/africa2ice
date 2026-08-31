@@ -162,7 +162,10 @@ func routeDistances(frame *gameapi.Frame, target gameapi.Region, habitatWeighted
 			continue
 		}
 		tile := frame.Tiles[current]
-		neighbors := passagePeers[current]
+		// Copied rather than appended to in place: passagePeers owns that slice,
+		// and appending to a map value with spare capacity would overwrite
+		// another tile's peer list.
+		neighbors := append([]gameapi.TileID(nil), passagePeers[current]...)
 		for dy := -1; dy <= 1; dy++ {
 			for dx := -1; dx <= 1; dx++ {
 				if dx == 0 && dy == 0 {
@@ -178,6 +181,14 @@ func routeDistances(frame *gameapi.Frame, target gameapi.Region, habitatWeighted
 					if !horizontal || !vertical {
 						continue
 					}
+				}
+				// The domain refuses escarpment edges, so a plan that crossed one
+				// would steer the route leader at a wall. Only discovered
+				// escarpments reach the frame, so this tightens the plan as the
+				// campaign explores rather than making it exact; the domain's own
+				// candidate list stays authoritative.
+				if gameapi.EscarpmentBlocks(frame, current, neighbor) {
+					continue
 				}
 				neighbors = append(neighbors, neighbor)
 			}

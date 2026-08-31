@@ -17,6 +17,7 @@ var playerErrorMessages = map[gameapi.ErrorCode]string{
 	gameapi.ErrSplitPopulationTooLow:         "This band is too small to divide into two viable bands.",
 	gameapi.ErrSplitDestinationNotAdjacent:   "A new band can only establish on an eligible neighboring tile.",
 	gameapi.ErrSplitDestinationUninhabitable: "The proposed new band cannot survive on that destination tile.",
+	gameapi.ErrSplitDestinationUnexplored:    "That area is unexplored; scout it before settling a new band there.",
 	gameapi.ErrBandLimitReached:              "The campaign has reached the 256-band limit; a band must disappear before another can split.",
 	gameapi.ErrBandIDExhausted:               "No additional band identifiers remain in this campaign.",
 	gameapi.ErrMissingTechnologyPrerequisite: "That research is locked until its prerequisite technology has been learned.",

@@ -109,3 +109,42 @@ func TestTerminalWorldRejectsEveryPlanningCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestPlayerSplitRequiresAnExploredDestination(t *testing.T) {
+	world, err := NewWorld(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	world.bands[0].Population = 10_000
+	// An adjacent habitable tile the campaign has not scouted. Exploration is
+	// seeded around East Africa, so clear the bit rather than hunting for a
+	// tile that starts hidden.
+	var destination TileID
+	found := false
+	for _, edge := range world.grid.OrdinaryEdges(world.bands[0].TileID) {
+		if world.habitat[edge.To].BaselineK > 0 {
+			destination, found = edge.To, true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("starting band has no habitable neighbour")
+	}
+	world.exploredTiles[destination/64] &^= uint64(1) << (destination % 64)
+
+	if err := world.Split(1, destination, true); !errors.Is(err, ErrSplitDestinationUnexplored) {
+		t.Fatalf("player split into unexplored tile = %v, want ErrSplitDestinationUnexplored", err)
+	}
+	if got := len(world.Bands()); got != len(StartingAnchors) {
+		t.Fatalf("rejected split still created a band: %d", got)
+	}
+	// The archaic planner is not a player and keeps its own reach.
+	if err := world.Split(1, destination, false); err != nil {
+		t.Fatalf("non-player split into unexplored tile = %v", err)
+	}
+	// And an explored destination is still accepted.
+	world.markExplored(destination)
+	if !world.IsExplored(destination) {
+		t.Fatal("destination did not become explored")
+	}
+}

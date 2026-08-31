@@ -181,11 +181,11 @@ jobs:
           path: web
       - run: npm --prefix tools/web-e2e ci
       - run: npm --prefix tools/web-e2e run install-browser
-      - name: Re-run compressed wasm size gate
-        shell: bash
-        env:
-          WASM_SIZE_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        run: ./tools/check_wasm_size.sh web/main.wasm release-readiness-wasm-size.json
+      # The compressed wasm size gate is not repeated here. web-release runs it
+      # before it uploads, and this job needs that job, so the bundle downloaded
+      # above has already passed against the same budget file and base ref. A
+      # second brotli -q 11 pass over the identical bytes costs minutes and can
+      # only ever agree, and its record was being discarded rather than uploaded.
       - name: Re-run route and benchmark readiness gates
         run: ./tools/check_release_readiness.sh
       - name: Re-run smoke against the tested optimized bundle

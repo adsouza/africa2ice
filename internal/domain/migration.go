@@ -39,7 +39,7 @@ func (world *World) MigrationCandidates(id BandID) []MigrationCandidate {
 		return nil
 	}
 	populationByTile := world.populationByTile()
-	return world.migrationCandidates(world.bands[index], &populationByTile)
+	return world.migrationCandidates(world.bands[index], &populationByTile, nil)
 }
 
 // MigrationCandidatesByBand scores every band against one shared population
@@ -47,11 +47,12 @@ func (world *World) MigrationCandidates(id BandID) []MigrationCandidate {
 // built once rather than once per band.
 func (world *World) MigrationCandidatesByBand() []BandMigrationCandidates {
 	populationByTile := world.populationByTile()
+	edges := make([]GridEdge, 0, MaxGridNeighbors)
 	result := make([]BandMigrationCandidates, len(world.bands))
 	for index, band := range world.bands {
 		result[index] = BandMigrationCandidates{
 			BandID:     band.ID,
-			Candidates: world.migrationCandidates(band, &populationByTile),
+			Candidates: world.migrationCandidates(band, &populationByTile, edges),
 		}
 	}
 	return result
@@ -67,9 +68,11 @@ func (world *World) populationByTile() [TileCount]uint64 {
 	return populationByTile
 }
 
-func (world *World) migrationCandidates(band Band, populationByTile *[TileCount]uint64) []MigrationCandidate {
+// migrationCandidates scores one band. edges is an optional scratch buffer the
+// batch form reuses across bands; a nil buffer simply allocates one.
+func (world *World) migrationCandidates(band Band, populationByTile *[TileCount]uint64, edges []GridEdge) []MigrationCandidate {
 	result := make([]MigrationCandidate, 0, MaxGridNeighbors+MaxPassageEdgesPerTile)
-	for _, edge := range world.grid.OrdinaryEdges(band.TileID) {
+	for _, edge := range world.grid.AppendOrdinaryEdges(edges[:0], band.TileID) {
 		if world.habitat[edge.To].BaselineK <= 0 || band.Species == HomoSapiens && !world.IsExplored(edge.To) {
 			continue
 		}

@@ -13,6 +13,7 @@ const (
 	ErrSplitPopulationTooLow         ErrorCode = "split_population_too_low"
 	ErrSplitDestinationNotAdjacent   ErrorCode = "split_destination_not_adjacent"
 	ErrSplitDestinationUninhabitable ErrorCode = "split_destination_uninhabitable"
+	ErrSplitDestinationUnexplored    ErrorCode = "split_destination_unexplored"
 	ErrBandLimitReached              ErrorCode = "band_limit_reached"
 	ErrBandIDExhausted               ErrorCode = "band_id_exhausted"
 	ErrMissingTechnologyPrerequisite ErrorCode = "missing_technology_prerequisite"

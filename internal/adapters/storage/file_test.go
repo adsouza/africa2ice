@@ -4,6 +4,7 @@ package storage
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -68,7 +69,11 @@ func TestFileRepositoryWriteReadListDelete(t *testing.T) {
 	}
 }
 
-func TestFileRepositoryOverwriteKeepsImmutableGenerations(t *testing.T) {
+// Records are immutable while they are reachable. Once a newer commit
+// supersedes a generation, its payload is reclaimed: a campaign autosaves every
+// turn, and keeping every turn's world forever would grow the save directory
+// without bound.
+func TestFileRepositoryOverwriteCommitsANewGeneration(t *testing.T) {
 	repository, _ := NewFileRepository(t.TempDir())
 	defer func() { _ = repository.Close() }()
 	firstService, _ := application.NewGameService(1)
@@ -108,5 +113,107 @@ func TestFileRepositorySecondProcessViewIsReadOnly(t *testing.T) {
 	state, _ := service.ExportSaveState()
 	if err := second.BeginWrite(1, application.Manual1, state); err == nil {
 		t.Fatal("read-only repository accepted write")
+	}
+}
+
+func slotFiles(t *testing.T, directory string) (meta, world int) {
+	t.Helper()
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		switch {
+		case strings.Contains(entry.Name(), "_meta_"):
+			meta++
+		case strings.Contains(entry.Name(), "_world_"):
+			world++
+		}
+	}
+	return meta, world
+}
+
+// Autosave writes one world payload per turn. Superseded records must be
+// reclaimed, and the commit sequence must come from memory rather than a rescan
+// of every metadata file, or the cost of a save grows with the campaign.
+func TestFileRepositoryReclaimsSupersededRecords(t *testing.T) {
+	directory := t.TempDir()
+	repository, err := NewFileRepository(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = repository.Close() }()
+	for turn := range 6 {
+		service, _ := application.NewGameService(uint64(turn) + 1)
+		state, _ := service.ExportSaveState()
+		if err := repository.BeginWrite(application.RepositoryOpID(turn+1), application.Auto1, state); err != nil {
+			t.Fatal(err)
+		}
+		completion := waitCompletion(t, repository)
+		if completion.Err != nil {
+			t.Fatalf("turn %d write = %v", turn, completion.Err)
+		}
+		if got := completion.Metadata.CommitSequence; got != uint64(turn+1) {
+			t.Fatalf("turn %d commit sequence = %d, want %d", turn, got, turn+1)
+		}
+	}
+	if meta, world := slotFiles(t, directory); meta != 1 || world != 1 {
+		t.Fatalf("after six saves: %d metadata and %d world files, want 1 and 1", meta, world)
+	}
+
+	// The newest save is still readable after everything before it went away.
+	if err := repository.BeginRead(100, application.Auto1); err != nil {
+		t.Fatal(err)
+	}
+	read := waitCompletion(t, repository)
+	if read.Err != nil || read.State == nil || read.State.WorldSeed != 6 {
+		t.Fatalf("newest generation not readable after pruning: %#v", read)
+	}
+
+	// A delete marker names no generation, so the payload goes too.
+	if err := repository.BeginDelete(101, application.Auto1); err != nil {
+		t.Fatal(err)
+	}
+	if deleted := waitCompletion(t, repository); deleted.Err != nil {
+		t.Fatal(deleted.Err)
+	}
+	if meta, world := slotFiles(t, directory); meta != 1 || world != 0 {
+		t.Fatalf("after delete: %d metadata and %d world files, want 1 and 0", meta, world)
+	}
+}
+
+// A fresh process must not reissue a commit sequence an earlier one already
+// used, or autosave rotation would compare stale numbers across slots.
+func TestFileRepositoryResumesCommitSequenceAcrossProcesses(t *testing.T) {
+	directory := t.TempDir()
+	first, err := NewFileRepository(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, _ := application.NewGameService(4)
+	state, _ := service.ExportSaveState()
+	for index := range 3 {
+		if err := first.BeginWrite(application.RepositoryOpID(index+1), application.SlotID(int(application.Auto1)+index), state); err != nil {
+			t.Fatal(err)
+		}
+		if completion := waitCompletion(t, first); completion.Err != nil {
+			t.Fatal(completion.Err)
+		}
+	}
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := NewFileRepository(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = second.Close() }()
+	if err := second.BeginWrite(9, application.Manual1, state); err != nil {
+		t.Fatal(err)
+	}
+	resumed := waitCompletion(t, second)
+	if resumed.Err != nil || resumed.Metadata.CommitSequence != 4 {
+		t.Fatalf("resumed commit sequence = %#v, want 4", resumed.Metadata)
 	}
 }

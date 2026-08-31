@@ -50,7 +50,7 @@ func Run(game gameapi.Game, seed uint64, turns int, policy Policy) ([]Checkpoint
 		return nil, err
 	}
 	margins := runMargins{firstDestinationTurn: -1}
-	initialDestinations := destinationSet(frame)
+	initialDestinations := establishedDestinations(frame)
 	records := make([]CheckpointRecord, 0, turns/100+1)
 	if record, checkpointErr := checkpoint(game, frame, seed, policy, margins); checkpointErr != nil {
 		return nil, checkpointErr
@@ -79,19 +79,7 @@ func Run(game gameapi.Game, seed uint64, turns int, policy Policy) ([]Checkpoint
 			return nil, fmt.Errorf("turn %d policy %s end: %w", frameTurn(frame), policy.Name, err)
 		}
 		if margins.firstDestinationTurn < 0 {
-			newDestinations := destinationSet(frame)
-			for region := range newDestinations {
-				if initialDestinations[region] {
-					continue
-				}
-				margins.firstDestinationTurn = frame.Turn
-				for _, band := range frame.Bands {
-					if band.Species == gameapi.HomoSapiens && tileRegion(frame, band.TileID) == region && band.Population > margins.firstDestinationPopulation {
-						margins.firstDestinationPopulation = band.Population
-					}
-				}
-				break
-			}
+			margins.observeDestinations(frame, initialDestinations)
 		}
 		if frame.Turn%100 == 0 || frame.Turn == turns || frame.CampaignResult != gameapi.Ongoing {
 			record, checkpointErr := checkpoint(game, frame, seed, policy, margins)
@@ -127,19 +115,57 @@ func frameTurn(frame *gameapi.Frame) int {
 	return frame.Turn
 }
 
-func destinationSet(frame *gameapi.Frame) map[gameapi.Region]bool {
-	result := make(map[gameapi.Region]bool, len(destinationRegions))
+// destinationSet reports which destinations hold an established sapiens band,
+// indexed by position in destinationRegions. It is a fixed-size array rather
+// than a map so that every consumer walks the destinations in one declared
+// order: firstDestinationPopulation reaches the cross-target checkpoint record,
+// and Go randomizes map iteration.
+type destinationSet [len(destinationRegions)]bool
+
+func establishedDestinations(frame *gameapi.Frame) destinationSet {
+	var result destinationSet
 	if frame == nil {
 		return result
 	}
 	for _, established := range frame.SapiensEstablishedRegions {
-		for _, destination := range destinationRegions {
+		for index, destination := range destinationRegions {
 			if established == destination {
-				result[established] = true
+				result[index] = true
 			}
 		}
 	}
 	return result
+}
+
+// observeDestinations records the turn on which any destination region first
+// became established, and the largest established sapiens band standing in one
+// of the regions newly established on that turn. It takes the maximum over
+// every newly established destination and applies the same MinEstablishedBand
+// floor as domain.RunPolicyCampaign, so both drivers report one number.
+func (margins *runMargins) observeDestinations(frame *gameapi.Frame, initial destinationSet) {
+	current := establishedDestinations(frame)
+	var newly destinationSet
+	found := false
+	for index := range current {
+		if current[index] && !initial[index] {
+			newly[index], found = true, true
+		}
+	}
+	if !found {
+		return
+	}
+	margins.firstDestinationTurn = frame.Turn
+	for _, band := range frame.Bands {
+		if band.Species != gameapi.HomoSapiens || band.Population < gameapi.MinEstablishedBand {
+			continue
+		}
+		region := tileRegion(frame, band.TileID)
+		for index, destination := range destinationRegions {
+			if newly[index] && region == destination && band.Population > margins.firstDestinationPopulation {
+				margins.firstDestinationPopulation = band.Population
+			}
+		}
+	}
 }
 
 // DumpMap returns the fixed grid as a biome layer followed by a region layer.

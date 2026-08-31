@@ -8,15 +8,7 @@ type geneticPartner struct {
 }
 
 func ordinaryContact(grid *Grid, left, right TileID) bool {
-	if left == right {
-		return true
-	}
-	for _, edge := range grid.OrdinaryEdges(left) {
-		if edge.To == right {
-			return true
-		}
-	}
-	return false
+	return left == right || grid.OrdinaryNeighbors(left, right)
 }
 
 func knowledgeContact(grid *Grid, left, right Band) bool {
@@ -71,15 +63,7 @@ func applyKnowledgeAndGenetics(bands []Band, grid *Grid, research map[BandID]flo
 			if state.HasTarget && state.Target == technology {
 				gain += research[snapshot[index].ID]
 			}
-			progress := state.Progress[technology] + gain
-			if progress >= ResearchCost[technology] {
-				progress = ResearchCost[technology]
-				state.Acquired |= 1 << technology
-				if state.HasTarget && state.Target == technology {
-					state.HasTarget = false
-				}
-			}
-			state.Progress[technology] = progress
+			state.AdvanceResearch(technology, gain)
 		}
 		bands[index].Technology = state
 	}

@@ -14,8 +14,15 @@ func ProjectSaveState(state SaveState) (*gameapi.Frame, error) {
 	if err != nil {
 		return nil, err
 	}
-	service := &GameService{world: world, worldRevision: state.WorldRevision, terrainRevision: 1}
-	return service.projectFrame()
+	return newProjectionService(world, state.WorldRevision).projectFrame()
+}
+
+// newProjectionService builds a service that only ever projects. It still
+// installs a clock: pollAutosaveClock dereferences that field unconditionally,
+// so leaving it nil would make the projection path one accidental method call
+// away from a nil-interface panic.
+func newProjectionService(world *domain.World, revision uint64) *GameService {
+	return &GameService{world: world, worldRevision: revision, terrainRevision: 1, clock: systemMonotonicClock{}}
 }
 
 func (service *GameService) projectFrame() (*gameapi.Frame, error) {

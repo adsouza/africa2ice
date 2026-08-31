@@ -32,6 +32,12 @@ type FileRepository struct {
 	completions chan application.RepositoryCompletion
 	done        chan struct{}
 	closeOnce   sync.Once
+	// sequence is the last commit sequence this process issued. It is scanned
+	// from disk once and then advanced in memory, so a long campaign's
+	// per-turn autosaves do not re-read every metadata record on every write.
+	// Only the worker goroutine touches it.
+	sequence       uint64
+	sequenceLoaded bool
 }
 
 func NewFileRepository(directory string) (*FileRepository, error) {
@@ -154,18 +160,13 @@ func (repository *FileRepository) write(slot application.SlotID, state applicati
 	if err := writeImmutable(metaPath, metadataBytes); err != nil {
 		return nil, err
 	}
+	repository.pruneSupersededRecords(slot, sequence, generation)
 	return &metadata, nil
 }
 
 func metadataFor(slot application.SlotID, sequence uint64, generation string, state application.SaveState) application.SaveMetadata {
 	metadata := application.SaveMetadata{SlotID: slot, CommitSequence: sequence, Generation: generation, SchemaVersion: state.SchemaVersion, CampaignClockAlgorithm: state.CampaignClockAlgorithm, WorldRevision: state.WorldRevision, Turn: state.Turn, SavedAt: time.Now().UTC()}
-	for _, band := range state.Bands {
-		if band.Species == 0 {
-			metadata.SapiensPopulation += uint64(band.Population)
-		} else {
-			metadata.ArchaicPopulation += uint64(band.Population)
-		}
-	}
+	metadata.SapiensPopulation, metadata.ArchaicPopulation = state.PopulationBySpecies()
 	return metadata
 }
 
@@ -262,11 +263,17 @@ func (repository *FileRepository) delete(slot application.SlotID) (*application.
 		return nil, err
 	}
 	metadata := application.SaveMetadata{SlotID: slot, CommitSequence: sequence, Deleted: true}
-	data, _ := json.Marshal(metadata)
+	data, err := json.Marshal(metadata)
+	if err != nil {
+		return nil, err
+	}
 	path := filepath.Join(repository.directory, fmt.Sprintf("slot_%d_meta_%020d.json", slot, sequence))
 	if err := writeImmutable(path, data); err != nil {
 		return nil, err
 	}
+	// The delete marker names no generation, so every world payload for this
+	// slot is now unreachable.
+	repository.pruneSupersededRecords(slot, sequence, "")
 	return &metadata, nil
 }
 
@@ -282,6 +289,24 @@ func (repository *FileRepository) list() ([]application.SaveMetadata, error) {
 }
 
 func (repository *FileRepository) nextSequence() (uint64, error) {
+	if !repository.sequenceLoaded {
+		highest, err := repository.highestRecordedSequence()
+		if err != nil {
+			return 0, err
+		}
+		repository.sequence, repository.sequenceLoaded = highest, true
+	}
+	if repository.sequence == ^uint64(0) {
+		return 0, errors.New("commit sequence exhausted")
+	}
+	repository.sequence++
+	return repository.sequence, nil
+}
+
+// highestRecordedSequence reads what previous processes committed. Sequences
+// are global across slots because autosave rotation compares them between
+// slots to pick the oldest.
+func (repository *FileRepository) highestRecordedSequence() (uint64, error) {
 	entries, err := filepath.Glob(filepath.Join(repository.directory, "slot_*_meta_*.json"))
 	if err != nil {
 		return 0, err
@@ -297,10 +322,34 @@ func (repository *FileRepository) nextSequence() (uint64, error) {
 			maximum = metadata.CommitSequence
 		}
 	}
-	if maximum == ^uint64(0) {
-		return 0, errors.New("commit sequence exhausted")
+	return maximum, nil
+}
+
+// pruneSupersededRecords drops the records a slot no longer needs: metadata
+// below the newest commit, and every world payload except the one that commit
+// names. Records stay immutable while they are reachable; without this a
+// campaign that autosaves every turn leaves a full world payload per turn on
+// disk forever. Best effort, and never fatal to a save that already committed.
+func (repository *FileRepository) pruneSupersededRecords(slot application.SlotID, keepSequence uint64, keepGeneration string) {
+	metaPrefix := fmt.Sprintf("slot_%d_meta_", slot)
+	keepMeta := fmt.Sprintf("%s%020d.json", metaPrefix, keepSequence)
+	keepWorld := ""
+	if keepGeneration != "" {
+		keepWorld = fmt.Sprintf("slot_%d_world_%s.json", slot, keepGeneration)
 	}
-	return maximum + 1, nil
+	for _, pattern := range []string{metaPrefix + "*.json", fmt.Sprintf("slot_%d_world_*.json", slot)} {
+		entries, err := filepath.Glob(filepath.Join(repository.directory, pattern))
+		if err != nil {
+			continue
+		}
+		for _, path := range entries {
+			switch filepath.Base(path) {
+			case keepMeta, keepWorld:
+				continue
+			}
+			_ = os.Remove(path)
+		}
+	}
 }
 
 var _ application.CampaignRepository = (*FileRepository)(nil)

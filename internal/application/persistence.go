@@ -148,6 +148,29 @@ type OutcomeReportSave struct {
 	AcuteDiseaseHealthLoss  float64 `json:"acute_disease_health_loss"`
 }
 
+// SavedHomoSapiens and SavedArchaicHominin name the BandSave.Species encoding.
+// The wire form is a bare uint8, so without these an adapter has to hardcode
+// the domain enum's ordering to read a save it is not allowed to import.
+const (
+	SavedHomoSapiens    uint8 = uint8(domain.HomoSapiens)
+	SavedArchaicHominin uint8 = uint8(domain.ArchaicHominin)
+)
+
+// PopulationBySpecies totals the saved bands. Repository adapters record these
+// in slot metadata, so the classification lives here with the encoding it
+// depends on rather than being retyped once per adapter.
+func (save SaveState) PopulationBySpecies() (sapiens, archaic uint64) {
+	for _, band := range save.Bands {
+		switch band.Species {
+		case SavedHomoSapiens:
+			sapiens += uint64(band.Population)
+		case SavedArchaicHominin:
+			archaic += uint64(band.Population)
+		}
+	}
+	return sapiens, archaic
+}
+
 func SaveStateFromWorld(world *domain.World, revision uint64) (SaveState, error) {
 	state, err := world.ExportState()
 	if err != nil {

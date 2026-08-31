@@ -179,6 +179,9 @@ func buildTemporalRoute(grid *Grid, target Region) (*temporalRoute, error) {
 		costs[index] = unreachableRouteCost
 	}
 	route := &temporalRoute{target: target, costs: costs, stepCosts: stepCosts}
+	// Reused across every tile of every turn: this loop asks the grid for edges
+	// TileCount*(MaxCampaignTurn+1) times.
+	edges := make([]GridEdge, 0, MaxGridNeighbors)
 	for turn := MaxCampaignTurn; turn >= 0; turn-- {
 		for id := range TileCount {
 			tileID := TileID(id)
@@ -212,7 +215,7 @@ func buildTemporalRoute(grid *Grid, target Region) (*temporalRoute, error) {
 				}
 			}
 			consider(tileID)
-			for _, edge := range grid.OrdinaryEdges(tileID) {
+			for _, edge := range grid.AppendOrdinaryEdges(edges[:0], tileID) {
 				consider(edge.To)
 			}
 			for _, passage := range passageCatalog {

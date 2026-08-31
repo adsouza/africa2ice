@@ -44,29 +44,64 @@ func (g *Grid) OrdinaryEdges(from TileID) []GridEdge {
 	if g == nil || from >= TileCount || !g.tiles[from].Land {
 		return nil
 	}
-	x, y, _ := TileXY(from)
-	result := make([]GridEdge, 0, 8)
-	for _, delta := range neighborOrder {
-		to, err := TileIDAt(x+delta.dx, y+delta.dy)
-		if err != nil || !g.tiles[to].Land {
-			continue
-		}
-		diagonal := delta.dx != 0 && delta.dy != 0
-		if diagonal {
-			horizontal, hErr := TileIDAt(x+delta.dx, y)
-			vertical, vErr := TileIDAt(x, y+delta.dy)
-			if hErr != nil || vErr != nil || !g.tiles[horizontal].Land || !g.tiles[vertical].Land {
-				continue
-			}
-		}
-		if g.EscarpmentBlocks(from, to) {
-			continue
-		}
-		length := 1.0
-		if diagonal {
-			length = math.Sqrt2
-		}
-		result = append(result, GridEdge{To: to, StepLength: length})
+	return g.AppendOrdinaryEdges(make([]GridEdge, 0, MaxGridNeighbors), from)
+}
+
+// AppendOrdinaryEdges appends from's legal one-step moves to buffer and returns
+// the extended slice. The turn pipeline walks the grid inside loops quadratic in
+// the band count and, when planning routes, once per land tile per turn; those
+// callers pass a reused buffer so walking it costs nothing to allocate.
+func (g *Grid) AppendOrdinaryEdges(buffer []GridEdge, from TileID) []GridEdge {
+	if g == nil || from >= TileCount || !g.tiles[from].Land {
+		return buffer
 	}
-	return result
+	x, y, _ := TileXY(from)
+	for _, delta := range neighborOrder {
+		if edge, ok := g.ordinaryEdge(from, x, y, delta.dx, delta.dy); ok {
+			buffer = append(buffer, edge)
+		}
+	}
+	return buffer
+}
+
+// OrdinaryNeighbors reports whether one ordinary land move connects the tiles.
+// The contact predicates only ever asked the grid this question, and answering
+// it directly avoids materializing an edge list per pair of bands.
+func (g *Grid) OrdinaryNeighbors(from, to TileID) bool {
+	if g == nil || from >= TileCount || to >= TileCount || !g.tiles[from].Land {
+		return false
+	}
+	x, y, _ := TileXY(from)
+	for _, delta := range neighborOrder {
+		if edge, ok := g.ordinaryEdge(from, x, y, delta.dx, delta.dy); ok && edge.To == to {
+			return true
+		}
+	}
+	return false
+}
+
+// ordinaryEdge is the single authority on whether one step is legal, so the
+// list, append, and predicate forms cannot drift apart. (x, y) are from's
+// coordinates, already resolved by the caller.
+func (g *Grid) ordinaryEdge(from TileID, x, y, dx, dy int) (GridEdge, bool) {
+	to, err := TileIDAt(x+dx, y+dy)
+	if err != nil || !g.tiles[to].Land {
+		return GridEdge{}, false
+	}
+	diagonal := dx != 0 && dy != 0
+	if diagonal {
+		horizontal, hErr := TileIDAt(x+dx, y)
+		vertical, vErr := TileIDAt(x, y+dy)
+		if hErr != nil || vErr != nil || !g.tiles[horizontal].Land || !g.tiles[vertical].Land {
+			return GridEdge{}, false
+		}
+	}
+	if g.EscarpmentBlocks(from, to) {
+		return GridEdge{}, false
+	}
+	length := 1.0
+	if diagonal {
+		length = math.Sqrt2
+	}
+	return GridEdge{To: to, StepLength: length}, true
 }
