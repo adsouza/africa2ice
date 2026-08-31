@@ -19,6 +19,7 @@ func TestDiagnoseMigrationGeneralRejections(t *testing.T) {
 		{name: "unexplored water does not leak terrain", destination: 2, want: MigrationBlockedUnexplored},
 		{name: "explored water", destination: 3, want: MigrationBlockedWater},
 		{name: "uninhabitable land", destination: 4, want: MigrationBlockedUninhabitable},
+		{name: "escarpment", destination: 9, want: MigrationBlockedEscarpment},
 		{name: "blocked diagonal", destination: 5, want: MigrationBlockedDiagonal},
 		{name: "more than one tile away", destination: 6, want: MigrationBlockedTooFar},
 		{name: "adjacent without a route", destination: 7, want: MigrationBlockedNoRoute},
@@ -110,7 +111,9 @@ func migrationFixture() (*gameapi.Frame, *gameapi.Band) {
 		{ID: 6, X: 3, Y: 0, Land: true, Explored: true, BaselineK: 100},
 		{ID: 7, X: -1, Y: 0, Land: true, Explored: true, BaselineK: 100},
 		{ID: 8, X: -1, Y: -1, Land: true, Explored: true, BaselineK: 100},
+		{ID: 9, X: 0, Y: 1, Land: true, Explored: true, BaselineK: 100},
 	}}
+	frame.Escarpments = []gameapi.Escarpment{{Name: "Test Front", First: 0, Second: 9}}
 	band := &gameapi.Band{
 		ID: 1, Species: gameapi.HomoSapiens, TileID: 0,
 		MigrationCandidates: []gameapi.MigrationCandidate{{TileID: 1}, {TileID: 8}},

@@ -39,6 +39,7 @@ const (
 var (
 	unexploredTileColor    = color.RGBA{R: 6, G: 11, B: 15, A: 255}
 	archaicBandMarkerColor = color.RGBA{R: 201, G: 103, B: 82, A: 255}
+	escarpmentColor        = color.RGBA{R: 220, G: 142, B: 88, A: 255}
 )
 
 type MapScene struct {
@@ -171,6 +172,7 @@ func (scene *MapScene) drawFrame(screen *ebiten.Image, frame *gameapi.Frame, sel
 	scene.drawMapLegend(screen, frame.Climate.AridityIndex)
 	scene.drawTerrain(screen, frame)
 	scene.drawReachableTiles(screen, frame, selectedBand)
+	scene.drawEscarpments(screen, frame)
 	for _, passage := range frame.Passages {
 		lineColor, visible := passageColorForRender(frame, passage)
 		if !visible {
@@ -213,6 +215,46 @@ func (scene *MapScene) drawFrame(screen *ebiten.Image, frame *gameapi.Frame, sel
 		vector.FillRect(screen, 28, 610, 650, 30, color.RGBA{R: 26, G: 38, B: 45, A: 240}, false)
 		scene.drawText(screen, notice, 40, 617, 14, color.RGBA{R: 239, G: 220, B: 178, A: 255})
 	}
+}
+
+func (scene *MapScene) drawEscarpments(screen *ebiten.Image, frame *gameapi.Frame) {
+	for _, edge := range frame.Escarpments {
+		if int(edge.First) >= len(frame.Tiles) || int(edge.Second) >= len(frame.Tiles) {
+			continue
+		}
+		first, second := frame.Tiles[edge.First], frame.Tiles[edge.Second]
+		if !first.Explored || !second.Explored {
+			continue
+		}
+		fromX, fromY, toX, toY, ok := escarpmentLine(first, second)
+		if !ok {
+			continue
+		}
+		vector.StrokeLine(screen, fromX, fromY, toX, toY, 3, color.RGBA{R: 48, G: 31, B: 26, A: 235}, false)
+		vector.StrokeLine(screen, fromX, fromY, toX, toY, 1.35, escarpmentColor, false)
+	}
+}
+
+func escarpmentLine(first, second gameapi.Tile) (float32, float32, float32, float32, bool) {
+	dx, dy := second.X-first.X, second.Y-first.Y
+	if absRenderInt(dx)+absRenderInt(dy) != 1 {
+		return 0, 0, 0, 0, false
+	}
+	left := mapOriginX + float32(min(first.X, second.X)*mapTileSize)
+	top := mapOriginY + float32(min(first.Y, second.Y)*mapTileSize)
+	if dx != 0 {
+		x := left + mapTileSize
+		return x, top, x, top + mapTileSize, true
+	}
+	y := top + mapTileSize
+	return left, y, left + mapTileSize, y, true
+}
+
+func absRenderInt(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
 
 func (scene *MapScene) drawMenuOverlay(screen *ebiten.Image) {
@@ -448,11 +490,16 @@ func (scene *MapScene) drawTimeline(screen *ebiten.Image, frame *gameapi.Frame, 
 func (scene *MapScene) drawMapLegend(screen *ebiten.Image, aridity float64) {
 	vector.FillRect(screen, mapOriginX, mapLegendOriginY, 864, mapLegendHeight, color.RGBA{R: 18, G: 27, B: 33, A: 245}, false)
 	entries := mapLegendEntries(aridity)
-	const entryWidth = float32(108)
+	const entryWidth = float32(96)
 	for index, entry := range entries {
 		x := float32(mapOriginX) + float32(index)*entryWidth
-		vector.FillRect(screen, x+4, mapLegendOriginY+4, 8, 8, entry.color, false)
-		vector.StrokeRect(screen, x+4, mapLegendOriginY+4, 8, 8, 0.7, color.RGBA{R: 210, G: 216, B: 210, A: 180}, false)
+		if entry.edge {
+			vector.StrokeLine(screen, x+4, mapLegendOriginY+8, x+12, mapLegendOriginY+8, 3, color.RGBA{R: 48, G: 31, B: 26, A: 235}, false)
+			vector.StrokeLine(screen, x+4, mapLegendOriginY+8, x+12, mapLegendOriginY+8, 1.35, entry.color, false)
+		} else {
+			vector.FillRect(screen, x+4, mapLegendOriginY+4, 8, 8, entry.color, false)
+			vector.StrokeRect(screen, x+4, mapLegendOriginY+4, 8, 8, 0.7, color.RGBA{R: 210, G: 216, B: 210, A: 180}, false)
+		}
 		scene.drawText(screen, entry.label, x+15, mapLegendOriginY+1, 8.5, color.RGBA{R: 235, G: 236, B: 226, A: 255})
 		scene.drawText(screen, entry.meaning, x+4, mapLegendOriginY+13, 7, color.RGBA{R: 167, G: 184, B: 181, A: 255})
 	}

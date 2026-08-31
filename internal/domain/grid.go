@@ -3,8 +3,11 @@ package domain
 import "math"
 
 type Grid struct {
-	tiles  [TileCount]TileGeography
-	biomes []Biome
+	tiles              [TileCount]TileGeography
+	biomes             []Biome
+	escarpments        [MaxEscarpmentEdges]EscarpmentEdge
+	escarpmentCount    int
+	escarpmentEdgeMask [TileCount]uint8
 }
 
 func (g *Grid) Tile(id TileID) (TileGeography, bool) {
@@ -55,6 +58,9 @@ func (g *Grid) OrdinaryEdges(from TileID) []GridEdge {
 			if hErr != nil || vErr != nil || !g.tiles[horizontal].Land || !g.tiles[vertical].Land {
 				continue
 			}
+		}
+		if g.EscarpmentBlocks(from, to) {
+			continue
 		}
 		length := 1.0
 		if diagonal {

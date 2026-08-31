@@ -14,6 +14,7 @@ type Frame struct {
 	Climate                   ClimateSummary
 	MacroEpisodes             []MacroEpisodeSummary
 	Passages                  []Passage
+	Escarpments               []Escarpment
 	SapiensEstablishedRegions []Region
 	Tiles                     []Tile
 	Bands                     []Band
@@ -59,6 +60,13 @@ type Passage struct {
 	Status   PassageStatus
 	Cost     float64
 	Explored bool
+}
+
+// Escarpment is an explored, impassable boundary between two cardinally
+// adjacent land tiles.
+type Escarpment struct {
+	Name          string
+	First, Second TileID
 }
 
 type Tile struct {

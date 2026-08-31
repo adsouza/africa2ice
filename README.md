@@ -12,9 +12,11 @@ Current controls:
 - use the arrow keys to move a destination cursor anywhere in the band's one-turn neighborhood, including corners; Enter queues the selected migration and Esc clears it (named passages remain clickable);
 - a red arrow marks the keyboard-selected or queued migration until it is cleared or the next turn resolves it;
 - the fixed top-down map keeps every tile aligned with its grid location; biome color, fog, reachable
-  outlines, band markers, and migration arrows share that one unambiguous surface;
+  outlines, band markers, migration arrows, and ochre impassable-escarpment edges share that one
+  unambiguous surface;
 - band rows show last-turn population and health changes, while the selected band names the leading causes of any decline;
-- click any other map tile to see why it is not currently reachable, including water, uninhabitable terrain, and locked passages;
+- click any other map tile to see why it is not currently reachable, including water, uninhabitable
+  terrain, steep escarpments, and locked passages;
 - Tab/Shift+Tab selects the next/previous sapiens band, with wraparound;
 - Space ends the turn;
 - 1–9 selects the named research shown in the persistent research-key legend, and N splits a band;

@@ -13,10 +13,11 @@ type mapLegendEntry struct {
 	label   string
 	meaning string
 	color   color.RGBA
+	edge    bool
 }
 
-func mapLegendEntries(aridity float64) [8]mapLegendEntry {
-	return [8]mapLegendEntry{
+func mapLegendEntries(aridity float64) [9]mapLegendEntry {
+	return [9]mapLegendEntry{
 		{label: "Riverine woodland", meaning: "plant food; disease", color: climateBiomeColor(gameapi.RiverineWoodland, aridity)},
 		{label: "Savanna", meaning: "mixed food; drought", color: climateBiomeColor(gameapi.Savanna, aridity)},
 		{label: "Coastal shrubland", meaning: "aquatic food; storms", color: climateBiomeColor(gameapi.CoastalShrubland, aridity)},
@@ -25,6 +26,7 @@ func mapLegendEntries(aridity float64) [8]mapLegendEntry {
 		{label: "Glacial tundra", meaning: "little plant food; freezing", color: climateBiomeColor(gameapi.GlacialTundra, aridity)},
 		{label: "Water", meaning: "cannot be occupied", color: EpochGrade(aridity).Water},
 		{label: "Unknown", meaning: "not yet explored", color: unexploredTileColor},
+		{label: "Escarpment", meaning: "impassable edge", color: escarpmentColor, edge: true},
 	}
 }
 
@@ -91,6 +93,8 @@ func targetTileSummary(frame *gameapi.Frame, band *gameapi.Band, preview Migrati
 		summary.chronicRisk = candidate.ChronicMortalityRate
 		summary.crowdingDecline = candidate.CrowdingDecline
 		summary.hasRisk = true
+	} else if gameapi.EscarpmentBlocks(frame, band.TileID, tileID) {
+		summary.status = status + " · escarpment blocks approach"
 	} else {
 		summary.status = status + " · not reachable"
 	}

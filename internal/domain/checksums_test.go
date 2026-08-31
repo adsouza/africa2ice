@@ -28,6 +28,7 @@ const (
 	elevationChecksum       = 0x55e2e631a779654d
 	naturalShelterChecksum  = 0x3d9a7aac56ee8ad9
 	baseMoistureChecksum    = 0xc2893007e359e3c5
+	escarpmentChecksum      = 0x1c4adbba2758b419
 	latitudeTableChecksum   = 0xf15ec7fbe87b9a7b
 	orbitalTableChecksum    = 0x31dccd8a94047833
 	seasonalTableChecksum   = 0x18a2c4d6211e0ab8
@@ -63,6 +64,11 @@ func (a *accumulator) addBool(value bool) {
 }
 
 func (a *accumulator) addInt(value int) { a.addUint64(uint64(value)) }
+
+func (a *accumulator) addString(value string) {
+	a.addInt(len(value))
+	_, _ = a.hash.Write([]byte(value))
+}
 
 func generatedGrid(t *testing.T) *Grid {
 	t.Helper()
@@ -146,6 +152,15 @@ func TestFrozenGeographyChecksums(t *testing.T) {
 	expectChecksum(t, "base moisture", tileChecksum(t, grid, func(a *accumulator, tile TileGeography) {
 		a.addFloat(tile.BaseMoisture)
 	}), baseMoistureChecksum)
+
+	escarpments := newAccumulator()
+	for index, edge := range grid.Escarpments() {
+		escarpments.addInt(index)
+		escarpments.addString(edge.Name)
+		escarpments.addUint64(uint64(edge.First))
+		escarpments.addUint64(uint64(edge.Second))
+	}
+	expectChecksum(t, "escarpment catalog", escarpments.sum(), escarpmentChecksum)
 }
 
 func TestFrozenTableChecksums(t *testing.T) {

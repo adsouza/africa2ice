@@ -150,6 +150,27 @@ func TestMapSceneDrawsTerrainVisibilityBandsAndPassagesOffscreen(t *testing.T) {
 	}
 }
 
+func TestMapSceneDrawsEscarpmentBoundaryOffscreen(t *testing.T) {
+	frame := representativeRenderFrame()
+	frame.Tiles[1] = gameapi.Tile{ID: 1, X: 1, Y: 0, Land: true, Explored: true, Biome: gameapi.MountainousHighlands}
+	frame.Escarpments = []gameapi.Escarpment{{Name: "Test Front", First: 0, Second: 1}}
+	wantFrame := cloneRenderFrame(frame)
+	image := renderMapOffscreen(t, frame, 7, MigrationPreview{}, FieldNote{}, false, EndScene{}, "")
+	defer image.Deallocate()
+	if !reflect.DeepEqual(frame, wantFrame) {
+		t.Fatal("drawing the escarpment mutated the accepted frame")
+	}
+	if escarpmentColor.R < 160 || escarpmentColor.G < 80 || escarpmentColor.B > 130 {
+		t.Fatalf("escarpment color = %v, want visible ochre", escarpmentColor)
+	}
+
+	boundaryX := mapOriginX + mapTileSize
+	fromX, fromY, toX, toY, ok := escarpmentLine(frame.Tiles[0], frame.Tiles[1])
+	if !ok || fromX != float32(boundaryX) || toX != float32(boundaryX) || fromY != mapOriginY || toY != mapOriginY+mapTileSize {
+		t.Fatalf("escarpment line = (%.0f,%.0f)-(%.0f,%.0f), %t", fromX, fromY, toX, toY, ok)
+	}
+}
+
 func TestMapSceneCachesTerrainByTerrainRevisionAndAridity(t *testing.T) {
 	frame := representativeRenderFrame()
 	screen := ebiten.NewImage(1280, 720)
@@ -373,6 +394,7 @@ func cloneRenderFrame(frame *gameapi.Frame) *gameapi.Frame {
 	clone.Tiles = append([]gameapi.Tile(nil), frame.Tiles...)
 	clone.Bands = append([]gameapi.Band(nil), frame.Bands...)
 	clone.Passages = append([]gameapi.Passage(nil), frame.Passages...)
+	clone.Escarpments = append([]gameapi.Escarpment(nil), frame.Escarpments...)
 	clone.MacroEpisodes = append([]gameapi.MacroEpisodeSummary(nil), frame.MacroEpisodes...)
 	clone.SapiensEstablishedRegions = append([]gameapi.Region(nil), frame.SapiensEstablishedRegions...)
 	for index := range clone.Bands {

@@ -79,9 +79,15 @@ func TestGameServiceRevisionsAndPlayerAuthority(t *testing.T) {
 func TestFrameIsolationAcrossProjections(t *testing.T) {
 	service, _ := NewGameService(2)
 	old, _ := service.Snapshot()
+	if len(old.Escarpments) == 0 {
+		t.Fatal("initially explored East Africa projects no escarpments")
+	}
 	old.Bands[0].Population = 999
 	old.Tiles[0].ElevationKm = 999
 	old.Tiles[0].LocalTemperatureC = 999
+	if len(old.Escarpments) > 0 {
+		old.Escarpments[0].Name = "mutated"
+	}
 	if len(old.Bands[0].MigrationCandidates) > 0 {
 		old.Bands[0].MigrationCandidates[0].SeasonalMortalityRate = 999
 	}
@@ -89,6 +95,11 @@ func TestFrameIsolationAcrossProjections(t *testing.T) {
 	fresh, _ := service.Snapshot()
 	if fresh.Bands[0].Population == 999 || fresh.Tiles[0].ElevationKm == 999 || fresh.Tiles[0].LocalTemperatureC == 999 {
 		t.Fatal("frame aliases a prior projection")
+	}
+	for _, edge := range fresh.Escarpments {
+		if edge.Name == "mutated" {
+			t.Fatal("escarpment projection aliases a prior frame")
+		}
 	}
 	for _, candidate := range fresh.Bands[0].MigrationCandidates {
 		if candidate.TileID == 6000 || candidate.SeasonalMortalityRate == 999 {

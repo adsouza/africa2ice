@@ -62,6 +62,15 @@ func TestWorldGenerationDeterministic(t *testing.T) {
 	if a.Tiles() != b.Tiles() {
 		t.Fatal("geography generation is not deterministic")
 	}
+	aEdges, bEdges := a.Escarpments(), b.Escarpments()
+	if len(aEdges) != len(bEdges) {
+		t.Fatal("escarpment generation is not deterministic")
+	}
+	for index := range aEdges {
+		if aEdges[index] != bEdges[index] {
+			t.Fatal("escarpment generation is not deterministic")
+		}
+	}
 }
 
 func TestProjectionRoundTripAtCorners(t *testing.T) {

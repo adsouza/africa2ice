@@ -86,6 +86,14 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 			frame.SapiensEstablishedRegions = append(frame.SapiensEstablishedRegions, mapRegion(region))
 		}
 	}
+	for _, edge := range grid.Escarpments() {
+		if !service.world.IsExplored(edge.First) || !service.world.IsExplored(edge.Second) {
+			continue
+		}
+		frame.Escarpments = append(frame.Escarpments, gameapi.Escarpment{
+			Name: edge.Name, First: gameapi.TileID(edge.First), Second: gameapi.TileID(edge.Second),
+		})
+	}
 	for _, passage := range domain.Passages() {
 		status := gameapi.PassageOpen
 		if passage.ClimateGated && !domain.BeringiaOpen(climate.LongTermTempOffset) {

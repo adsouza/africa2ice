@@ -10,8 +10,8 @@ import (
 
 func TestMapLegendExplainsEveryRenderedTileClass(t *testing.T) {
 	entries := mapLegendEntries(0.4)
-	if len(entries) != int(gameapi.BiomeCount)+2 {
-		t.Fatalf("legend entries = %d, want %d", len(entries), gameapi.BiomeCount+2)
+	if len(entries) != int(gameapi.BiomeCount)+3 {
+		t.Fatalf("legend entries = %d, want %d", len(entries), gameapi.BiomeCount+3)
 	}
 	seen := map[string]bool{}
 	for _, entry := range entries {
@@ -23,10 +23,13 @@ func TestMapLegendExplainsEveryRenderedTileClass(t *testing.T) {
 		}
 		seen[entry.label] = true
 	}
-	for _, label := range []string{"Riverine woodland", "Savanna", "Coastal shrubland", "Mountain highlands", "Semi-arid desert", "Glacial tundra", "Water", "Unknown"} {
+	for _, label := range []string{"Riverine woodland", "Savanna", "Coastal shrubland", "Mountain highlands", "Semi-arid desert", "Glacial tundra", "Water", "Unknown", "Escarpment"} {
 		if !seen[label] {
 			t.Fatalf("legend is missing %q", label)
 		}
+	}
+	if !entries[8].edge {
+		t.Fatal("escarpment legend entry is not presented as an edge")
 	}
 }
 
@@ -41,8 +44,8 @@ func TestLegendUsesStableBiomeIdentityAndTheLiveAtmosphericWaterGrade(t *testing
 			t.Fatalf("atmospheric grade changed %s's biome identity", biome)
 		}
 	}
-	if humid[6].color == arid[6].color || humid[7].color != arid[7].color {
-		t.Fatal("water did not follow the grade, or unexplored terrain did")
+	if humid[6].color == arid[6].color || humid[7].color != arid[7].color || humid[8].color != arid[8].color {
+		t.Fatal("water did not follow the grade, or fixed overlay colors changed")
 	}
 }
 

@@ -21,6 +21,7 @@ const (
 	MigrationBlockedPassageTechnology
 	MigrationBlockedPassageClimate
 	MigrationBlockedPassageUnavailable
+	MigrationBlockedEscarpment
 	MigrationBlockedDiagonal
 	MigrationBlockedTooFar
 	MigrationBlockedNoRoute
@@ -97,6 +98,9 @@ func DiagnoseMigration(frame *gameapi.Frame, band *gameapi.Band, destination gam
 			return MigrationDiagnostic{Reason: MigrationBlockedPassageUnavailable, Passage: passage.ID}
 		}
 	}
+	if gameapi.EscarpmentBlocks(frame, band.TileID, destination) {
+		return MigrationDiagnostic{Reason: MigrationBlockedEscarpment}
+	}
 	origin := frame.Tiles[band.TileID]
 	dx, dy := absInt(tile.X-origin.X), absInt(tile.Y-origin.Y)
 	if dx == 1 && dy == 1 {
@@ -134,6 +138,8 @@ func MigrationDiagnosticMessage(diagnostic MigrationDiagnostic, band *gameapi.Ba
 		return "Beringia is closed; long-term cooling must expose the land bridge first."
 	case MigrationBlockedPassageUnavailable:
 		return fmt.Sprintf("%s cannot be used from here right now.", diagnostic.Passage)
+	case MigrationBlockedEscarpment:
+		return "A steep escarpment blocks entry from this direction."
 	case MigrationBlockedDiagonal:
 		return "No traversable route: diagonal moves cannot cut across a water corner."
 	case MigrationBlockedTooFar:

@@ -554,7 +554,8 @@ accepted planning command, completed turn, or successful load. The frame is a pl
 holding campaign turn/year/era/calendar progress, `Season`, the global long-term/seasonal/noise
 offsets, the long-term moisture offset with its derived `AridityIndex` and `ClimateEpoch`,
 bounded regional abrupt-offset vector, per-tile total offset, and warned/current/elapsed
-`MacroEpisodes`, `Passages []gameapi.Passage`,
+`MacroEpisodes`, `Passages []gameapi.Passage`, explored
+`Escarpments []gameapi.Escarpment`,
 `SapiensEstablishedRegions []Region`, `Tiles []gameapi.Tile`,
 `Bands []gameapi.Band`, closed `CampaignResult` (`Ongoing`, `Victory`, `Extinction`, or
 `DispersalFailed`), the bounded `Events []gameapi.Event` feed, and the derived cache key
@@ -753,6 +754,7 @@ its internal archaic policy exactly once before phase 1, as specified in §7.
 ```text
 O(
     len(Tiles) * (1 + FaunaGroupCount)
+  + len(Escarpments)
   + len(Bands) * (10 + TechCount + HeritableTraitCount + AssignmentCount + PassageCount)
   + CrossSpeciesCoLocatedPairs
 )
@@ -772,7 +774,7 @@ colors.
 
 ### The honest limit of this guarantee
 
-`Frame` contains slices, including `Passages`, `SapiensEstablishedRegions`, `Events`, and nested
+`Frame` contains slices, including `Passages`, `Escarpments`, `SapiensEstablishedRegions`, `Events`, and nested
 `Band.MigrationCandidates` and `Band.InterbreedCandidateIDs`, so draw code _can_ write to them. What it cannot do is reach the
 simulation by doing so: writing to a frame corrupts only that frame, which is discarded at the next
 snapshot replacement. Snapshot projection never exposes or aliases domain-owned storage: every slice
@@ -1271,7 +1273,7 @@ land and all water therefore sit at the model's `0 km` reference. There is no ra
 interpolation, slope, depression, sea-level change, or separate render-only height field in v1.
 
 The catalog, strict threshold, land clipping, and maximum-overlap rule belong to
-`GeographyAlgorithm: "dispersal-map-v2"`. The resulting fixed tile elevations drive temperature,
+`GeographyAlgorithm: "dispersal-map-v3"`. The resulting fixed tile elevations drive temperature,
 biome classification, orographic moisture, altitude UV, hypoxia pressure, and the top-down highland
 classification and inspector, but are
 derived geography rather than mutable or serialized campaign state. The Initial values may be tuned
@@ -1285,7 +1287,31 @@ and uncovered land; finite tile values in `[0, 3]`; maximum-overlap and feature-
 independence; and a checked-in exact `Float64bits` checksum of all 6,144 tile elevations. Boundary
 fixtures classify synthetic elevations `1 ulp` below, exactly at, and `1 ulp` above the threshold.
 
-**Starting-band anchors.** New-world placement uses eight authored geographic anchors rather than
+### Authored escarpment edges
+
+Elevation alone does not define a climbable slope at this map resolution: a highland polygon gives a
+broad representative plateau height, not a gradient within each coarse tile. V1 therefore authors a
+sparse catalog of impassable **cardinal land-tile boundaries**. Each boundary blocks travel in both
+directions; descending a sheer face is no safer for a migrating band than ascending it. Omitted
+boundaries are deliberate passes, not data gaps.
+
+| Stable order | Feature              | First `(x,y)` | Second `(x,y)` |
+| -----------: | -------------------- | ------------: | -------------: |
+|          0–3 | Ethiopian Escarpment | `(22,31)`, `(22,32)`, `(22,34)`, `(22,35)` | matching `(23,y)` |
+|          4–6 | Ethiopian Escarpment | `(27,33)`, `(27,34)`, `(27,35)` | matching `(28,y)` |
+|            7 | Ethiopian Escarpment | `(24,29)` | `(24,30)` |
+|          8–9 | Ethiopian Escarpment | `(24,35)`, `(26,35)` | matching `(x,36)` |
+|        10–16 | Himalayan Escarpment | `(42,24)`, `(43,24)`, `(44,24)`, `(46,24)`, `(48,24)`, `(49,24)`, `(50,24)` | matching `(x,25)` |
+
+`MaxEscarpmentEdges = 24` bounds the catalog and leaves seven entries of structural headroom. World
+generation resolves the 17 entries after land and elevation rasterization and rejects an empty name,
+out-of-bounds endpoint, non-cardinal pair, water endpoint, duplicate boundary, or pair without an
+elevation change. The resulting stable catalog and a checked-in checksum belong to
+`GeographyAlgorithm: "dispersal-map-v3"`; they are reconstructed geography and add no save field.
+The barrier and diagonal-corner interpretation belong to `MovementAlgorithm` below. Changing either
+catalog or interpretation after release requires the corresponding algorithm-version migration.
+
+**Starting-band anchors.** New-world placement uses ten authored geographic anchors rather than
 choosing arbitrary cells after the raster exists. They are broad gameplay starting areas, not claims
 that each band represents a population at one exact archaeological site:
 
@@ -1466,7 +1492,7 @@ change visible without storing per-tile cave state in the save.
 The rating is immutable geography, independent of world seed, current biome, climate, degradation,
 and resident population. It is not inferred merely from elevation or a biome label: a biome change
 must not create or remove caves. World generation and load reconstruction use projection/land data
-under `GeographyAlgorithm: "dispersal-map-v2"` and shelter catalog/raster rules under
+under `GeographyAlgorithm: "dispersal-map-v3"` and shelter catalog/raster rules under
 `NaturalShelterMaskAlgorithm`, consume no `WorldRNG`, and validate finite in-range ratings. After
 release, changing the table, mask equation, or rating changes the natural-shelter-mask identifier;
 changing projection or land changes both identifiers because it changes the rasterized mask. Either
@@ -4571,7 +4597,12 @@ phase-4 revalidation. From `(x, y)`, the eight possible direction deltas are the
 `1`. A diagonal edge has step length `math.Sqrt2` and exists only when both
 orthogonal corner tiles `(x+dx, y)` and `(x, y+dy)` are also land. The corner test uses the fixed
 land mask, not current habitability or biome, so climate changes cannot make the graph asymmetric or
-open a water shortcut. Destination habitability remains a separate current-turn eligibility check.
+open a water shortcut. An ordinary cardinal edge is also omitted when its shared boundary is in
+§6's authored escarpment catalog. A diagonal edge is omitted when **any** of the four cardinal sides
+of its enclosing square is an escarpment: origin-to-horizontal, origin-to-vertical,
+horizontal-to-destination, or vertical-to-destination. Thus diagonal movement cannot jump around a
+one-cell cliff. Authored gaps remain traversable passes. Destination habitability remains a separate
+current-turn eligibility check.
 For an ordinary edge from `i` to `j`:
 
 ```
@@ -4631,6 +4662,12 @@ exactly one edge in one turn; there is no hidden multi-edge pathfinding inside `
 identifiers. The identifier is selected now,
 while v1 is unreleased; it is the only supported movement-cost identifier, and no migration from a
 provisional identifier exists.
+
+`MovementAlgorithm: "eight-way-escarpment-corners-v2"` versions the stable eight-direction order,
+land and water-corner tests, symmetric escarpment blocking, and four-side diagonal rule. Candidate
+generation, migration and split validation, queued-move revalidation, computer policy, and spatial
+contact all consume this one `Grid.OrdinaryEdges` relation; none may reconstruct a more permissive
+neighbor rule.
 
 This makes `MaxGridNeighbors = 8` and therefore caps a band's candidate list at
 `8 + MaxPassageEdgesPerTile = 10`. The edge relation is symmetric: if `i` has an ordinary edge to
@@ -6545,7 +6582,7 @@ detail modes. This is deliberate: a highland tile must never create a dark shape
 unexplored or impassable tile, and the visual route between two cells must match the migration graph
 rather than perspective geometry.
 
-Terrain, exploration, passage overlays, reachable highlights, migration arrows, and band markers
+Terrain, exploration, escarpment and passage overlays, reachable highlights, migration arrows, and band markers
 all use the same cell formula. A tile's marker point is the center of its 9 × 9 cell. Rendering and
 picking therefore cannot disagree because of elevation or view angle.
 
@@ -6753,11 +6790,17 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   range nor the total. This page is derived from the selected ID and accepted frame and adds no
   independent scroll position or saved UI state.
 - **Persistent terrain legend:** the strip immediately above the map shows a swatch and a short
-  liveability explanation for each of the six biome classes, plus open water and unexplored terrain.
+  liveability explanation for each of the six biome classes, plus open water, unexplored terrain,
+  and the ochre escarpment-edge mark.
   Biome swatches use the same current palette function as their map tiles, not a duplicated set of
   approximate colors. The accompanying text names the characteristic resource opportunity and
   principal environmental hazard; water says it cannot be occupied and unexplored terrain says its
   details are not yet known. The legend therefore remains meaningful without color perception.
+- **Escarpment overlay:** once both endpoint tiles are explored, draw each authored escarpment as a
+  dark-backed ochre rule on their shared cell boundary. Hidden endpoints reveal no partial line.
+  A rejected pointer click or keyboard confirmation says “A steep escarpment blocks entry from this
+  direction,” and the target inspector labels that approach as blocked. The line and text are
+  presentation of the projected catalog; render code never infers barriers from elevation color.
 - **Reachability overlay:** when the selected sapiens band still has its spatial action, every tile
   in its authoritative `MigrationCandidates` list receives a cyan outline and the first-ranked
   candidate receives a gold outline. A persistent legend explains both colors, and turn-0 Field
@@ -7129,7 +7172,7 @@ world. No JSON tag, slot ID, schema version, or migration branch appears in `int
 
 `SaveState.SchemaVersion` starts at `1`. The state includes `WorldSeed`,
 `CampaignClockAlgorithm: "four-era-v1"`,
-`GeographyAlgorithm: "dispersal-map-v2"`, `ClimateAlgorithm: "hybrid-abrupt-moisture-v1"`,
+`GeographyAlgorithm: "dispersal-map-v3"`, `ClimateAlgorithm: "hybrid-abrupt-moisture-v1"`,
 `NaturalShelterMaskAlgorithm: "authored-ellipse-v1"`,
 `TemperatureAlgorithm: "lat-elev-offset-v1"`,
 `MacroEventAlgorithm: "bounded-regional-v1"`,
@@ -7153,7 +7196,7 @@ world. No JSON tag, slot ID, schema version, or migration branch appears in `int
 `GeneticSelectionAlgorithm: "trait-functions-v1"`,
 `GeneFlowAlgorithm: "local-reciprocal-v1"`,
 `MutationAlgorithm: "rare-emergence-v1"`,
-`MovementAlgorithm: "eight-way-no-water-corners-v1"`,
+`MovementAlgorithm: "eight-way-escarpment-corners-v2"`,
 `MovementCostAlgorithm: "destination-vegetation-v1"`,
 `PassageAlgorithm: "named-asymmetric-v1"`, `ResourceAlgorithm: "toward-cap-v1"`,
 `HazardAlgorithm: "split-v1"`,
@@ -7181,7 +7224,8 @@ requires—under its matching supported clock identifier—to equal `CampaignDat
 turn span after release requires a new clock version and an explicit migration because the climate
 curve, macro-episode activation, and every displayed date depend on it. No genetics rule reads the
 clock: mutation emergence is ungated, so cutting `HbS` removed the clock's only genetics consumer.
-`GeographyAlgorithm` versions the grid projection and land/water, region, highland, river, and fixed
+`GeographyAlgorithm` versions the grid projection and land/water, region, highland, river, authored
+escarpment-edge catalog, and fixed
 base-moisture geography, including §6's numeric elevation catalog, `HighlandElevationKm`, land
 clipping, maximum-overlap rule, and checked elevation checksum. Elevation is reconstructed from that
 supported geography and never serialized. A geography change therefore also changes every downstream
@@ -7373,7 +7417,7 @@ population, position, technology, and mortality fields.
 `ClimateEpoch`,
 bounded regional abrupt-offset vector, and per-tile total,
 warned/current/elapsed macro-episode summaries and per-tile impact factors, `BeringiaOpen`,
-`Frame.Passages`, ordinary edges and their step
+`Frame.Passages`, explored `Frame.Escarpments`, ordinary edges and their step
 lengths/directed costs, `ElevationKm`, biome, fauna profiles/`FaunaSummary`, `NaturalShelter`, `BaselineK`,
 `EcologicalK`, resource caps, destination membership,
 region membership for every tile and band,
@@ -7890,7 +7934,8 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    The combined acceptance contract implements §§6–7's clock, climate, habitat, and macro-event
    contracts with their fixtures as specified there: `four-era-v1`'s exact
    80,000/50,000/35,000/25,000/20,000 BP endpoints and 300/150/100/50-year spans;
-   `dispersal-map-v2`'s authored elevation catalog and strict highland threshold;
+   `dispersal-map-v3`'s authored elevation and escarpment catalogs, strict highland threshold,
+   stable escarpment checksum, and deliberate pass fixtures;
    `lat-elev-offset-v1` with its 64-row table and checksum; the orbital, seasonal, and precession
    tables under that same bit-pattern, tolerance, and checksum discipline; the abrupt-pulse catalog
    and the shared regional climate-response table; `BeringiaOpenFraction` and its attainability
@@ -8019,7 +8064,8 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    distribution under a binding cap is not mistaken for a mitigation regression.
    Implement §7's hazard, movement, and passage contracts here with their fixtures as specified
    there: the acute probability partition and its shared cap, the acute-severity bounds, the
-   one-or-two-draw accounting, `destination-vegetation-v1` ordinary edge costs,
+   one-or-two-draw accounting, `eight-way-escarpment-corners-v2` topology and
+   `destination-vegetation-v1` ordinary edge costs,
    `named-asymmetric-v1` with its `4.00`/`4.50`/`3.00` route costs and eligibility rules, the
    migration attraction score with its water survival-equivalent term, and `ranked-pressure-v1`.
 
@@ -8256,9 +8302,10 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    retained harness through the desktop `-screenshot` and `-turns` flags for the §13 visual smoke
    test.
 
-   Grid tests cover exact half-open map bounds, representative tile IDs, shared marker/picking
+   Grid tests cover exact half-open map bounds, representative tile IDs, authored escarpment
+   boundaries and passes, four-side diagonal rejection, shared marker/picking
    centers, every land biome, water, and unexplored cells. Offscreen scenarios assert reachable
-   highlights, migration arrows, passage states, species-distinct markers, and at most one marker for
+   highlights, migration arrows, escarpment and passage states, species-distinct markers, and at most one marker for
    each of the at most 256 bands. Fog tests cover exact explored cutouts, no hidden
    biome/elevation/marker/full-passage leakage, and ignored hidden picking. A planning-only frame and
    idle drawing reuse the cached terrain image; a terrain revision or changed water grade rebuilds
@@ -8576,7 +8623,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
     named crossing is required. Run the sapiens reference policy plus `ranked-pressure-v1` across a
     exact `BalanceSeedCorpus` declared by the determinism contract, never exceeding `MaxBands`; the
     reference seed must win, while extinction and dispersal-failed runs remain possible.
-    Validate without retuning the eight starting bands, fixed 50/50 split, authored starting anchors
+    Validate without retuning the ten starting bands, fixed 50/50 split, authored starting anchors
     and their frozen resolved tile IDs, Toba no-effect marker, Campanian identity/date, and checked-in
     Campanian masks/checksums. Run §8's native benchmarks, automated browser timeouts, and complete
     reference-machine profile. Both top-down DPR floors must pass. Finish with
@@ -8868,7 +8915,9 @@ assert, so nothing here re-verifies a numeric fixture by hand — a person click
 arithmetic proves less than the test that already runs on every push, and takes an afternoon.
 
 *Top-down rendering and picking.* Biome colours, explored water, fog, reachable highlights, migration
-arrows, and species markers must remain distinct across the grid. Hover representative flat and
+arrows, ochre escarpment boundaries, and species markers must remain distinct across the grid. Confirm
+that a blocked approach produces the escarpment explanation and that an authored pass remains usable.
+Hover representative flat and
 highland cells and confirm the tile inspector resolves the cell under the pointer, including at map
 edges; the tile's elevation appears in the inspector but never shifts its visual or clickable cell.
 
@@ -9291,6 +9340,8 @@ Earlier fixtures use explicit values that are never release data.
 | `OrographicBonus`                           | `0.10`                                                                         | Initial | `GeographyAlgorithm`          |
 | Authored elevation catalog                  | §6 ten height-valued highland polygons; `1.25–3.0 km`, maximum on overlap       | Initial | `GeographyAlgorithm`          |
 | `HighlandElevationKm`                       | `1.0 km`; strict `ElevationKm > HighlandElevationKm` classification             | Initial | `GeographyAlgorithm`          |
+| Authored escarpment catalog                 | §6 exact 17 cardinal land-boundary entries with deliberate pass gaps            | Locked  | `GeographyAlgorithm`          |
+| `MaxEscarpmentEdges`                        | `24`                                                                            | Locked  | `GeographyAlgorithm`          |
 | `ExplorationWordCount`                      | `6_144 / 64 = 96`                                                              | Derived | `ExplorationAlgorithm`        |
 | Campaign length                             | `400` turn transitions                                                         | Locked  | `CampaignClockAlgorithm`      |
 | Era boundaries                              | turns `100`, `200`, `300`                                                      | Locked  | `CampaignClockAlgorithm`      |
@@ -9466,6 +9517,7 @@ Earlier fixtures use explicit values that are never release data.
 | `MinSplitSourcePopulation`                                 | `2 × MinEstablishedBand = 40`                                                                   | Derived | `BandAlgorithm`            |
 | `DestinationRegions`                                       | `{Frangistan, SouthAsia, YellowRiverBasin, Sahul, Beringia}`                                    | Locked  | campaign outcome contract  |
 | Cardinal / diagonal step length                            | `1` / `math.Sqrt2`                                                                              | Locked  | `MovementAlgorithm`        |
+| Escarpment movement rule                                  | symmetric cardinal block; diagonals require all four enclosing cardinal sides clear             | Locked  | `MovementAlgorithm`        |
 | `MovementCurve(V)` knots                                   | §7 six-knot translation of the intent table's movement grades                                   | Initial | `MovementCostAlgorithm`    |
 | `BiomeMovementFactor[CoastalShrubland, MountainousHighlands]` | `1.25` / `2.50`                                                                            | Initial | `MovementCostAlgorithm`    |
 | `BiomeMovementFactor[vegetation-classified biomes]`          | exactly `1.00` for all four entries; not tunable                                            | Locked  | `MovementCostAlgorithm`    |
