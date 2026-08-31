@@ -17,6 +17,7 @@ type State struct {
 	Result             CampaignResult
 	NextBandID         BandID
 	Bands              []Band
+	Events             []Event
 	Tiles              [TileCount]TileState
 	ExploredTiles      [ExplorationWordCount]uint64
 	EstablishedRegions uint16

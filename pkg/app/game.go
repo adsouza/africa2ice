@@ -41,6 +41,7 @@ type Game struct {
 	startupRestoreLoadID   gameapi.StorageOpID
 	startupRestoreSlot     int
 	pendingQuickSaveIDs    map[gameapi.StorageOpID]struct{}
+	pendingSaveSoundIDs    map[gameapi.StorageOpID]struct{}
 	windowClosingRequested bool
 	pendingManualLoadID    gameapi.StorageOpID
 	settingsStore          ui.UISettingsStore
@@ -107,6 +108,7 @@ func newGameWithPresentation(port gameapi.Game, sound gameaudio.SoundManager, se
 		fieldNote: ui.CampaignOverviewFieldNote(),
 		notice:    "Outlined tiles are reachable — arrows choose, Enter confirms", noticeFrames: 300,
 		pendingQuickSaveIDs: make(map[gameapi.StorageOpID]struct{}),
+		pendingSaveSoundIDs: make(map[gameapi.StorageOpID]struct{}),
 		settingsStore:       settingsStore, settings: settings,
 		deviceScaleFactor: func() float64 { return ebiten.Monitor().DeviceScaleFactor() },
 		scenes:            ui.NewSceneStack(),
@@ -376,7 +378,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.scene.Draw(screen, displayFrame, g.selectedBand, render.MigrationPreview{
 		BandID: g.migrationPreviewBand, TileID: g.migrationPreviewTile, Visible: g.hasMigrationPreview,
 	}, g.notice, fieldNote, g.fieldNotesVisible, ui.CampaignEndScene(displayFrame), g.viewportInitialized && !g.viewport.SupportsGameplay())
-	if !g.firstDrawDone {
+	// Browser readiness means the first frame is visible and input is accepted.
+	// IndexedDB discovery may still be resolving on earlier draws; announcing
+	// readiness there lets the first gesture disappear into the startup guard.
+	if !g.firstDrawDone && !g.startupRestorePending {
 		g.firstDrawDone = true
 		if g.onFirstDraw != nil {
 			g.onFirstDraw()
@@ -510,21 +515,21 @@ func completedTurnAddedAcuteEvent(previous, current *gameapi.Frame) bool {
 	if current == nil {
 		return false
 	}
-	previousCount := 0
+	seen := make(map[gameapi.Event]struct{})
 	if previous != nil {
 		for _, event := range previous.Events {
-			if event.Kind == gameapi.EventAcuteIncident {
-				previousCount++
+			seen[event] = struct{}{}
+		}
+	}
+	for index := len(current.Events) - 1; index >= 0; index-- {
+		event := current.Events[index]
+		if event.Kind == gameapi.EventAcuteIncident {
+			if _, existed := seen[event]; !existed {
+				return true
 			}
 		}
 	}
-	currentCount := 0
-	for _, event := range current.Events {
-		if event.Kind == gameapi.EventAcuteIncident {
-			currentCount++
-		}
-	}
-	return currentCount > previousCount
+	return false
 }
 
 func newTechnologyDiscoveries(previous, current *gameapi.Frame, preferredBand gameapi.BandID) []technologyDiscovery {
@@ -778,23 +783,33 @@ func (g *Game) handleMapClick() {
 		return
 	}
 	g.clearMigrationPreview()
-	for _, band := range g.frame.Bands {
-		if band.Species == gameapi.HomoSapiens && band.TileID == tileID {
-			if band.ID != g.selectedBand && g.assignmentDraftDirty() {
-				g.showNotice("Apply or discard workforce changes")
-				return
-			}
-			g.selectedBand = band.ID
-			g.syncAssignmentDraft(true)
-			g.refreshBandFieldNote()
-			return
-		}
+	if g.selectBandAtTile(tileID) {
+		return
 	}
 	band := g.selected()
 	if band == nil {
 		return
 	}
 	g.tryQueueMigration(band, tileID)
+}
+
+func (g *Game) selectBandAtTile(tileID gameapi.TileID) bool {
+	for _, band := range g.frame.Bands {
+		if band.Species == gameapi.HomoSapiens && band.TileID == tileID {
+			if band.ID == g.selectedBand {
+				return true
+			}
+			if g.assignmentDraftDirty() {
+				g.showNotice("Apply or discard workforce changes")
+				return true
+			}
+			g.selectedBand = band.ID
+			g.syncAssignmentDraft(true)
+			g.refreshBandFieldNote()
+			return true
+		}
+	}
+	return false
 }
 
 func (g *Game) handleDirectionalMigration(dx, dy int) {
@@ -894,6 +909,14 @@ func (g *Game) dispatchBatch(actions []ui.Action) (actionBatchResult, bool) {
 			}
 		case ui.ActionSave:
 			result.operationID, err = g.port.BeginSave(action.Slot())
+			if err == nil {
+				if action.Slot() == 99 {
+					g.pendingQuickSaveIDs[result.operationID] = struct{}{}
+				}
+				if action.Slot() == 99 || action.Slot() >= 1 && action.Slot() <= 3 {
+					g.pendingSaveSoundIDs[result.operationID] = struct{}{}
+				}
+			}
 		case ui.ActionLoad:
 			result.operationID, err = g.port.BeginLoad(action.Slot())
 		case ui.ActionDelete:
@@ -952,11 +975,7 @@ func (g *Game) clearMigrationPreview() {
 }
 
 func (g *Game) beginQuickSave() {
-	result, accepted := g.dispatchBatch([]ui.Action{ui.SaveAction(99)})
-	if !accepted {
-		return
-	}
-	g.pendingQuickSaveIDs[result.operationID] = struct{}{}
+	g.dispatchBatch([]ui.Action{ui.SaveAction(99)})
 }
 
 func (g *Game) beginManualSave(slot int) {
@@ -1231,6 +1250,8 @@ func (g *Game) beginStartupResume() {
 
 func (g *Game) pollStorage() {
 	for _, result := range g.port.PollStorage() {
+		_, saveSoundPending := g.pendingSaveSoundIDs[result.OperationID]
+		delete(g.pendingSaveSoundIDs, result.OperationID)
 		if result.Operation == gameapi.StorageSave && result.Slot == 99 {
 			delete(g.pendingQuickSaveIDs, result.OperationID)
 		}
@@ -1314,9 +1335,14 @@ func (g *Game) pollStorage() {
 		case result.Operation == gameapi.StorageLoad:
 			g.queueToast("Game loaded", false)
 		case result.Operation == gameapi.StorageSave && result.Slot >= 1 && result.Slot <= 3:
+			if saveSoundPending {
+				g.sound.Play(gameaudio.SFXSaveComplete)
+			}
 			g.queueToast(fmt.Sprintf("Saved Manual %d", result.Slot), false)
 		case result.Operation == gameapi.StorageSave && result.Slot == 99:
-			g.sound.Play(gameaudio.SFXSaveComplete)
+			if saveSoundPending {
+				g.sound.Play(gameaudio.SFXSaveComplete)
+			}
 			g.queueToast("Quick-saved", false)
 		case result.Operation == gameapi.StorageSave && result.Slot >= 101 && result.Slot <= 103:
 			g.queueToast("Autosaved — "+storageSlotLabel(result.Slot), false)

@@ -83,27 +83,41 @@ func clampVolume(value float64) float64 {
 // leaves startup, headless, map-dump, and screenshot paths device-independent.
 type LazyManager struct {
 	manager SoundManager
+	create  func() SoundManager
 	volume  float64
 	muted   bool
 	settled bool
 	pending *Sound
 }
 
-func NewLazyManager() *LazyManager { return &LazyManager{volume: 0.5} }
+func NewLazyManager() *LazyManager {
+	return newLazyManager(func() SoundManager { return NewManager() })
+}
+
+func newLazyManager(create func() SoundManager) *LazyManager {
+	return &LazyManager{create: create, volume: 0.5}
+}
 
 func (manager *LazyManager) Play(sound Sound) {
 	if manager == nil {
 		return
 	}
 	if manager.manager == nil {
-		manager.manager = NewManager()
-		manager.manager.SetMaster(0, true)
+		manager.manager = manager.create()
+		if manager.settled {
+			manager.manager.SetMaster(manager.volume, manager.muted)
+		} else {
+			manager.manager.SetMaster(0, true)
+		}
 	}
 	if !manager.settled {
 		if manager.pending == nil {
 			pending := sound
 			manager.pending = &pending
 		}
+		return
+	}
+	if manager.muted {
 		return
 	}
 	manager.manager.Play(sound)

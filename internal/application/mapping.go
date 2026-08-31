@@ -213,3 +213,24 @@ func mapFaunaGroup(value domain.FaunaGroup) gameapi.FaunaGroup {
 		panic("unmapped fauna group")
 	}
 }
+
+func mapEventKind(value domain.EventKind) gameapi.EventKind {
+	switch value {
+	case domain.EventMigration:
+		return gameapi.EventMigration
+	case domain.EventSplit:
+		return gameapi.EventSplit
+	case domain.EventTechnology:
+		return gameapi.EventTechnology
+	case domain.EventInterbreeding:
+		return gameapi.EventInterbreeding
+	case domain.EventAcuteIncident:
+		return gameapi.EventAcuteIncident
+	case domain.EventMacroEpisode:
+		return gameapi.EventMacroEpisode
+	case domain.EventAchievement:
+		return gameapi.EventAchievement
+	default:
+		panic("unmapped event kind")
+	}
+}

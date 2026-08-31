@@ -186,7 +186,8 @@ func TestAcceptedPlanningSaveCompletionAndNewAcuteEventRequestDistinctSounds(t *
 	if !game.apply(gameapi.ResearchTech{BandID: 7, Tech: gameapi.Firecraft}) {
 		t.Fatal("accepted planning command was rejected")
 	}
-	stub.results = []gameapi.StorageResult{{Operation: gameapi.StorageSave, OperationID: 4, Slot: 99}}
+	game.beginQuickSave()
+	stub.results = []gameapi.StorageResult{{Operation: gameapi.StorageSave, OperationID: stub.nextStorageID, Slot: 99}}
 	game.pollStorage()
 	after := cloneAppFrame(frame)
 	after.Turn++
@@ -535,10 +536,21 @@ func TestStartupResumeLoadsNewestQuickOrAutosave(t *testing.T) {
 
 func TestManualSlotShortcutsUseExplicitSlotsAndFreezeARequestedLoad(t *testing.T) {
 	stub := &gameStub{frame: migrationPreviewFrame()}
-	game := New(stub)
+	sounds := &soundRecorder{}
+	game := NewWithSound(stub, sounds)
 	game.beginManualSave(2)
 	if stub.savedSlot != 2 || game.notice != "Saving Manual 2…" {
 		t.Fatalf("manual save = slot %d notice %q", stub.savedSlot, game.notice)
+	}
+	stub.results = []gameapi.StorageResult{{Operation: gameapi.StorageSave, OperationID: stub.nextStorageID, Slot: 2}}
+	game.pollStorage()
+	if len(sounds.played) != 1 || sounds.played[0] != gameaudio.SFXSaveComplete {
+		t.Fatalf("manual-save sounds = %v", sounds.played)
+	}
+	stub.results = []gameapi.StorageResult{{Operation: gameapi.StorageSave, OperationID: stub.nextStorageID, Slot: 2}}
+	game.pollStorage()
+	if len(sounds.played) != 1 {
+		t.Fatalf("duplicate completion replayed manual-save sound: %v", sounds.played)
 	}
 	game.beginManualLoad(3)
 	if stub.loadedSlot != 3 || game.pendingManualLoadID == 0 || game.notice != "Loading Manual 3…" {
@@ -556,6 +568,22 @@ func TestManualSlotShortcutsUseExplicitSlotsAndFreezeARequestedLoad(t *testing.T
 	game.beginManualLoad(1)
 	if stub.loadedSlot != 0 || game.notice != "Apply or discard workforce changes before loading" {
 		t.Fatalf("dirty draft load = slot %d notice %q", stub.loadedSlot, game.notice)
+	}
+}
+
+func TestClickingSelectedBandPreservesDirtyAssignmentDraft(t *testing.T) {
+	stub := &gameStub{frame: migrationPreviewFrame()}
+	game := New(stub)
+	game.editAssignmentDraft(100)
+	want := game.assignmentDraft
+	if !game.assignmentDraftDirty() {
+		t.Fatal("test setup did not create a dirty assignment draft")
+	}
+	if !game.selectBandAtTile(game.frame.Bands[0].TileID) {
+		t.Fatal("selected band marker was not recognized")
+	}
+	if !game.assignmentDraftDirty() || game.assignmentDraft != want {
+		t.Fatalf("same-band click changed draft: got %#v want %#v", game.assignmentDraft, want)
 	}
 }
 

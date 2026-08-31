@@ -1,5 +1,7 @@
 package domain
 
+import "fmt"
+
 func (world *World) SetAssignment(id BandID, allocation [AssignmentCount]AssignmentBP, player bool) error {
 	if world.result != CampaignOngoing {
 		return ErrCampaignComplete
@@ -122,6 +124,8 @@ func (world *World) Split(id BandID, destination TileID, player bool) error {
 	world.bands[index] = left
 	world.bands = append(world.bands, right)
 	world.nextBandID++
+	geography, _ := world.grid.Tile(right.TileID)
+	world.appendEvent(Event{Turn: world.turn, Kind: EventSplit, BandID: right.ID, TileID: right.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d split from band %d.", right.ID, left.ID)})
 	world.revealFromSapiens()
 	return nil
 }

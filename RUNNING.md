@@ -8,4 +8,5 @@ override if you trust the download.
 The executable needs a graphical desktop for ordinary play. For a display-free integrity smoke,
 run `africa2ice -headless -turns 0`.
 
-See `README.md` in the source repository for controls, saves, logs, and web-build instructions.
+See the [repository README](https://github.com/adsouza/africa2ice#readme) for controls, saves, logs,
+and web-build instructions.

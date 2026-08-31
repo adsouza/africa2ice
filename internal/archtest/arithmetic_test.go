@@ -284,7 +284,7 @@ func (a *arithmeticAnalyzer) checkFloatToInteger(call *ast.CallExpr) {
 	}
 	if declaration := a.enclosingFunction(); a.path == roundPopulationFile &&
 		declaration != nil && declaration.Name.Name == roundPopulationFunc &&
-		auditedRoundPopulation(a.info, declaration) {
+		auditedRoundPopulation(a.info, declaration, call) {
 		return
 	}
 	a.add(ruleFloatInt, call, "float-to-integer conversion must go through RoundPopulation")
@@ -305,7 +305,7 @@ func (a *arithmeticAnalyzer) enclosingFunction() *ast.FuncDecl {
 // auditedRoundPopulation makes the sole exemption depend on the safety proof,
 // not just a convenient file and function spelling. The helper must reject both
 // non-finite classes and both sides of Population's closed numeric range.
-func auditedRoundPopulation(info *types.Info, declaration *ast.FuncDecl) bool {
+func auditedRoundPopulation(info *types.Info, declaration *ast.FuncDecl, conversion *ast.CallExpr) bool {
 	if declaration == nil || declaration.Type.Params == nil || declaration.Type.Params.NumFields() > 2 {
 		return false
 	}
@@ -334,54 +334,92 @@ func auditedRoundPopulation(info *types.Info, declaration *ast.FuncDecl) bool {
 	if parameter == nil {
 		return false
 	}
-	var hasNaN, hasInf, hasLowerBound, hasUpperBound bool
+	if declaration.Body == nil || len(declaration.Body.List) != 2 {
+		return false
+	}
+	guard, ok := declaration.Body.List[0].(*ast.IfStmt)
+	if !ok || guard.Else != nil || guard.Init != nil || len(guard.Body.List) != 1 {
+		return false
+	}
+	if _, ok := guard.Body.List[0].(*ast.ReturnStmt); !ok {
+		return false
+	}
+	finalReturn, ok := declaration.Body.List[1].(*ast.ReturnStmt)
+	if !ok || !nodeContains(finalReturn, conversion) {
+		return false
+	}
+	conversions := 0
 	ast.Inspect(declaration.Body, func(node ast.Node) bool {
-		switch typed := node.(type) {
+		call, ok := node.(*ast.CallExpr)
+		if !ok || len(call.Args) != 1 {
+			return true
+		}
+		target, known := info.Types[call.Fun]
+		operand := info.TypeOf(unparenthesize(call.Args[0]))
+		if known && target.IsType() && isIntegerType(target.Type) && operand != nil && isFloatingType(operand) {
+			if recorded, exists := info.Types[call]; !exists || recorded.Value == nil {
+				conversions++
+			}
+		}
+		return true
+	})
+	if conversions != 1 {
+		return false
+	}
+	terms := flattenLogicalOr(guard.Cond)
+	if len(terms) != 4 {
+		return false
+	}
+	var hasNaN, hasInf, hasLowerBound, hasUpperBound bool
+	for _, term := range terms {
+		switch typed := unparenthesize(term).(type) {
 		case *ast.CallExpr:
 			if selector, ok := typed.Fun.(*ast.SelectorExpr); ok {
 				if function, ok := info.Uses[selector.Sel].(*types.Func); ok &&
 					function.Pkg() != nil && function.Pkg().Path() == "math" {
 					switch function.Name() {
 					case "IsNaN":
-						hasNaN = callUsesObject(info, typed, parameter)
+						hasNaN = len(typed.Args) == 1 && exprIsObject(info, typed.Args[0], parameter)
 					case "IsInf":
-						hasInf = callUsesObject(info, typed, parameter)
+						hasInf = len(typed.Args) == 2 && exprIsObject(info, typed.Args[0], parameter) && isZeroConstant(info, typed.Args[1])
 					}
 				}
 			}
 		case *ast.BinaryExpr:
-			if typed.Op == token.LSS && exprUsesObject(info, typed.X, parameter) && isZeroConstant(info, typed.Y) {
+			if typed.Op == token.LSS && exprIsObject(info, typed.X, parameter) && isZeroConstant(info, typed.Y) {
 				hasLowerBound = true
 			}
-			if typed.Op == token.GTR && exprUsesObject(info, typed.X, parameter) && exprNames(typed.Y, "MaxPopulation") {
+			if typed.Op == token.GTR && exprIsObject(info, typed.X, parameter) && exprNames(typed.Y, "MaxPopulation") {
 				hasUpperBound = true
 			}
 		}
-		return true
-	})
+	}
 	return hasNaN && hasInf && hasLowerBound && hasUpperBound
 }
 
-func callUsesObject(info *types.Info, call *ast.CallExpr, object types.Object) bool {
-	for _, argument := range call.Args {
-		if exprUsesObject(info, argument, object) {
-			return true
-		}
+func flattenLogicalOr(expression ast.Expr) []ast.Expr {
+	expression = unparenthesize(expression)
+	if binary, ok := expression.(*ast.BinaryExpr); ok && binary.Op == token.LOR {
+		return append(flattenLogicalOr(binary.X), flattenLogicalOr(binary.Y)...)
 	}
-	return false
+	return []ast.Expr{expression}
 }
 
-func exprUsesObject(info *types.Info, expression ast.Expr, object types.Object) bool {
+func nodeContains(root, target ast.Node) bool {
 	found := false
-	ast.Inspect(expression, func(node ast.Node) bool {
-		identifier, ok := node.(*ast.Ident)
-		if ok && info.Uses[identifier] == object {
+	ast.Inspect(root, func(node ast.Node) bool {
+		if node == target {
 			found = true
 			return false
 		}
 		return !found
 	})
 	return found
+}
+
+func exprIsObject(info *types.Info, expression ast.Expr, object types.Object) bool {
+	identifier, ok := unparenthesize(expression).(*ast.Ident)
+	return ok && info.Uses[identifier] == object
 }
 
 func isZeroConstant(info *types.Info, expression ast.Expr) bool {

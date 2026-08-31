@@ -30,6 +30,7 @@ await new Promise(resolveListen => server.listen(0, "127.0.0.1", resolveListen))
 const { port } = server.address();
 const origin = `http://127.0.0.1:${port}`;
 const browser = await chromium.launch({ headless: true });
+const pressGameKey = (page, key) => page.keyboard.press(key, { delay: 40 });
 
 const openGame = async (context, page) => {
   const failures = [];
@@ -61,9 +62,9 @@ try {
 
   let queued = false;
   for (const keys of [["ArrowUp"], ["ArrowRight"], ["ArrowDown"], ["ArrowLeft"], ["ArrowUp", "ArrowRight"], ["ArrowDown", "ArrowRight"], ["ArrowDown", "ArrowLeft"], ["ArrowUp", "ArrowLeft"]]) {
-    await page.keyboard.press("Escape");
-    for (const key of keys) await page.keyboard.press(key);
-    await page.keyboard.press("Enter");
+    await pressGameKey(page, "Escape");
+    for (const key of keys) await pressGameKey(page, key);
+    await pressGameKey(page, "Enter");
     await page.waitForTimeout(75);
     const summary = JSON.parse(await page.locator("html").getAttribute("data-africa2ice-summary"));
     if (summary.world_revision > initial.world_revision) {
@@ -73,10 +74,10 @@ try {
   }
   if (!queued) throw new Error("could not queue a legal migration with the keyboard");
 
-  await page.keyboard.press("Space");
+  await pressGameKey(page, "Space");
   await page.waitForFunction(() => JSON.parse(document.documentElement.dataset.africa2iceSummary).turn === 1, null, { timeout: 5_000 });
   const saved = await page.locator("html").getAttribute("data-africa2ice-summary");
-  await page.keyboard.press("Control+S");
+  await pressGameKey(page, "Control+S");
   await page.waitForTimeout(1_000);
   if (failures.length > 0) throw new Error(failures.join("\n"));
 
@@ -87,12 +88,12 @@ try {
   const restored = await page.locator("html").getAttribute("data-africa2ice-summary");
   if (restored !== saved) throw new Error(`quick-save reload changed the semantic frame\nbefore ${saved}\nafter  ${restored}`);
 
-  await page.keyboard.press("F1");
+  await pressGameKey(page, "F1");
   await page.waitForTimeout(1_000);
-  await page.keyboard.press("Space");
+  await pressGameKey(page, "Space");
   await page.waitForFunction(() => JSON.parse(document.documentElement.dataset.africa2iceSummary).turn === 2, null, { timeout: 5_000 });
   await page.keyboard.down("Shift");
-  await page.keyboard.press("F1");
+  await pressGameKey(page, "F1");
   await page.waitForTimeout(50);
   await page.keyboard.up("Shift");
   await page.waitForFunction(expected => document.documentElement.dataset.africa2iceSummary === expected, saved, { timeout: 5_000 });

@@ -74,3 +74,26 @@ func TestKnowledgeDiffusionDoesNotRelayInSameTurn(t *testing.T) {
 		t.Fatalf("same-turn relay = %v", got)
 	}
 }
+
+func TestKnowledgeDiffusionCannotUsePrerequisiteLearnedInSameTurn(t *testing.T) {
+	grid, _ := (WorldGenerator{}).Generate()
+	tile := StartingTileIDs[0]
+	sourceTech := TechnologyState{Acquired: 1<<HaftedTools | 1<<TailoredClothing}
+	sourceTech.Progress[HaftedTools] = ResearchCost[HaftedTools]
+	sourceTech.Progress[TailoredClothing] = ResearchCost[TailoredClothing]
+	recipientTech := TechnologyState{}
+	recipientTech.Progress[HaftedTools] = float64(ResearchCost[HaftedTools] * (1 - DiffusionRate))
+	bands := []Band{
+		{ID: 1, Species: HomoSapiens, TileID: tile, Population: 100, Heritable: uniformTraits(0.5), Technology: sourceTech},
+		{ID: 2, Species: HomoSapiens, TileID: tile, Population: 100, Heritable: uniformTraits(0.5), Technology: recipientTech},
+	}
+
+	applyKnowledgeAndGenetics(bands, grid, nil, nil, NewWorldRNG(4))
+
+	if !bands[1].Technology.Has(HaftedTools) {
+		t.Fatal("eligible prerequisite did not complete")
+	}
+	if got := bands[1].Technology.Progress[TailoredClothing]; got != 0 {
+		t.Fatalf("dependent gained %v research from a prerequisite learned in the same turn", got)
+	}
+}

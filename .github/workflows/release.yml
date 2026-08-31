@@ -64,8 +64,14 @@ jobs:
             echo "go=$(go version)"
             echo "binaryen=$(wasm-opt --version)"
             echo "playwright=$(node -p "require('./tools/web-e2e/node_modules/playwright/package.json').version")"
-            echo "save_schema=1"
-            echo "working_tree=$(test -z "$(git status --porcelain)" && echo clean || echo modified-by-build)"
+            go run ./tools/release_identity
+            echo "wasm_measurements=$(tr -d '\n ' < wasm-size.json)"
+            echo "performance_profile_sha256=$(sha256sum performance-profile.json | cut -d' ' -f1)"
+            if git diff --quiet && git diff --cached --quiet; then
+              echo "tracked_tree=clean"
+            else
+              echo "tracked_tree=modified"
+            fi
           } > release-record.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -129,14 +135,46 @@ jobs:
             artifact="dist/$archive.tar.gz"
           fi
           ./tools/check_release_archive.sh "$artifact" "${{ matrix.executable }}" "$GITHUB_SHA"
+      - name: Produce exact-tag native reference checkpoints
+        shell: bash
+        run: go run . -headless -turns 400 -seed 0x9e3779b97f4a7c15 -policy reference -checkpoint-json tag-reference-checkpoints.json > tag-reference-headless.log
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: native-${{ matrix.platform }}-${{ matrix.goarch }}
           path: dist/africa2ice-${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.goarch }}.*
           if-no-files-found: error
+      - name: Upload exact-tag native reference checkpoints
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: tag-checkpoints-${{ matrix.platform }}-${{ matrix.goarch }}
+          path: tag-reference-checkpoints.json
+          if-no-files-found: error
+
+  cross-target-determinism:
+    needs: [verify, build-native]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: release-verification
+          path: checkpoints/chromium
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: tag-checkpoints-*
+          path: checkpoints/native
+      - name: Require byte-identical exact-tag checkpoint records
+        shell: bash
+        run: |
+          chromium=checkpoints/chromium/reference-checkpoints.json
+          test -s "$chromium"
+          for target in linux-amd64 windows-amd64 macos-amd64 macos-arm64; do
+            native="checkpoints/native/tag-checkpoints-$target/tag-reference-checkpoints.json"
+            test -s "$native"
+            cmp "$chromium" "$native"
+          done
 
   publish:
-    needs: build-native
+    needs: [build-native, cross-target-determinism]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

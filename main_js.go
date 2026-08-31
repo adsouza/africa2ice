@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"syscall/js"
 
@@ -15,10 +16,17 @@ import (
 func main() {
 	session, err := logging.NewDefaultSession(os.Stdout)
 	if err != nil {
+		reportBootError(err)
 		_, _ = os.Stderr.WriteString(err.Error() + "\n")
 		return
 	}
 	defer func() { _ = session.Close() }()
+	defer func() {
+		if value := recover(); value != nil {
+			reportBootError(fmt.Errorf("panic: %v", value))
+			panic(value)
+		}
+	}()
 	defer logging.GuardPanic(session)
 	game, err := app.NewGame(0x9e3779b97f4a7c15, session)
 	if err == nil {
@@ -34,8 +42,21 @@ func main() {
 		err = ebiten.RunGameWithOptions(game, &ebiten.RunGameOptions{DisableHiDPI: false})
 	}
 	if err != nil {
+		reportBootError(err)
 		_, _ = os.Stderr.WriteString(err.Error() + "\n")
 	}
+}
+
+func reportBootError(err error) {
+	reporter := js.Global().Get("africa2iceShowBootError")
+	if reporter.Type() != js.TypeFunction {
+		return
+	}
+	reporter.Invoke(
+		"Africa 2 Ice could not start",
+		"Check the browser console for details, rebuild with ./build_web.sh --dev, and reload.",
+		err.Error(),
+	)
 }
 
 func installPresentationOptions(game *app.Game) {

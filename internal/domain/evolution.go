@@ -18,8 +18,9 @@ func knowledgeContact(grid *Grid, left, right Band) bool {
 	return ordinaryContact(grid, left.TileID, right.TileID)
 }
 
-func applyKnowledgeAndGenetics(bands []Band, grid *Grid, research map[BandID]float64, selection map[BandID]HeritableState, rng *WorldRNG) {
+func applyKnowledgeAndGenetics(bands []Band, grid *Grid, research map[BandID]float64, selection map[BandID]HeritableState, rng *WorldRNG) map[BandID]bool {
 	snapshot := append([]Band(nil), bands...)
+	completedInterbreeding := make(map[BandID]bool)
 	geneticPartners := make([][]geneticPartner, len(snapshot))
 	sourceCounts := make([][TechCount]int, len(snapshot))
 	for left := 0; left < len(snapshot); left++ {
@@ -48,15 +49,17 @@ func applyKnowledgeAndGenetics(bands []Band, grid *Grid, research map[BandID]flo
 			if target.ID == actor.InterbreedTarget && target.Species == ArchaicHominin {
 				geneticPartners[actorIndex] = append(geneticPartners[actorIndex], geneticPartner{targetIndex, InterbreedGeneFlowRate})
 				geneticPartners[targetIndex] = append(geneticPartners[targetIndex], geneticPartner{actorIndex, InterbreedGeneFlowRate})
+				completedInterbreeding[actor.ID] = true
 				break
 			}
 		}
 	}
 
 	for index := range bands {
-		state := snapshot[index].Technology
+		frozen := snapshot[index].Technology
+		state := frozen
 		for technology := Technology(0); technology < TechCount; technology++ {
-			if state.Has(technology) || !state.PrerequisitesMet(technology) {
+			if frozen.Has(technology) || !frozen.PrerequisitesMet(technology) {
 				continue
 			}
 			gain := float64(float64(sourceCounts[index][technology]) * DiffusionRate * ResearchCost[technology])
@@ -80,6 +83,7 @@ func applyKnowledgeAndGenetics(bands []Band, grid *Grid, research map[BandID]flo
 			bands[index].Heritable[trait] = TraitValue(clamp01(original + delta))
 		}
 	}
+	return completedInterbreeding
 }
 
 func geneFlowDelta(recipient int, trait HeritableTrait, snapshot []Band, partners []geneticPartner) float64 {

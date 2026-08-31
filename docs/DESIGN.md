@@ -256,41 +256,40 @@ Domain tests may compare `State` values directly but do not gain a JSON or stora
 
 ### Package layout
 
+This is the checked-in responsibility map, not a one-file-per-concept prescription. Closely related
+use cases deliberately share files where that keeps the implementation smaller; tests sit beside
+the production files they exercise.
+
 ```
-main.go                  desktop flags/window/reference-checkpoint setup, session-log close/recovery, app.New, RunGame   (//go:build !js)
-main_js.go               wasm entry: session-log recovery, canvas sizing, RunGame                   (//go:build js)
+main.go                  desktop flags/window/checkpoint setup and RunGame                           (//go:build !js)
+main_js.go               wasm entry, boot-error reporting, and RunGame                               (//go:build js)
 .golangci.yml            depguard boundary rules + forbidigo
 .github/workflows/ci.yml native Linux/macOS/Windows matrix + WASM release + Pages deploy jobs
-.github/workflows/release.yml tagged native archives + checksums
+.github/workflows/release.yml exact-tag verification, native archives, checkpoints, and checksums
 web/index.html           canvas host, loader, full game title
 web/wasm_exec.js         copied from GOROOT by the build script
 build_web.sh             dev build or stripped + wasm-opt release build
-tools/web-e2e/package.json pinned Playwright/Chromium test tooling only; never shipped
-tools/web-e2e/package-lock.json exact browser-test dependency graph
-tools/web-e2e/smoke.mjs  local-build boot/action/save/reload, frame-summary, and console-failure gate
-tools/web-e2e/profile.mjs reference-machine 30-second render/turn/memory measurement
-tools/run_wasm_go_tests.mjs compile/serve/run js-tagged Go tests in pinned Chromium
-tools/run_wasm_checkpoint.mjs run the js-tagged checkpoint binary and extract reference-checkpoints.json
-testdata/performance_baseline.json reviewed step-8 normalized-time + bytes/op baselines
-testdata/performance_profile_save.json fixed turn-300/256-band/all-explored render workload
-tools/check_benchmarks.sh calibrated same-runner 25% regression comparison for release readiness
-docs/PERFORMANCE.md      step-2a skeleton size/FPS baseline, release-candidate machine identity, and measured performance record
-THIRD_PARTY_NOTICES.md   reviewed runtime/tooling license notices shipped with native archives
+RUNNING.md               run/readme file shipped in native archives
+tools/                   build-size, benchmark, release-archive, release-identity, WASM-test, and browser drivers
+tools/web-e2e/           pinned Playwright/Chromium smoke and performance tooling; never shipped
+testdata/                fixed performance workload and reviewed benchmark baselines
+docs/PERFORMANCE.md      measured reference-machine and release performance record
 
 pkg/gameapi/             DRIVING PORT + DTO + SHARED POLICY CONTRACT — stdlib only, no dependencies
   doc.go                 package contract and architectural role
   enums.go               Biome, Season, Tech, HeritableTrait, Species, Region, FaunaGroup, MacroEpisode + String()
-  frame.go               Frame, climate/macro summaries, passages/achievements, Tile incl. elevation/temperature/movement/Band/FoodTurnReport/OutcomeReport/Event/MigrationCandidate values — no pointers
+  frame.go               immutable projection values, including tiles, bands, passages, events, and outcomes
   command.go             Command iface + SetAssignment, QueueMigration, SplitBand, ResearchTech, Interbreed
   errors.go              stable ErrorCode/GameError boundary values; no domain types
   game.go                Game inbound port: Snapshot, NewCampaign, Apply, EndTurn, and storage use cases
   storage.go             operations/results, slot constants/kinds, SlotMetadata
-  policy.go              single source for deterministic route/split policy values used by domain + verification
+  policy.go              shared deterministic route/split policy values used by domain + verification
+  escarpment.go          projection-level escarpment traversal policy used by UI and verification
 
 internal/domain/         CORE DOMAIN — one package, stdlib + gameapi policy only; no application, JSON, or frameworks
   doc.go                 package contract and architectural role
-  identifiers.go         BandID, TileID, RegionID, PassageID and stable ordering
-  concepts.go            domain Species, Biome, Season, Technology, traits, events, and count sentinels
+  identifiers.go         BandID, TileID, PassageID and stable ordering
+  concepts.go            Species, Biome, Season, Technology, traits, and count sentinels
   quantities.go          uint32 Population + audited rounding boundary; validated Health, FU, WU, AssignmentBP, Probability, trait values
   errors.go              typed invariant and domain-rule failures; no presentation strings
   geo.go                 lat/lon <-> tile projection
@@ -298,47 +297,44 @@ internal/domain/         CORE DOMAIN — one package, stdlib + gameapi policy on
   region.go              Region table, destination set, and display names (South Asia, Yellow River Basin, ...)
   worldgen.go            concrete WorldGenerator domain service -> elevation/moisture/natural-shelter grid
   canonical_grid.go      process-wide immutable seed-independent Grid/biome-history initialization
-  biome.go               DESIGN vegetation index V; ClassifyBiome + BaselineKCurve(V) + MovementCurve(V)
+  biome.go, habitat.go   vegetation, biome, carrying-capacity, and movement classification
   fauna.go               closed region × biome profiles, prey mixes, shared exploitation inputs
   tile.go                stocks, bounded Degradation, CarryingCapacity(), toward-cap Regenerate()
   grid.go                Grid, indexing, bounded eight-way OrdinaryEdges(), no-water-corner rule
-  tech.go                band-local research state, T_tech/modifier tables, local diffusion
-  genetics.go            bounded heritable state, selection, mutation, and local gene flow
+  tech.go, evolution.go  band-local research, diffusion, heritable selection, mutation, and gene flow
+  genetics.go            bounded heritable values and trait functions
   band.go                Band, assignments, MaxBands=256, atomic Split()
   policy.go              typed domain aliases over the shared gameapi route/split policy contract
-  competition.go         workforce-derived per-tile demand + proportional allocation across species
+  subsistence.go         workforce-derived resource demand, gathering, storage, and competition
   archaic.go             deterministic computer policy invoked only within aggregate turn advancement
   passage.go             named Wallacea crossings + climate-derived Beringian land bridge
   migration.go           directed destination-environment costs, ranking + queued movement resolution
   hazard.go              deterministic chronic attrition + RNG-driven acute events
   scenario.go            deterministic sapiens + archaic starting bands
-  exploration.go         persistent sapiens-only explored-tile mask + bounded frontier reveal
   campaign.go            four-era CampaignDate + calendar progress conversion
-  climate.go             LGM/orbital + moisture/precession trends, abrupt pulses, season, noise, epochs
+  climate.go             temperature/moisture trends, abrupt pulses, season, noise, and epochs
   macroevent.go          authored episode catalog, warnings, volcanic impact masks + refugia
   turn.go                atomic five-phase turn pipeline / population equation
   rng.go                 serializable PCG WorldRNG + versioned climate/resource counter hashes
-  events.go              typed domain outcomes consumed by application projectors
+  event.go               bounded typed historical outcomes consumed by application projectors
   state.go               persistence-neutral aggregate memento; no JSON tags
-  world.go               World aggregate: NewWorld, RestoreWorld, PlanPlayer, AdvanceTurn, ExportState
+  world.go               World aggregate construction, restoration, projection data, and invariants
+  world_commands.go      planning commands and transactional aggregate mutations
 
 internal/application/    FRAMEWORK-FREE USE CASES — imports domain + gameapi + stdlib only
-  service.go             GameService implements gameapi.Game and owns the live World
+  service.go             GameService implements gameapi.Game, owns World, commands, turns, and autosave scheduling
   mapping.go             exhaustive boundary/domain enum and value mappings; no ordinal casts
   errors.go              exhaustive typed domain failure -> gameapi ErrorCode mapping
-  commands.go            boundary validation and gameapi command -> domain operation mapping
-  end_turn.go            one computer-planning/five-phase turn use case
   snapshot.go            domain state/events -> isolated gameapi.Frame projection
   ports.go               outbound CampaignRepository port and immutable completion values
   persistence.go         domain State <-> versioned SaveState mapping, validation, migrations
-  autosave.go            WorldRevision, monotonic-time input, bounded trigger coalescing
+  performance_fixture.go checked-in maximum-workload projection fixture support
 
 internal/adapters/storage/ OUTER STORAGE ADAPTERS — implement application.CampaignRepository
-  file.go                file-backed JSON records                       (//go:build !js)
-  lock_unix.go           process-lifetime advisory save-directory lock  (//go:build !js && !windows)
-  lock_windows.go        process-lifetime LockFileEx wrapper             (//go:build windows)
-  indexeddb.go           generation-addressed IndexedDB records         (//go:build js)
-  contract_test.go       backend-neutral CampaignRepository contract suite
+  file.go                generation-addressed files, retention, and sequence cache             (//go:build !js)
+  lease_unix.go          process-lifetime advisory save-directory lease                         (//go:build !js && !windows)
+  lease_windows.go       process-lifetime LockFileEx wrapper                                    (//go:build windows)
+  indexeddb_js.go        generation-addressed IndexedDB, Web Lock writer lease, and retention   (//go:build js)
 
 internal/adapters/logging/ OUTER OBSERVABILITY ADAPTER — stdlib + application/gameapi/ui only
   session.go             session identity, stable event/attribute names, lifecycle, panic reporting
@@ -350,13 +346,11 @@ internal/adapters/logging/ OUTER OBSERVABILITY ADAPTER — stdlib + application/
 
 pkg/audio/               stdlib + Ebitengine audio only
   synth.go               PCM tone generation (enveloped sine/square)
-  manager.go             SoundManager, lazily constructed on first user gesture
+  manager.go             SoundManager, lazily constructed with persisted master settings
 
 pkg/render/              DRAWING ADAPTER — gameapi + Ebitengine; no domain/application/ui
-  fonts.go               goregular -> text/v2 face, cached at three sizes
   palette.go             water and UI-chrome colors from the three-anchor epoch grade
-  viewport.go            DPI-aware logical-DIP/render-pixel transforms + viewport revision
-  map.go                 fixed top-down terrain, fog, grid picking, markers, routes, and HUD
+  map.go                 scalable top-down terrain, fog, picking, markers, routes, HUD, and viewport transforms
   tile_info.go           legend and current/candidate tile summaries
   band_window.go         scrollable visible-band window
   timeline.go            campaign timeline presentation derivations
@@ -365,42 +359,40 @@ pkg/render/              DRAWING ADAPTER — gameapi + Ebitengine; no domain/app
   end_scene.go           terminal outcome presentation
 
 pkg/ui/                  DRIVING PRESENTATION ADAPTER — gameapi + render + audio; no domain/application
-  scene.go               Scene interface + stack router
-  action.go              UI actions: sim command, EndTurn, manual/quick save, load/delete, scene navigation
-  widgets.go             Button, Label, Slider, ListRow + hit-testing
+  scene_stack.go         typed scene-stack router
+  action.go              simulation, turn, storage, and scene-navigation actions
   toast.go               two-second queued success/error notifications
-  title_scene.go
-  game_scene.go          input routing, one workforce draft + inline exit guard, Ctrl/Cmd+S or click quick-save; emits typed ui.Action values
-  pause_overlay.go       translucent modal over live gameplay
-  save_load_scene.go     grouped manual/quick/auto slots, metadata preview, immediate actions
-  settings_scene.go      master-volume slider, mute checkbox, Field Notes visibility
   field_notes.go         bundled sourced entries keyed by gameapi context values; no domain imports
+  migration.go           migration-preview movement and terrain diagnostics
   ui_settings.go         versioned local-preference record and store interface
   ui_settings_file.go    desktop JSON preference store                    (//go:build !js)
-  ui_settings_idb.go     separate web IndexedDB preference store          (//go:build js)
+  ui_settings_idb_js.go  separate web IndexedDB preference store          (//go:build js)
   end_scene.go           victory / extinction / dispersal-failed result
 
 pkg/app/                 Ebitengine HOST + COMPOSITION ROOT — outermost driving adapter
-  game.go                implements ebiten.Game + LayoutFer; owns gameapi.Game, viewport, current Frame, scenes, action queue
+  game.go                Ebiten host, input/scenes, workforce draft, storage UI, current Frame, and audio cues
   e2e_summary.go         bounded published-frame summary for the opt-in browser test observer
-  wire.go                accepts the observability session; constructs decorated ports, GameService, renderer, audio, and UI graph
-  game_test.go           turn-counting + async storage polling/load-freeze tests
+  repository_desktop.go  desktop composition of file repository and logging adapter            (//go:build !js)
+  repository_js.go       browser composition of IndexedDB repository and logging adapter         (//go:build js)
+  skeleton_port.go       application/service/logging composition root
 
 internal/verification/   REFERENCE-CAMPAIGN DRIVER — imports application + gameapi + stdlib only
   policy.go              the five deterministic frame-driven sapiens route policies, incl. reference
   checkpoint.go          CheckpointRecord + canonical sorted-key JSON encoding
   run.go                 ReferenceRun(seed, turns, policy) -> []CheckpointRecord; no I/O, no wall clock
+  map.go                 deterministic text map dump
   run_js_test.go         js-tagged: emits the sentinel-delimited record block on stdout  (//go:build js)
 
 internal/archtest/
   arch_test.go           parses imports in every .go file, including inactive build tags
 ```
 
-**Package-organization decision.** Placing the gameplay scene in `render` would force `render` to
-import `ui` in order to push the pause overlay, creating an import cycle. All scenes therefore live
-in `pkg/ui`, and `pkg/render` stays a drawing adapter. UI-settings persistence remains a presentation
-port implemented within `pkg/ui` because it stores local panel preferences, not campaign or domain
-state.
+**Package-organization decision.** `pkg/ui` owns typed scene-stack and action values, `pkg/app` owns
+the Ebitengine input/event loop and mutable presentation state, and `pkg/render` remains a drawing
+adapter with no dependency back on either package. This keeps navigation from creating an import
+cycle while allowing the compact host to compose the actual screen. UI-settings persistence remains
+a presentation port implemented within `pkg/ui` because it stores local panel preferences, not
+campaign or domain state.
 
 ### Operational session logging
 
@@ -6681,10 +6673,10 @@ in DIPs. The supported minimum gameplay viewport is **`960 × 600 DIPs`**; small
 resize overlay and suspend every gameplay/scene action except resize and application exit, without
 advancing or resizing the simulation. The narrow-layout
 breakpoint is **`1,100 DIPs`** wide. Drawing maps DIP positions through `ScaleX`/`ScaleY`; one-DIP vector rules snap their edges
-to the nearest physical-pixel boundary after scaling. `fonts.go` caches exactly the three current
-logical face sizes multiplied by `RenderScale` and replaces that three-face set when scale changes,
-rather than accumulating one cache entry per resize or monitor. Text measurement and drawing use the
-same scaled face, so labels do not clip merely because glyphs became sharper.
+to the nearest physical-pixel boundary after scaling. `pkg/render/map.go` owns the fixed face source
+and draws each of the three current logical sizes through the current transform rather than
+accumulating one cache entry per resize or monitor. Text measurement and drawing use the same face
+and scale, so labels do not clip merely because glyphs became sharper.
 
 Ebitengine pointer and touch positions are in its returned game-screen coordinate space. The input
 router converts each current event into the fixed logical presentation space:
@@ -7194,7 +7186,7 @@ increments the revision. A save made while a draft exists therefore serializes t
 allocation and revision, never the UI-local draft. Quick-save and autosave do not resolve or discard
 the draft; draft edits alone do not trigger the revision-based autosave fallback. Actual load
 requests must pass the dirty-draft guard before starting or joining the storage queue (§4).
-`internal/application/autosave.go` requests an autosave after every completed turn. It also requests
+`internal/application/service.go` requests an autosave after every completed turn. It also requests
 one when five minutes of monotonic running time have elapsed since the last successful autosave and
 the current revision is newer; this is the fallback for long planning periods. On load, the
 scheduler adopts the loaded revision as its baseline and starts a fresh five-minute interval.
@@ -7779,10 +7771,10 @@ new preference and would still require the ordinary settings-version migration; 
 reserve an unnamed per-channel field.
 
 The `-dumpmap`, `-headless`, and `-screenshot` verification modes need no audio and open no audio
-context. `wire.go` selects the no-op `SoundManager` unconditionally in those modes rather than
-leaving silence to the incidental absence of user gestures, so the §13 gate requires no sound device
-on any runner. This also keeps the silent-fallback path an actual error handler: if CI reached it on
-every run, a genuine audio-construction regression would be indistinguishable from normal output.
+context. The first two finish before constructing the interactive host; the screenshot path uses
+the lazy manager but requests no sound, so it also never creates a device context. The §13 gate
+therefore requires no sound device on any runner. Tests inject `NoopManager` explicitly when they
+need a permanently silent presentation port.
 
 ---
 
@@ -8258,7 +8250,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
 7. **Application persistence use cases + storage adapters** — domain-memento/`SaveState` mapping,
    schema/version validation, `CampaignRepository`, asynchronous operation/result facade,
    generation-addressed commit protocol, `internal/adapters/storage/file.go`,
-   `internal/adapters/storage/indexeddb.go`, and backend-neutral failure injection. This step owns
+   `internal/adapters/storage/indexeddb_js.go`, and backend-neutral failure injection. This step owns
    both adapter implementations and the shared repository contract suite; js/wasm tests exercise
    IndexedDB through the controllable adapter fake, and step 11 executes the compiled js/wasm Go
    test binary in Chromium against real IndexedDB. Step 11 otherwise owns real-browser composition,
@@ -8520,7 +8512,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    independence on desktop and the separate web database. With the initial read pending, all three
    preference controls render disabled and issue no write; installing either a valid result or the
    whole-record defaults enables them atomically. This step owns `ui_settings_file.go` and
-   `ui_settings_idb.go`, including their shared record-validation contract; step 11 composes and
+   `ui_settings_idb_js.go`, including their shared record-validation contract; step 11 composes and
    exercises the latter in a real browser rather than implementing another preferences store. Use a
    controllable completion order to prove one active write plus one replaceable `pendingLatest`
    record, revision-tagged stale completions that never roll back live UI, and last-value-wins state.
@@ -8579,7 +8571,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
     never appear in fixture logs.
 11. **Web target and release-build CI** — replace step 2a's fake `main_js.go` wiring with the real
     graph, add release mode to its dev-only build script, and perform real-browser composition of step 7's
-    generation-addressed `internal/adapters/storage/indexeddb.go`, IndexedDB upgrade/versionchange handling,
+    generation-addressed `internal/adapters/storage/indexeddb_js.go`, IndexedDB upgrade/versionchange handling,
     session-writer Web Lock lease,
     step 9's independent `africa2ice-ui` preference database,
     `web/index.html`, dev/release modes in `build_web.sh`, pinned Binaryen and `brotli`,
@@ -8756,8 +8748,7 @@ in the separate Ubuntu `web-release` job:
 
 ```bash
 ./build_web.sh --release
-test "$(brotli -q 11 -c web/main.wasm | wc -c | tr -d ' ')" -le 5500000
-gzip -9 -c web/main.wasm | wc -c    # recorded, not gated: the no-Brotli fallback stream
+./tools/check_wasm_size.sh web/main.wasm wasm-size.json
 npm --prefix tools/web-e2e ci
 npm --prefix tools/web-e2e run install-browser
 node tools/run_wasm_go_tests.mjs

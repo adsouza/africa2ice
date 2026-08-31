@@ -12,6 +12,7 @@ type World struct {
 	result             CampaignResult
 	nextBandID         BandID
 	bands              []Band
+	events             []Event
 	tiles              [TileCount]TileState
 	exploredTiles      [ExplorationWordCount]uint64
 	establishedRegions uint16
@@ -78,7 +79,7 @@ func RestoreWorld(state State) (*World, error) {
 	}
 	world := &World{
 		seed: state.Seed, turn: state.Turn, result: state.Result, nextBandID: state.NextBandID,
-		bands: append([]Band(nil), state.Bands...), tiles: state.Tiles, exploredTiles: state.ExploredTiles,
+		bands: append([]Band(nil), state.Bands...), events: append([]Event(nil), state.Events...), tiles: state.Tiles, exploredTiles: state.ExploredTiles,
 		establishedRegions: state.EstablishedRegions, rng: rng, grid: grid, habitat: habitat, climate: climate,
 	}
 	if err := world.validate(); err != nil {
@@ -97,7 +98,7 @@ func (world *World) ExportState() (State, error) {
 	}
 	return State{
 		Seed: world.seed, Turn: world.turn, Result: world.result, NextBandID: world.nextBandID,
-		Bands: append([]Band(nil), world.bands...), Tiles: world.tiles, ExploredTiles: world.exploredTiles,
+		Bands: append([]Band(nil), world.bands...), Events: append([]Event(nil), world.events...), Tiles: world.tiles, ExploredTiles: world.exploredTiles,
 		EstablishedRegions: world.establishedRegions, RNGState: append([]byte(nil), rngState...),
 	}, nil
 }
@@ -115,6 +116,7 @@ func (world *World) Habitat() Habitat {
 }
 func (world *World) TileStates() [TileCount]TileState { return world.tiles }
 func (world *World) Bands() []Band                    { return append([]Band(nil), world.bands...) }
+func (world *World) Events() []Event                  { return append([]Event(nil), world.events...) }
 func (world *World) EstablishedRegions() uint16       { return world.establishedRegions }
 
 func (world *World) IsExplored(id TileID) bool {
@@ -320,6 +322,36 @@ func (world *World) validate() error {
 	}
 	if len(world.bands) != 0 && world.nextBandID <= world.bands[len(world.bands)-1].ID {
 		return fmt.Errorf("%w: next band ID", ErrInvalidValue)
+	}
+	previousEventTurn := -1
+	for _, event := range world.events {
+		if event.Turn < 0 || event.Turn > world.turn || event.Turn < previousEventTurn || event.Kind >= EventKindCount ||
+			event.BandID >= world.nextBandID || event.TileID >= TileCount || event.Region >= RegionCount || event.Summary == "" || len(event.Summary) > 256 {
+			return fmt.Errorf("%w: event feed", ErrInvalidValue)
+		}
+		previousEventTurn = event.Turn
+	}
+	if len(world.events) > MaxEvents {
+		return fmt.Errorf("%w: event feed capacity", ErrInvalidValue)
+	}
+	hasSapiens := false
+	for _, band := range world.bands {
+		if band.Species == HomoSapiens {
+			hasSapiens = true
+			break
+		}
+	}
+	wantResult := CampaignOngoing
+	switch {
+	case !hasSapiens:
+		wantResult = CampaignExtinction
+	case world.turn == MaxCampaignTurn && world.establishedRegions&destinationMask() != 0:
+		wantResult = CampaignVictory
+	case world.turn == MaxCampaignTurn:
+		wantResult = CampaignDispersalFailed
+	}
+	if world.result != wantResult {
+		return fmt.Errorf("%w: terminal campaign state", ErrInvalidValue)
 	}
 	return nil
 }

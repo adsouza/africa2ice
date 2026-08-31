@@ -29,6 +29,9 @@ type indexedRequest struct {
 type IndexedDBRepository struct {
 	db          js.Value
 	openErr     error
+	writable    bool
+	canCollect  bool
+	lockRelease js.Value
 	ready       chan struct{}
 	requests    chan indexedRequest
 	completions chan application.RepositoryCompletion
@@ -45,6 +48,10 @@ func NewIndexedDBRepository() *IndexedDBRepository {
 
 func (repository *IndexedDBRepository) open() {
 	defer close(repository.ready)
+	if err := repository.acquireWriterLease(); err != nil {
+		repository.openErr = err
+		return
+	}
 	indexedDB := js.Global().Get("indexedDB")
 	if indexedDB.IsUndefined() || indexedDB.IsNull() {
 		repository.openErr = errors.New("IndexedDB unavailable")
@@ -64,6 +71,12 @@ func (repository *IndexedDBRepository) open() {
 	})
 	success = js.FuncOf(func(this js.Value, args []js.Value) any {
 		repository.db = request.Get("result")
+		versionChange := js.FuncOf(func(this js.Value, args []js.Value) any {
+			repository.writable = false
+			repository.db.Call("close")
+			return nil
+		})
+		repository.db.Set("onversionchange", versionChange)
 		result <- nil
 		return nil
 	})
@@ -79,15 +92,72 @@ func (repository *IndexedDBRepository) open() {
 	upgrade.Release()
 	success.Release()
 	failure.Release()
+	if repository.openErr == nil && repository.canCollect {
+		_ = repository.collectUnreferencedWorlds()
+	}
+}
+
+// acquireWriterLease makes a tab the sole browser writer when Web Locks are
+// available. Browsers without the API retain IndexedDB's transactional
+// last-commit semantics, but skip orphan collection because ownership cannot
+// be proven.
+func (repository *IndexedDBRepository) acquireWriterLease() error {
+	navigator := js.Global().Get("navigator")
+	locks := navigator.Get("locks")
+	if locks.IsUndefined() || locks.IsNull() {
+		repository.writable = true
+		return nil
+	}
+
+	acquired := make(chan error, 1)
+	var signalOnce sync.Once
+	signal := func(err error) { signalOnce.Do(func() { acquired <- err }) }
+	executor := js.FuncOf(func(this js.Value, args []js.Value) any {
+		repository.lockRelease = args[0]
+		return nil
+	})
+	hold := js.Global().Get("Promise").New(executor)
+	executor.Release()
+	callback := js.FuncOf(func(this js.Value, args []js.Value) any {
+		lock := args[0]
+		if lock.IsUndefined() || lock.IsNull() {
+			repository.writable = false
+			signal(nil)
+			return nil
+		}
+		repository.writable = true
+		repository.canCollect = true
+		signal(nil)
+		return hold
+	})
+	failure := js.FuncOf(func(this js.Value, args []js.Value) any {
+		message := "Web Lock request failed"
+		if len(args) != 0 && !args[0].IsUndefined() {
+			message = args[0].Get("message").String()
+		}
+		signal(errors.New(message))
+		return nil
+	})
+	request := locks.Call("request", indexedDBName+"/saves", js.ValueOf(map[string]any{"mode": "exclusive", "ifAvailable": true}), callback)
+	request.Call("catch", failure)
+	// Both callbacks are retained by the lifetime-long lock promise. They are
+	// intentionally released only with the page's Go runtime.
+	return <-acquired
 }
 
 func (repository *IndexedDBRepository) BeginWrite(op application.RepositoryOpID, slot application.SlotID, state application.SaveState) error {
+	if !repository.Writable() {
+		return errors.New("repository is read-only")
+	}
 	return repository.enqueue(indexedRequest{op: op, kind: application.RepositoryWrite, slot: slot, state: &state})
 }
 func (repository *IndexedDBRepository) BeginRead(op application.RepositoryOpID, slot application.SlotID) error {
 	return repository.enqueue(indexedRequest{op: op, kind: application.RepositoryRead, slot: slot})
 }
 func (repository *IndexedDBRepository) BeginDelete(op application.RepositoryOpID, slot application.SlotID) error {
+	if !repository.Writable() {
+		return errors.New("repository is read-only")
+	}
 	return repository.enqueue(indexedRequest{op: op, kind: application.RepositoryDelete, slot: slot})
 }
 func (repository *IndexedDBRepository) BeginList(op application.RepositoryOpID) error {
@@ -111,7 +181,16 @@ func (repository *IndexedDBRepository) enqueue(request indexedRequest) error {
 	}
 }
 
-func (repository *IndexedDBRepository) Writable() bool { return true }
+func (repository *IndexedDBRepository) Writable() bool {
+	select {
+	case <-repository.ready:
+		return repository.openErr == nil && repository.writable
+	default:
+		// Composition asks before the asynchronous open completes. The eventual
+		// operation still checks the authoritative capability after readiness.
+		return true
+	}
+}
 
 func (repository *IndexedDBRepository) Poll() []application.RepositoryCompletion {
 	var result []application.RepositoryCompletion
@@ -132,6 +211,9 @@ func (repository *IndexedDBRepository) Close() error {
 		if repository.openErr == nil && !repository.db.IsUndefined() {
 			repository.db.Call("close")
 		}
+		if repository.lockRelease.Type() == js.TypeFunction {
+			repository.lockRelease.Invoke()
+		}
 	})
 	return nil
 }
@@ -141,9 +223,11 @@ func (repository *IndexedDBRepository) worker() {
 	for {
 		select {
 		case request := <-repository.requests:
-			completion := application.RepositoryCompletion{OperationID: request.op, Operation: request.kind, SlotID: request.slot, Writable: true}
+			completion := application.RepositoryCompletion{OperationID: request.op, Operation: request.kind, SlotID: request.slot, Writable: repository.writable}
 			if repository.openErr != nil {
 				completion.Err = repository.openErr
+			} else if (request.kind == application.RepositoryWrite || request.kind == application.RepositoryDelete) && !repository.writable {
+				completion.Err = errors.New("repository is read-only")
 			} else {
 				switch request.kind {
 				case application.RepositoryWrite:
@@ -170,22 +254,96 @@ func (repository *IndexedDBRepository) write(slot application.SlotID, state appl
 	}
 	hash := sha256.Sum256(worldBytes)
 	generation := hex.EncodeToString(hash[:])
-	return repository.commit(slot, func(sequence uint64, transaction js.Value) application.SaveMetadata {
+	metadata, err := repository.commit(slot, func(sequence uint64, transaction js.Value) application.SaveMetadata {
 		metadata := indexedMetadataFor(slot, sequence, generation, state)
 		metadataBytes, _ := json.Marshal(metadata)
 		transaction.Call("objectStore", "worlds").Call("put", string(worldBytes), generation)
 		transaction.Call("objectStore", "metadata").Call("put", string(metadataBytes), slotKey(slot))
 		return metadata
 	})
+	if err == nil && repository.canCollect {
+		_ = repository.collectUnreferencedWorlds()
+	}
+	return metadata, err
 }
 
 func (repository *IndexedDBRepository) delete(slot application.SlotID) (*application.SaveMetadata, error) {
-	return repository.commit(slot, func(sequence uint64, transaction js.Value) application.SaveMetadata {
+	metadata, err := repository.commit(slot, func(sequence uint64, transaction js.Value) application.SaveMetadata {
 		metadata := application.SaveMetadata{SlotID: slot, CommitSequence: sequence, Deleted: true, SavedAt: time.Now().UTC()}
 		metadataBytes, _ := json.Marshal(metadata)
 		transaction.Call("objectStore", "metadata").Call("put", string(metadataBytes), slotKey(slot))
 		return metadata
 	})
+	if err == nil && repository.canCollect {
+		_ = repository.collectUnreferencedWorlds()
+	}
+	return metadata, err
+}
+
+func (repository *IndexedDBRepository) collectUnreferencedWorlds() error {
+	transaction := repository.db.Call("transaction", js.ValueOf([]any{"worlds", "metadata"}), "readwrite")
+	metadataRequest := transaction.Call("objectStore", "metadata").Call("getAll")
+	result := make(chan error, 1)
+	var finishOnce sync.Once
+	finish := func(err error) { finishOnce.Do(func() { result <- err }) }
+	referenced := make(map[string]struct{})
+	var abortErr error
+	var worldKeysRequest js.Value
+	var metadataSuccess, keysSuccess, complete, failure js.Func
+	keysSuccess = js.FuncOf(func(this js.Value, args []js.Value) any {
+		keys := worldKeysRequest.Get("result")
+		worlds := transaction.Call("objectStore", "worlds")
+		for index := 0; index < keys.Length(); index++ {
+			key := keys.Index(index).String()
+			if _, live := referenced[key]; !live {
+				worlds.Call("delete", key)
+			}
+		}
+		return nil
+	})
+	metadataSuccess = js.FuncOf(func(this js.Value, args []js.Value) any {
+		values := metadataRequest.Get("result")
+		for index := 0; index < values.Length(); index++ {
+			var metadata application.SaveMetadata
+			if err := json.Unmarshal([]byte(values.Index(index).String()), &metadata); err != nil {
+				// A malformed live pointer is a recovery problem, not evidence that
+				// every world generation is unreferenced. Preserve all payloads.
+				abortErr = fmt.Errorf("decode IndexedDB save metadata: %w", err)
+				transaction.Call("abort")
+				return nil
+			}
+			if !metadata.Deleted && metadata.Generation != "" {
+				referenced[metadata.Generation] = struct{}{}
+			}
+		}
+		worldKeysRequest = transaction.Call("objectStore", "worlds").Call("getAllKeys")
+		worldKeysRequest.Set("onsuccess", keysSuccess)
+		return nil
+	})
+	complete = js.FuncOf(func(this js.Value, args []js.Value) any { finish(nil); return nil })
+	failure = js.FuncOf(func(this js.Value, args []js.Value) any {
+		if abortErr != nil {
+			finish(abortErr)
+			return nil
+		}
+		finish(jsError(transaction, "collect IndexedDB save generations"))
+		return nil
+	})
+	metadataRequest.Set("onsuccess", metadataSuccess)
+	transaction.Set("oncomplete", complete)
+	transaction.Set("onabort", failure)
+	err := <-result
+	metadataRequest.Set("onsuccess", js.Null())
+	if worldKeysRequest.Type() == js.TypeObject {
+		worldKeysRequest.Set("onsuccess", js.Null())
+	}
+	transaction.Set("oncomplete", js.Null())
+	transaction.Set("onabort", js.Null())
+	metadataSuccess.Release()
+	keysSuccess.Release()
+	complete.Release()
+	failure.Release()
+	return err
 }
 
 func (repository *IndexedDBRepository) commit(slot application.SlotID, prepare func(uint64, js.Value) application.SaveMetadata) (*application.SaveMetadata, error) {

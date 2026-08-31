@@ -56,3 +56,24 @@ func TestAcuteProbabilitiesAreCappedAndCrossingSpecific(t *testing.T) {
 		t.Fatalf("ordinary/crossing probabilities = %#v / %#v", ordinary, crossing)
 	}
 }
+
+func TestInnateImmuneReactivityReducesChronicUncoveredDisease(t *testing.T) {
+	world, _ := NewWorld(9)
+	band := world.bands[0]
+	tile, _ := world.grid.Tile(band.TileID)
+	habitat := world.habitat[band.TileID]
+	season, _ := SeasonForTurn(0)
+	original := chronicRisk[habitat.Biome]
+	chronicRisk[habitat.Biome] = chronicRiskRow{uncovered: 0.02}
+	defer func() { chronicRisk[habitat.Biome] = original }()
+	band.Heritable[PigmentationLevel] = 1
+
+	band.Heritable[InnateImmuneReactivity] = 0
+	_, without := Phase3MortalityRates(band, tile, habitat, season)
+	band.Heritable[InnateImmuneReactivity] = 1
+	_, with := Phase3MortalityRates(band, tile, habitat, season)
+	want := float64(without * InnateImmuneRemainingRisk(1))
+	if with != want {
+		t.Fatalf("immune chronic uncovered rate = %v, want %v from base %v", with, want, without)
+	}
+}

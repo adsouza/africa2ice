@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -95,5 +96,114 @@ func TestInitialExplorationIsSapiensOnly(t *testing.T) {
 		if band.Species == HomoSapiens && !world.IsExplored(band.TileID) {
 			t.Fatalf("sapiens tile %d is hidden", band.TileID)
 		}
+	}
+}
+
+func TestSplitAppendsBoundedPersistentEvent(t *testing.T) {
+	world, err := NewWorld(18)
+	if err != nil {
+		t.Fatal(err)
+	}
+	world.bands[0].Population = 10_000
+	candidates := world.MigrationCandidates(world.bands[0].ID)
+	var destination TileID
+	found := false
+	for _, candidate := range candidates {
+		if !candidate.RequiresPassage {
+			destination, found = candidate.TileID, true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("starting band has no ordinary split destination")
+	}
+	if err := world.Split(world.bands[0].ID, destination, true); err != nil {
+		t.Fatal(err)
+	}
+	if len(world.events) != 1 || world.events[0].Kind != EventSplit || world.events[0].BandID != world.bands[len(world.bands)-1].ID {
+		t.Fatalf("split events = %#v", world.events)
+	}
+	state, err := world.ExportState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := RestoreWorld(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(world.events, restored.events) {
+		t.Fatalf("restored events = %#v, want %#v", restored.events, world.events)
+	}
+}
+
+func TestCompletedMigrationAppendsHistoricalEvent(t *testing.T) {
+	world, err := NewWorld(20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	band := world.bands[0]
+	var destination TileID
+	found := false
+	for _, candidate := range world.MigrationCandidates(band.ID) {
+		if world.IsExplored(candidate.TileID) {
+			destination, found = candidate.TileID, true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("starting band has no explored migration destination")
+	}
+	if err := world.QueueMigration(band.ID, destination, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := world.AdvanceTurn(); err != nil {
+		t.Fatal(err)
+	}
+	found = false
+	for _, event := range world.Events() {
+		if event.Kind == EventMigration && event.BandID == band.ID && event.TileID == destination && event.Turn == 1 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("migration event missing from %#v", world.Events())
+	}
+}
+
+func TestEventFeedDropsItsOldestEntryAtCapacity(t *testing.T) {
+	world, _ := NewWorld(21)
+	geography, _ := world.grid.Tile(world.bands[0].TileID)
+	for index := 0; index <= MaxEvents; index++ {
+		world.appendEvent(Event{Turn: 0, Kind: EventAchievement, BandID: world.bands[0].ID, TileID: world.bands[0].TileID, Region: geography.Region, Summary: fmt.Sprintf("event %d", index)})
+	}
+	if len(world.events) != MaxEvents || world.events[0].Summary != "event 1" || world.events[MaxEvents-1].Summary != fmt.Sprintf("event %d", MaxEvents) {
+		t.Fatalf("bounded event feed = first %q last %q length %d", world.events[0].Summary, world.events[MaxEvents-1].Summary, len(world.events))
+	}
+	if err := world.validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRestoreRejectsContradictoryTerminalState(t *testing.T) {
+	world, _ := NewWorld(19)
+	state, _ := world.ExportState()
+	state.Turn = MaxCampaignTurn
+	state.Result = CampaignOngoing
+	if _, err := RestoreWorld(state); err == nil {
+		t.Fatal("turn-400 ongoing state restored")
+	}
+
+	state, _ = world.ExportState()
+	state.Result = CampaignVictory
+	if _, err := RestoreWorld(state); err == nil {
+		t.Fatal("pre-terminal victory restored")
+	}
+
+	state, _ = world.ExportState()
+	state.Bands = nil
+	state.Result = CampaignOngoing
+	if _, err := RestoreWorld(state); err == nil {
+		t.Fatal("ongoing extinct state restored")
 	}
 }

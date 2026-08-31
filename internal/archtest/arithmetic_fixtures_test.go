@@ -492,6 +492,20 @@ func RoundPopulation(value float64) Population {
 		wantRules: []string{ruleFloatInt},
 	},
 	{
+		name: "reject/round_population_that_checks_after_conversion",
+		path: "internal/domain/quantities.go",
+		source: `package domain
+import "math"
+type Population uint32
+const MaxPopulation Population = 1<<32 - 1
+func RoundPopulation(value float64) Population {
+	converted := Population(value + 0.5)
+	if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > float64(MaxPopulation) { return 0 }
+	return converted
+}`,
+		wantRules: []string{ruleFloatInt},
+	},
+	{
 		name: "reject/package_scope_after_round_population",
 		path: "internal/domain/quantities.go",
 		source: `package domain

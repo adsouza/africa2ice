@@ -35,6 +35,7 @@
         loaderDetail.textContent = detail;
         if (error) console.error("wasm.boot", error);
       };
+      globalThis.africa2iceShowBootError = showBootError;
       document.addEventListener("keydown", event => {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") event.preventDefault();
       });

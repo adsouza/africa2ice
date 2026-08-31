@@ -111,6 +111,9 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 			Cost: passage.Cost, Status: status, Explored: service.world.IsExplored(passage.From) || service.world.IsExplored(passage.To),
 		})
 	}
+	for _, event := range service.world.Events() {
+		frame.Events = append(frame.Events, gameapi.Event{Turn: event.Turn, Kind: mapEventKind(event.Kind), BandID: gameapi.BandID(event.BandID), TileID: gameapi.TileID(event.TileID), Region: mapRegion(event.Region), Summary: event.Summary})
+	}
 	allBands := service.world.Bands()
 	migrationCandidates := service.world.MigrationCandidatesByBand()
 	for bandIndex, band := range allBands {

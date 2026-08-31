@@ -70,6 +70,13 @@ var supportedAlgorithms = AlgorithmVersions{
 	RNGAlgorithm: "pcg-splitmix-v1",
 }
 
+// SupportedCompatibility returns the complete persisted compatibility
+// identity used by release tooling and save validation. Keeping this as a
+// value prevents tooling from mutating the runtime contract.
+func SupportedCompatibility() (int, AlgorithmVersions) {
+	return SaveSchemaVersion, supportedAlgorithms
+}
+
 type SaveState struct {
 	SchemaVersion int `json:"schema_version"`
 	AlgorithmVersions
@@ -81,6 +88,7 @@ type SaveState struct {
 	Result             uint8                               `json:"result"`
 	NextBandID         uint64                              `json:"next_band_id"`
 	Bands              []BandSave                          `json:"bands"`
+	Events             []EventSave                         `json:"events,omitempty"`
 	Tiles              [domain.TileCount]TileSave          `json:"tiles"`
 	ExploredTiles      [domain.ExplorationWordCount]uint64 `json:"explored_tiles"`
 	EstablishedRegions []uint8                             `json:"sapiens_established_regions"`
@@ -146,6 +154,15 @@ type OutcomeReportSave struct {
 	GeneticBurdenHealthLoss float64 `json:"genetic_burden_health_loss"`
 	MacroHealthLoss         float64 `json:"macro_health_loss"`
 	AcuteDiseaseHealthLoss  float64 `json:"acute_disease_health_loss"`
+}
+
+type EventSave struct {
+	Turn    int    `json:"turn"`
+	Kind    uint8  `json:"kind"`
+	BandID  uint64 `json:"band_id"`
+	TileID  uint16 `json:"tile_id"`
+	Region  uint8  `json:"region"`
+	Summary string `json:"summary"`
 }
 
 // SavedHomoSapiens and SavedArchaicHominin name the BandSave.Species encoding.
@@ -214,6 +231,9 @@ func SaveStateFromWorld(world *domain.World, revision uint64) (SaveState, error)
 		}
 		save.Bands = append(save.Bands, item)
 	}
+	for _, event := range state.Events {
+		save.Events = append(save.Events, EventSave{Turn: event.Turn, Kind: uint8(event.Kind), BandID: uint64(event.BandID), TileID: uint16(event.TileID), Region: uint8(event.Region), Summary: event.Summary})
+	}
 	return save, nil
 }
 
@@ -265,6 +285,9 @@ func (save SaveState) RestoreWorld() (*domain.World, error) {
 			band.Heritable[index] = domain.TraitValue(value)
 		}
 		state.Bands = append(state.Bands, band)
+	}
+	for _, item := range save.Events {
+		state.Events = append(state.Events, domain.Event{Turn: item.Turn, Kind: domain.EventKind(item.Kind), BandID: domain.BandID(item.BandID), TileID: domain.TileID(item.TileID), Region: domain.Region(item.Region), Summary: item.Summary})
 	}
 	return domain.RestoreWorld(state)
 }

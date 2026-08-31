@@ -1,5 +1,7 @@
 package domain
 
+import "fmt"
+
 type turnBandWork struct {
 	floraDemand, huntingDemand, megafaunaDemand, waterDemand float64
 	aquaticShare                                             float64
@@ -19,6 +21,7 @@ func (world *World) AdvanceTurn() error {
 	}
 	next := *world
 	next.bands = append([]Band(nil), world.bands...)
+	next.events = append([]Event(nil), world.events...)
 	var err error
 	next.rng, err = world.rng.clone()
 	if err != nil {
@@ -245,6 +248,8 @@ func (world *World) advanceTurn() error {
 			}
 			if valid {
 				band.TileID = band.QueuedMigration
+				geography, _ := world.grid.Tile(band.TileID)
+				world.appendEvent(Event{Turn: nextTurn, Kind: EventMigration, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d migrated.", band.ID)})
 				if band.QueueUsesPassage {
 					work[index].crossed, work[index].crossedPassage = true, band.QueuedPassage
 				}
@@ -276,14 +281,16 @@ func (world *World) advanceTurn() error {
 			band.Health = Health(clamp01(float64(band.Health) - impact.HealthLoss))
 			band.LastMortality.Macro = before - float64(band.Population)
 			band.LastOutcomeReport.MacroHealthLoss = float64(healthBefore - band.Health)
+			world.appendEvent(Event{Turn: nextTurn, Kind: EventMacroEpisode, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d was affected by the Campanian eruption.", band.ID)})
 		}
 		healthBeforeAcute := band.Health
-		_, loss, occurred, err := ResolveAcute(band, geography, nextHabitat[band.TileID], season, work[index].acuteRisk, work[index].crossed, work[index].crossedPassage, kinContacts[index], world.rng)
+		kind, loss, occurred, err := ResolveAcute(band, geography, nextHabitat[band.TileID], season, work[index].acuteRisk, work[index].crossed, work[index].crossedPassage, kinContacts[index], world.rng)
 		if err != nil {
 			return err
 		}
 		if occurred {
 			band.LastMortality.Acute = loss
+			world.appendEvent(Event{Turn: nextTurn, Kind: EventAcuteIncident, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d suffered a %s incident.", band.ID, eventKindName(kind))})
 		}
 		band.LastOutcomeReport.AcuteDiseaseHealthLoss = float64(healthBeforeAcute - band.Health)
 		band.LastOutcomeReport.EndingPopulation = band.Population
@@ -307,13 +314,26 @@ func (world *World) advanceTurn() error {
 		}
 	}
 	nextBands = live
-	applyKnowledgeAndGenetics(nextBands, world.grid, researchGains, selectionDeltas, world.rng)
+	preGainBands := append([]Band(nil), nextBands...)
+	completedInterbreeding := applyKnowledgeAndGenetics(nextBands, world.grid, researchGains, selectionDeltas, world.rng)
 	for index := range nextBands {
+		learned := nextBands[index].Technology.Acquired &^ preGainBands[index].Technology.Acquired
+		for technology := Technology(0); technology < TechCount; technology++ {
+			if learned&(1<<technology) != 0 {
+				geography, _ := world.grid.Tile(nextBands[index].TileID)
+				world.appendEvent(Event{Turn: nextTurn, Kind: EventTechnology, BandID: nextBands[index].ID, TileID: nextBands[index].TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d learned %s.", nextBands[index].ID, technologyName(technology))})
+			}
+		}
+		if completedInterbreeding[nextBands[index].ID] {
+			geography, _ := world.grid.Tile(nextBands[index].TileID)
+			world.appendEvent(Event{Turn: nextTurn, Kind: EventInterbreeding, BandID: nextBands[index].ID, TileID: nextBands[index].TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d interbred with an archaic band.", nextBands[index].ID)})
+		}
 		nextBands[index].HasInterbreedTarget = false
 	}
 	result := CampaignOngoing
 	hasSapiens := false
-	established := world.establishedRegions
+	previousEstablished := world.establishedRegions
+	established := previousEstablished
 	for _, band := range nextBands {
 		if band.Species != HomoSapiens {
 			continue
@@ -322,6 +342,12 @@ func (world *World) advanceTurn() error {
 		if band.Population >= MinEstablishedBand {
 			geography, _ := world.grid.Tile(band.TileID)
 			established |= 1 << geography.Region
+		}
+	}
+	newlyEstablished := established &^ previousEstablished
+	for region := Region(0); region < RegionCount; region++ {
+		if newlyEstablished&(1<<region) != 0 {
+			world.appendEvent(Event{Turn: nextTurn, Kind: EventAchievement, Region: region, Summary: fmt.Sprintf("Sapiens established %s.", region)})
 		}
 	}
 	if !hasSapiens {

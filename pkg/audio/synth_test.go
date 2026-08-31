@@ -49,3 +49,55 @@ func TestNoopAndLazyMasterSettingsAreSafeBeforeConstruction(t *testing.T) {
 		t.Fatalf("clamped lazy settings = volume %v muted %t", lazy.volume, lazy.muted)
 	}
 }
+
+func TestLazyManagerAppliesSettledMasterBeforeFirstSound(t *testing.T) {
+	backend := &recordingManager{}
+	lazy := newLazyManager(func() SoundManager { return backend })
+	lazy.SetMaster(0.8, false)
+	lazy.Play(SFXEventTrigger)
+	if len(backend.masters) != 1 || backend.masters[0].volume != 0.8 || backend.masters[0].muted {
+		t.Fatalf("master settings = %#v", backend.masters)
+	}
+	if len(backend.played) != 1 || backend.played[0] != SFXEventTrigger {
+		t.Fatalf("played sounds = %v", backend.played)
+	}
+}
+
+func TestLazyManagerQueuesPreSettingsSoundUntilPreferencesArrive(t *testing.T) {
+	backend := &recordingManager{}
+	lazy := newLazyManager(func() SoundManager { return backend })
+	lazy.Play(SFXChoiceClick)
+	if len(backend.played) != 0 || len(backend.masters) != 1 || !backend.masters[0].muted {
+		t.Fatalf("preference-pending backend = played %v masters %#v", backend.played, backend.masters)
+	}
+	lazy.SetMaster(0.4, false)
+	if len(backend.played) != 1 || backend.played[0] != SFXChoiceClick {
+		t.Fatalf("released sounds = %v", backend.played)
+	}
+}
+
+func TestLazyManagerDoesNotStartMutedSounds(t *testing.T) {
+	backend := &recordingManager{}
+	lazy := newLazyManager(func() SoundManager { return backend })
+	lazy.SetMaster(0.4, true)
+	lazy.Play(SFXChoiceClick)
+	if len(backend.played) != 0 {
+		t.Fatalf("muted sounds = %v", backend.played)
+	}
+}
+
+type recordingManager struct {
+	played  []Sound
+	masters []struct {
+		volume float64
+		muted  bool
+	}
+}
+
+func (manager *recordingManager) Play(sound Sound) { manager.played = append(manager.played, sound) }
+func (manager *recordingManager) SetMaster(volume float64, muted bool) {
+	manager.masters = append(manager.masters, struct {
+		volume float64
+		muted  bool
+	}{volume: volume, muted: muted})
+}

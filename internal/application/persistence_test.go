@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/adsouza/africa2ice/internal/domain"
+	"github.com/adsouza/africa2ice/pkg/gameapi"
 )
 
 func TestSaveStateRoundTrip(t *testing.T) {
@@ -35,6 +36,24 @@ func TestSaveStateRoundTrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(save, restored) {
 		t.Fatal("save changed across JSON/domain round trip")
+	}
+}
+
+func TestProjectedFrameIncludesPersistedEvents(t *testing.T) {
+	service, _ := NewGameService(31)
+	state, _ := service.world.ExportState()
+	state.Events = []domain.Event{{Turn: 0, Kind: domain.EventAchievement, Region: domain.EastAfrica, Summary: "A test achievement."}}
+	world, err := domain.RestoreWorld(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.world = world
+	frame, err := service.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frame.Events) != 1 || frame.Events[0].Kind != gameapi.EventAchievement || frame.Events[0].Summary != "A test achievement." {
+		t.Fatalf("projected events = %#v", frame.Events)
 	}
 }
 

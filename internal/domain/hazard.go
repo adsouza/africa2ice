@@ -129,7 +129,7 @@ func Phase3MortalityRates(band Band, tile TileGeography, habitat HabitatTile, se
 	chronic = float64(chronicBase.exposure*remainingRisk(exposureTechnologyMitigation(band), exposureCamp)*coldRemaining*altitudeRemaining) +
 		float64(chronicBase.campPredation*remainingRisk(predationTech, security)) +
 		float64(chronicBase.campDisease*remainingRisk(campDiseaseTechnologyMitigation(band, true), hygiene)*immuneRemaining) +
-		chronicBase.uncovered
+		float64(chronicBase.uncovered*immuneRemaining)
 	chronic = float64(chronic * (1 + (1 - float64(band.Health))))
 	uv := UVExposure(tile, season)
 	pigmentation := float64(band.Heritable[PigmentationLevel])
