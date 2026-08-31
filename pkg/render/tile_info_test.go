@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
+	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
 func TestMapLegendExplainsEveryRenderedTileClass(t *testing.T) {
@@ -92,6 +93,49 @@ func TestTileLiveabilityExplainsWaterAndFallsBackToQueuedTarget(t *testing.T) {
 	}
 }
 
+func TestTileLiveabilityCallsOutArchaicBandsWithoutLeakingThroughFog(t *testing.T) {
+	frame := tileInfoFixture()
+	frame.Bands = append(frame.Bands,
+		gameapi.Band{ID: 8, Species: gameapi.ArchaicHominin, TileID: 0, Population: 60},
+		gameapi.Band{ID: 9, Species: gameapi.ArchaicHominin, TileID: 1, Population: 75},
+		gameapi.Band{ID: 10, Species: gameapi.ArchaicHominin, TileID: 1, Population: 90},
+		gameapi.Band{ID: 11, Species: gameapi.ArchaicHominin, TileID: 2, Population: 150},
+		gameapi.Band{ID: 12, Species: gameapi.ArchaicHominin, TileID: 1, Population: 0},
+	)
+	band := &frame.Bands[0]
+
+	current := currentTileSummary(frame, band)
+	if current.archaicBandCount != 1 || current.archaicPopulation != 60 {
+		t.Fatalf("current archaic presence = %d bands/%d population", current.archaicBandCount, current.archaicPopulation)
+	}
+	if line := liveabilityLines(current)[archaicPresenceLineIndex]; line != "Archaic hominins: 1 band · pop 60" {
+		t.Fatalf("current archaic line = %q", line)
+	}
+
+	target := targetTileSummary(frame, band, MigrationPreview{BandID: band.ID, TileID: 1, Visible: true})
+	if target.archaicBandCount != 2 || target.archaicPopulation != 165 {
+		t.Fatalf("target archaic presence = %d bands/%d population", target.archaicBandCount, target.archaicPopulation)
+	}
+	if line := liveabilityLines(target)[archaicPresenceLineIndex]; line != "Archaic hominins: 2 bands · pop 165" {
+		t.Fatalf("target archaic line = %q", line)
+	} else {
+		face := &text.GoTextFace{Source: NewMapScene().faceSource, Size: tileInspectorTextSize}
+		width, height := text.Measure(line, face, 0)
+		if width > 151 {
+			t.Fatalf("target archaic line width = %.1fpx, want at most 151px", width)
+		}
+		lastLineY := float64(tileInspectorOriginY+27) + float64(len(liveabilityLines(target))-1)*tileInspectorRowGap
+		if lastLineY+height > interbreedPanelLineY {
+			t.Fatalf("tile details end at %.1fpx, overlapping the footer at %dpx", lastLineY+height, interbreedPanelLineY)
+		}
+	}
+
+	hidden := targetTileSummary(frame, band, MigrationPreview{BandID: band.ID, TileID: 2, Visible: true})
+	if hidden.archaicBandCount != 0 || hidden.archaicPopulation != 0 {
+		t.Fatalf("unexplored tile leaked archaic presence: %#v", hidden)
+	}
+}
+
 func tileInfoFixture() *gameapi.Frame {
 	return &gameapi.Frame{
 		Tiles: []gameapi.Tile{
@@ -121,7 +165,7 @@ func TestLiveabilityRiskLineNamesTheDominantCause(t *testing.T) {
 		seasonalRisk: 0.0005, chronicRisk: 0.0006, hasRisk: true,
 		crowdingDecline: 28,
 	}
-	line := liveabilityLines(summary)[6]
+	line := liveabilityLines(summary)[7]
 	if !strings.Contains(strings.ToLower(line), "crowding") {
 		t.Fatalf("risk line = %q, want the dominant cause named", line)
 	}
@@ -132,7 +176,7 @@ func TestLiveabilityRiskLineNamesTheDominantCause(t *testing.T) {
 	// With room at the destination the line must stay exactly as it was, so the
 	// warning carries meaning by its absence too.
 	summary.crowdingDecline = 0
-	if line := liveabilityLines(summary)[6]; line != "Seasonal 0.05% · chronic 0.06%" {
+	if line := liveabilityLines(summary)[7]; line != "Seasonal 0.05% · chronic 0.06%" {
 		t.Fatalf("uncrowded risk line = %q", line)
 	}
 }

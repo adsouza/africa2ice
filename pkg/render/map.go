@@ -24,14 +24,17 @@ const (
 	bandOutcomeOriginY     = 310
 	tileInspectorOriginY   = 340
 	tileInspectorHeight    = 116
+	tileInspectorTextSize  = 7.4
+	tileInspectorRowGap    = 8.8
 	interbreedPanelLineY   = 446
 	fieldNotesPanelOriginY = 462
 	fieldNotesPanelHeight  = 138
 )
 
 var (
-	waterTileColor      = color.RGBA{R: 31, G: 64, B: 82, A: 255}
-	unexploredTileColor = color.RGBA{R: 6, G: 11, B: 15, A: 255}
+	waterTileColor         = color.RGBA{R: 31, G: 64, B: 82, A: 255}
+	unexploredTileColor    = color.RGBA{R: 6, G: 11, B: 15, A: 255}
+	archaicBandMarkerColor = color.RGBA{R: 201, G: 103, B: 82, A: 255}
 )
 
 type MapScene struct {
@@ -108,7 +111,7 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 		centreY := mapOriginY + float32(tile.Y*mapTileSize) + mapTileSize/2
 		marker := color.RGBA{R: 245, G: 202, B: 92, A: 255}
 		if band.Species == gameapi.ArchaicHominin {
-			marker = color.RGBA{R: 201, G: 103, B: 82, A: 255}
+			marker = archaicBandMarkerColor
 		}
 		vector.FillCircle(screen, centreX, centreY, 3.6, marker, true)
 		// An archaic band the selected band can interbreed with gets its own
@@ -378,12 +381,20 @@ func (scene *MapScene) drawTileInspector(screen *ebiten.Image, frame *gameapi.Fr
 
 	currentLines, targetLines := liveabilityLines(current), liveabilityLines(target)
 	for index := range currentLines {
-		y := tileInspectorOriginY + 27 + float32(index)*10
+		y := tileInspectorOriginY + 27 + float32(index)*tileInspectorRowGap
 		if currentLines[index] != "" {
-			scene.drawText(screen, currentLines[index], currentX, y, 7.8, color.RGBA{R: 220, G: 225, B: 218, A: 255})
+			lineColor := color.RGBA{R: 220, G: 225, B: 218, A: 255}
+			if index == archaicPresenceLineIndex && current.archaicBandCount > 0 {
+				lineColor = archaicBandMarkerColor
+			}
+			scene.drawText(screen, currentLines[index], currentX, y, tileInspectorTextSize, lineColor)
 		}
 		if targetLines[index] != "" {
-			scene.drawText(screen, targetLines[index], targetX, y, 7.8, color.RGBA{R: 220, G: 225, B: 218, A: 255})
+			lineColor := color.RGBA{R: 220, G: 225, B: 218, A: 255}
+			if index == archaicPresenceLineIndex && target.archaicBandCount > 0 {
+				lineColor = archaicBandMarkerColor
+			}
+			scene.drawText(screen, targetLines[index], targetX, y, tileInspectorTextSize, lineColor)
 		}
 	}
 

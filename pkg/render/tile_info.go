@@ -7,6 +7,8 @@ import (
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 )
 
+const archaicPresenceLineIndex = 6
+
 type mapLegendEntry struct {
 	label   string
 	meaning string
@@ -47,6 +49,8 @@ type tileLiveabilitySummary struct {
 	naturalShelter     float64
 	movementCost       float64
 	visibleMacroImpact gameapi.MacroImpactSummary
+	archaicBandCount   int
+	archaicPopulation  uint64
 	showDetails        bool
 }
 
@@ -124,6 +128,13 @@ func summarizeTile(frame *gameapi.Frame, tileID gameapi.TileID, heading string) 
 	summary.naturalShelter = tile.NaturalShelter
 	summary.movementCost = tile.MovementCost
 	summary.visibleMacroImpact = tile.VisibleMacroImpact
+	for _, band := range frame.Bands {
+		if band.Species != gameapi.ArchaicHominin || band.TileID != tileID || band.Population == 0 {
+			continue
+		}
+		summary.archaicBandCount++
+		summary.archaicPopulation += uint64(band.Population)
+	}
 	return summary
 }
 
@@ -136,8 +147,8 @@ func migrationCandidate(band gameapi.Band, tileID gameapi.TileID) (gameapi.Migra
 	return gameapi.MigrationCandidate{}, false
 }
 
-func liveabilityLines(summary tileLiveabilitySummary) [8]string {
-	lines := [8]string{summary.status}
+func liveabilityLines(summary tileLiveabilitySummary) [9]string {
+	lines := [9]string{summary.status}
 	if !summary.showDetails {
 		return lines
 	}
@@ -147,6 +158,7 @@ func liveabilityLines(summary tileLiveabilitySummary) [8]string {
 	lines[3] = fmt.Sprintf("Plants %.0f · animals %.0f", summary.floraStock, summary.faunaStock)
 	lines[4] = fmt.Sprintf("Water %.0f/%.0f WU", summary.waterStock, summary.waterCap)
 	lines[5] = fmt.Sprintf("Capacity %.0f · degraded %.0f%%", summary.ecologicalK, summary.degradation*100)
+	lines[archaicPresenceLineIndex] = formatArchaicPresence(summary.archaicBandCount, summary.archaicPopulation)
 	switch {
 	case summary.crowdingDecline > 0:
 		// Crowding dwarfs the per-person hazards whenever it applies at all — in a
@@ -154,16 +166,27 @@ func liveabilityLines(summary tileLiveabilitySummary) [8]string {
 		// carries the loss in people, which is what the choice actually costs.
 		// The column is about thirty-six characters wide, so the two hazard rates
 		// combine rather than being dropped.
-		lines[6] = fmt.Sprintf("Crowding −%.0f · hazards %.2f%%",
+		lines[7] = fmt.Sprintf("Crowding −%.0f · hazards %.2f%%",
 			summary.crowdingDecline, float64((summary.seasonalRisk+summary.chronicRisk)*100))
 	case summary.hasRisk:
-		lines[6] = fmt.Sprintf("Seasonal %.2f%% · chronic %.2f%%", summary.seasonalRisk*100, summary.chronicRisk*100)
+		lines[7] = fmt.Sprintf("Seasonal %.2f%% · chronic %.2f%%", summary.seasonalRisk*100, summary.chronicRisk*100)
 	default:
-		lines[6] = "Risk unavailable for route"
+		lines[7] = "Risk unavailable for route"
 	}
-	lines[7] = fmt.Sprintf("Shelter %.0f%% · travel ×%.2f", summary.naturalShelter*100, summary.movementCost)
+	lines[8] = fmt.Sprintf("Shelter %.0f%% · travel ×%.2f", summary.naturalShelter*100, summary.movementCost)
 	if summary.visibleMacroImpact.Visible {
-		lines[7] = fmt.Sprintf("Impact food ×%.2f · K ×%.2f", summary.visibleMacroImpact.ResourceFactor, summary.visibleMacroImpact.HabitatFactor)
+		lines[8] = fmt.Sprintf("Impact food ×%.2f · K ×%.2f", summary.visibleMacroImpact.ResourceFactor, summary.visibleMacroImpact.HabitatFactor)
 	}
 	return lines
+}
+
+func formatArchaicPresence(bandCount int, population uint64) string {
+	if bandCount == 0 {
+		return "Archaic hominins: none"
+	}
+	bandLabel := "band"
+	if bandCount != 1 {
+		bandLabel = "bands"
+	}
+	return fmt.Sprintf("Archaic hominins: %d %s · pop %d", bandCount, bandLabel, population)
 }
