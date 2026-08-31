@@ -70,6 +70,11 @@ type Game struct {
 	terrainDetail          render.TerrainDetailMode
 }
 
+const (
+	fieldNotesHotkey = ebiten.KeyF
+	splitBandHotkey  = ebiten.KeyN
+)
+
 type storageBrowserMode uint8
 
 const (
@@ -224,8 +229,8 @@ func (g *Game) Update() error {
 			}
 		}
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyN) || inpututil.IsKeyJustPressed(ebiten.KeyF) {
-		g.toggleFieldNotes()
+	if inpututil.IsKeyJustPressed(fieldNotesHotkey) {
+		g.handleGameplayHotkey(fieldNotesHotkey)
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyM) {
 		g.toggleMute()
@@ -277,17 +282,8 @@ func (g *Game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
 		g.confirmMigrationPreview()
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyB) {
-		if band := g.selected(); band != nil {
-			for _, candidate := range band.MigrationCandidates {
-				if !candidate.RequiresPassage {
-					if g.apply(gameapi.SplitBand{BandID: g.selectedBand, Destination: candidate.TileID}) {
-						g.clearMigrationPreview()
-					}
-					break
-				}
-			}
-		}
+	if inpututil.IsKeyJustPressed(splitBandHotkey) {
+		g.handleGameplayHotkey(splitBandHotkey)
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyI) {
 		g.requestInterbreed()
@@ -1023,7 +1019,7 @@ func (g *Game) handleSceneInput() bool {
 			g.dispatchBatch([]ui.Action{ui.PushSceneAction(ui.SceneSettings)})
 			return true
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyN) || inpututil.IsKeyJustPressed(ebiten.KeyF) {
+		if inpututil.IsKeyJustPressed(fieldNotesHotkey) {
 			g.toggleFieldNotes()
 		}
 		if inpututil.IsKeyJustPressed(ebiten.KeyM) {
@@ -1059,7 +1055,7 @@ func (g *Game) handleSceneInput() bool {
 			g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
 			return true
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyN) || inpututil.IsKeyJustPressed(ebiten.KeyF) {
+		if inpututil.IsKeyJustPressed(fieldNotesHotkey) {
 			g.toggleFieldNotes()
 		}
 		if inpututil.IsKeyJustPressed(ebiten.KeyM) {
@@ -1094,6 +1090,35 @@ func (g *Game) toggleFieldNotes() {
 	settings := g.settings
 	settings.FieldNotesVisible = !settings.FieldNotesVisible
 	g.updateUISettings(settings)
+}
+
+func (g *Game) handleGameplayHotkey(key ebiten.Key) bool {
+	switch key {
+	case fieldNotesHotkey:
+		g.toggleFieldNotes()
+	case splitBandHotkey:
+		g.splitSelectedBand()
+	default:
+		return false
+	}
+	return true
+}
+
+func (g *Game) splitSelectedBand() {
+	band := g.selected()
+	if band == nil {
+		return
+	}
+	for _, candidate := range band.MigrationCandidates {
+		if candidate.RequiresPassage {
+			continue
+		}
+		if g.apply(gameapi.SplitBand{BandID: g.selectedBand, Destination: candidate.TileID}) {
+			g.clearMigrationPreview()
+		}
+		return
+	}
+	g.showNotice("This band has no eligible adjacent land tile for splitting.")
 }
 
 func (g *Game) toggleMute() {
@@ -1404,7 +1429,7 @@ func (g *Game) menuOverlayForRender() render.MenuOverlay {
 	case ui.ScenePause:
 		return render.MenuOverlay{
 			Visible: true, Heading: "Paused", Selected: -1, LineCount: 5,
-			Lines: [8]string{"P / Esc  Resume", "S  Save slots", "L  Load or delete slots", "O  Settings", "N  Toggle Field Notes"},
+			Lines: [8]string{"P / Esc  Resume", "S  Save slots", "L  Load or delete slots", "O  Settings", "F  Toggle Field Notes"},
 			Help:  "The simulation is frozen while this menu is open.",
 		}
 	case ui.SceneStorage:
@@ -1452,7 +1477,7 @@ func (g *Game) menuOverlayForRender() render.MenuOverlay {
 			Lines: [8]string{
 				fmt.Sprintf("-/+  Master volume  %.0f%%", g.settings.MasterVolume*100),
 				"M  Muted  " + mute,
-				"N  Field Notes  " + visible,
+				"F  Field Notes  " + visible,
 				"T  Terrain detail  " + detail,
 			},
 			Help: "O / Esc back · terrain detail is session-local",

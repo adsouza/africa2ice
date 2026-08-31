@@ -17,7 +17,7 @@ Current controls:
 - click any other map tile to see why it is not currently reachable, including water, uninhabitable terrain, and locked passages;
 - Tab/Shift+Tab selects the next/previous sapiens band, with wraparound;
 - Space ends the turn;
-- 1–9 selects the named research shown in the persistent research-key legend, and B splits a band;
+- 1–9 selects the named research shown in the persistent research-key legend, and N splits a band;
 - W cycles the workforce roles, [ and ] adjust the highlighted share by one percentage point,
   A applies an exact 100% draft, and D discards it; changing bands or ending the turn is blocked while
   a draft is dirty;
@@ -25,7 +25,7 @@ Current controls:
   selected band's tile, where a violet ring marks it on the map and the panel names it, and pressing
   I otherwise explains why it is unavailable;
 - completing a technology triggers a breakthrough toast and updates Field Notes with context, its game effect, and a hint;
-- N toggles the Field Notes panel (F remains a compatibility alias);
+- F toggles the Field Notes panel;
 - G cycles contextual Field Notes for the selected band's six heritable traits;
 - M toggles mute, while - and + adjust the synthesized-effect master volume in 10% steps;
 - Ctrl+S (Cmd+S on macOS) quick-saves to the desktop filesystem or browser IndexedDB.

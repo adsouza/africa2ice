@@ -607,9 +607,9 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 		if fieldNote.Celebration {
 			vector.StrokeRect(screen, panelX+14, fieldNotesPanelOriginY, 324, fieldNotesPanelHeight, 2, headingColor, false)
 		}
-		headingSuffix := "  [N to hide]"
+		headingSuffix := "  [F to hide]"
 		if fieldNote.Celebration {
-			headingSuffix = "  [N]"
+			headingSuffix = "  [F]"
 		}
 		scene.drawText(screen, heading+headingSuffix, panelX+28, fieldNotesPanelOriginY+9, 10, headingColor)
 		body := fieldNote.Introduction
@@ -624,17 +624,17 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 		}
 		scene.drawText(screen, body, panelX+28, fieldNotesPanelOriginY+29, 9, color.RGBA{R: 202, G: 210, B: 206, A: 255})
 	} else {
-		label := "N: show Field Notes"
+		label := "F: show Field Notes"
 		labelColor := color.RGBA{R: 203, G: 172, B: 104, A: 255}
 		if fieldNote.Celebration {
-			label = "BREAKTHROUGH: " + fieldNote.Topic + " · N for details"
+			label = "BREAKTHROUGH: " + fieldNote.Topic + " · F for details"
 			labelColor = color.RGBA{R: 255, G: 213, B: 92, A: 255}
 		}
 		scene.drawText(screen, label, panelX+18, 574, 12, labelColor)
 	}
 	scene.drawText(screen, "Click: migrate · Arrows: choose · Enter: queue", panelX+18, 636, 10.5, color.White)
 	scene.drawText(screen, "Tab/Shift+Tab: bands · Space: turn", panelX+18, 652, 10.5, color.White)
-	spatialHint := "B: split"
+	spatialHint := "N: split"
 	if actor := selectedBandInFrame(frame, selectedBand); actor != nil {
 		spatialHint = spatialControlHint(interbreedStatus(*actor))
 	}

@@ -6830,6 +6830,11 @@ The same 2D HUD layout applies on desktop and web, over the 3D map:
   the existing red arrow remains frame-driven after confirmation. Pointer clicks still queue an
   eligible destination immediately, and non-adjacent named passages remain clickable. The persistent
   controls legend names the arrow, `Enter`, and `Esc` bindings.
+- **Keyboard splitting:** plain `N` sends `SplitBand` toward the selected band's first-ranked
+  eligible ordinary-land candidate. Named passages are never split destinations. The domain still
+  owns population, stress, spatial-action, band-cap, adjacency, and habitability validation; a
+  rejection or the absence of an ordinary-land candidate produces player-facing feedback rather
+  than changing Field Notes or failing silently.
 - **Rejected-destination feedback:** clicking any tile absent from that authoritative candidate list
   produces a short, player-facing explanation instead of silently doing nothing or repeating a
   generic “choose an outlined tile” message. `pkg/ui` classifies the frame projection into spent
@@ -6967,7 +6972,7 @@ future pulse is drawn and exact regional magnitude remains in the explored tile 
 A persistently available **Field Notes** text panel is visible by default and docked along the lower
 edge of the gameplay HUD. It has a capped responsive height and its own scroll position, and it must
 not cover the top bar, selected-band controls, tile inspector, or required alerts. The top bar has a
-book-button toggle; plain `N` performs the same action when no text-editing control has keyboard
+book-button toggle; plain `F` performs the same action when no text-editing control has keyboard
 focus. Hiding the panel leaves a small labeled tab that can restore it. On narrow windows, the panel
 may become a lower drawer, but it retains the same visible/hidden states and never replaces a
 simulation inspector.
@@ -8457,7 +8462,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    activations and reject disabled/repeated/slider/hover paths; save-sound fixtures key exactly once
    by successful manual/quick-save operation ID and keep autosave/load/delete/failure silent.
    Implement and test Field Notes in this step: visible by default; lower-edge capped/scrollable
-   layout; top-bar book button, plain-`N` toggle, and hidden restore tab; stable context priority for
+   layout; top-bar book button, plain-`F` toggle, and hidden restore tab; stable context priority for
    explicit trait/technology/passage/interbreeding focus, newly established region, current/warned
    macro context, band, region/biome, event, and campaign topics; and all
    three required text blocks, including sourced abrupt-climate, active Campanian, and no-effect Toba

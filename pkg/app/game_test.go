@@ -9,6 +9,7 @@ import (
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/adsouza/africa2ice/pkg/render"
 	"github.com/adsouza/africa2ice/pkg/ui"
+	"github.com/hajimehoshi/ebiten/v2"
 )
 
 type gameStub struct {
@@ -137,6 +138,43 @@ func TestKeyboardMigrationPreviewCanTurnIntoReachableCorner(t *testing.T) {
 	}
 	if game.hasMigrationPreview {
 		t.Fatal("confirmed migration left the keyboard preview active")
+	}
+}
+
+func TestFieldNotesAndSplitHotkeysRemainDistinct(t *testing.T) {
+	if fieldNotesHotkey != ebiten.KeyF {
+		t.Fatalf("Field Notes hotkey = %v, want F", fieldNotesHotkey)
+	}
+	if splitBandHotkey != ebiten.KeyN {
+		t.Fatalf("split-band hotkey = %v, want N", splitBandHotkey)
+	}
+	if fieldNotesHotkey == splitBandHotkey {
+		t.Fatal("Field Notes and split-band hotkeys overlap")
+	}
+
+	stub := &gameStub{frame: migrationPreviewFrame()}
+	game := New(stub)
+	if !game.handleGameplayHotkey(fieldNotesHotkey) || game.fieldNotesVisible || stub.appliedCommand != nil {
+		t.Fatalf("F binding = visible %t, command %T", game.fieldNotesVisible, stub.appliedCommand)
+	}
+	if !game.handleGameplayHotkey(splitBandHotkey) {
+		t.Fatal("N binding was not handled")
+	}
+	command, ok := stub.appliedCommand.(gameapi.SplitBand)
+	if !ok || command.BandID != 7 || command.Destination != 2 || game.fieldNotesVisible {
+		t.Fatalf("N binding = command %#v, Field Notes visible %t", stub.appliedCommand, game.fieldNotesVisible)
+	}
+}
+
+func TestSplitHotkeyExplainsWhenNoOrdinaryDestinationExists(t *testing.T) {
+	frame := migrationPreviewFrame()
+	frame.Bands[0].MigrationCandidates[0].RequiresPassage = true
+	stub := &gameStub{frame: frame}
+	game := New(stub)
+
+	game.handleGameplayHotkey(splitBandHotkey)
+	if stub.appliedCommand != nil || game.notice != "This band has no eligible adjacent land tile for splitting." {
+		t.Fatalf("unavailable split = command %T, notice %q", stub.appliedCommand, game.notice)
 	}
 }
 
