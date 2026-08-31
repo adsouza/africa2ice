@@ -24,11 +24,62 @@ func TestTechnologyFieldNotesCoverTheClosedCatalog(t *testing.T) {
 	if _, ok := TechnologyFieldNote(gameapi.TechCount, 7, 1); ok {
 		t.Fatal("out-of-range technology has Field Notes")
 	}
+	fishing, _ := TechnologyFieldNote(gameapi.CordageAndNets, 7, 1)
+	combined := fishing.Context + " " + fishing.Hint
+	for _, required := range []string{"~90 ka", "~42 ka", "23–16 ka", "post-campaign"} {
+		if !strings.Contains(combined, required) {
+			t.Fatalf("fishing chronology omits %q: %#v", required, fishing)
+		}
+	}
 }
 
 func TestCampaignOverviewIdentifiesTheDenisovanBand(t *testing.T) {
 	if note := CampaignOverviewFieldNote(); !strings.Contains(note.Hint, "Denisovan") {
 		t.Fatalf("campaign overview does not identify the Denisovan band: %#v", note)
+	}
+}
+
+func TestTraitAndRegionFieldNotesCoverTheirClosedCatalogs(t *testing.T) {
+	for trait := gameapi.HeritableTrait(0); trait < gameapi.HeritableTraitCount; trait++ {
+		note, ok := TraitFieldNote(trait, 0.5)
+		if !ok || note.Topic == "" || note.Introduction == "" || note.Context == "" || note.GameEffect == "" || note.Hint == "" {
+			t.Fatalf("trait %d has incomplete Field Notes: %#v", trait, note)
+		}
+	}
+	for region := gameapi.Region(0); region < gameapi.RegionCount; region++ {
+		note, ok := RegionEstablishedFieldNote(region)
+		if !ok || note.Topic == "" || note.Context == "" || note.GameEffect == "" || note.Hint == "" {
+			t.Fatalf("region %d has incomplete Field Notes: %#v", region, note)
+		}
+	}
+	if _, ok := TraitFieldNote(gameapi.HeritableTraitCount, 0.5); ok {
+		t.Fatal("out-of-range trait has Field Notes")
+	}
+	if _, ok := RegionEstablishedFieldNote(gameapi.RegionCount); ok {
+		t.Fatal("out-of-range region has Field Notes")
+	}
+}
+
+func TestCampanianFieldNoteLabelsTheSimulationEnvelope(t *testing.T) {
+	note, ok := MacroEpisodeFieldNote(gameapi.MacroEpisodeSummary{Episode: gameapi.CampanianIgnimbrite, Warned: true})
+	if !ok || !strings.Contains(note.Context, "39,850") || !strings.Contains(note.GameEffect, "envelope") || !strings.Contains(note.Introduction, "warning") {
+		t.Fatalf("Campanian note = %#v", note)
+	}
+}
+
+func TestClimateAndTobaNotesSeparateContextFromGameplay(t *testing.T) {
+	for epoch := gameapi.ClimateEpoch(0); epoch < gameapi.ClimateEpochCount; epoch++ {
+		note, ok := ClimateEpochFieldNote(epoch)
+		if !ok || !strings.Contains(note.Context, "Lisiecki") || !strings.Contains(note.GameEffect, "palette") {
+			t.Fatalf("climate epoch %d note = %#v", epoch, note)
+		}
+	}
+	if _, ok := ClimateEpochFieldNote(gameapi.ClimateEpochCount); ok {
+		t.Fatal("out-of-range climate epoch has Field Notes")
+	}
+	toba := TobaFieldNote()
+	if !strings.Contains(toba.Context+toba.Hint, "Storey") || !strings.Contains(toba.GameEffect, "no effect") {
+		t.Fatalf("Toba note does not separate evidence and gameplay: %#v", toba)
 	}
 }
 

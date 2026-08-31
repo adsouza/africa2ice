@@ -6,6 +6,8 @@ const (
 	MaxRenderScale       = 2.0
 	MinViewportWidthDIP  = 960.0
 	MinViewportHeightDIP = 600.0
+	PresentationWidth    = 1280.0
+	PresentationHeight   = 720.0
 )
 
 // Viewport is presentation-only state. It converts the window's logical DIPs
@@ -63,6 +65,40 @@ func (viewport Viewport) RenderToDIP(xPx, yPx float64) (float64, float64) {
 		return 0, 0
 	}
 	return xPx / viewport.ScaleX, yPx / viewport.ScaleY
+}
+
+// PresentationTransform aspect-fits the fixed presentation surface inside
+// the physical render target. Letterboxing is presentation-only and mouse
+// input uses the exact inverse transform.
+type PresentationTransform struct {
+	Scale   float64
+	OffsetX float64
+	OffsetY float64
+}
+
+func FitPresentation(renderWidth, renderHeight int) PresentationTransform {
+	if renderWidth <= 0 || renderHeight <= 0 {
+		return PresentationTransform{Scale: 1}
+	}
+	scale := min(float64(renderWidth)/PresentationWidth, float64(renderHeight)/PresentationHeight)
+	return PresentationTransform{
+		Scale:   scale,
+		OffsetX: (float64(renderWidth) - PresentationWidth*scale) / 2,
+		OffsetY: (float64(renderHeight) - PresentationHeight*scale) / 2,
+	}
+}
+
+func (transform PresentationTransform) LogicalToRender(x, y float64) (float64, float64) {
+	return transform.OffsetX + x*transform.Scale, transform.OffsetY + y*transform.Scale
+}
+
+func (transform PresentationTransform) RenderToLogical(x, y float64) (float64, float64, bool) {
+	if transform.Scale <= 0 {
+		return 0, 0, false
+	}
+	logicalX := (x - transform.OffsetX) / transform.Scale
+	logicalY := (y - transform.OffsetY) / transform.Scale
+	return logicalX, logicalY, logicalX >= 0 && logicalX < PresentationWidth && logicalY >= 0 && logicalY < PresentationHeight
 }
 
 func sameViewportGeometry(first, second Viewport) bool {

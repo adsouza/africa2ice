@@ -19,23 +19,23 @@ Measured 2026-08-30 from a full `./build_web.sh --release` build — stripped, t
 
 | measurement            |      bytes |
 |------------------------|-----------:|
-| raw                    | 21,999,936 |
-| `brotli -q 11` (gated) |  3,746,982 |
-| `gzip -9`              |  5,219,150 |
+| raw                    | 22,329,016 |
+| `brotli -q 11` (gated) |  3,815,965 |
+| `gzip -9`              |  5,276,125 |
 
 **`wasm-opt` is primarily a decompressed-size optimization.** Measuring the same build with and
 without the optimizer shows a modest compressed improvement rather than a second-order transfer-size lever:
 
 |                         |        raw |     brotli |      gzip |
 |-------------------------|-----------:|-----------:|----------:|
-| stripped, no `wasm-opt` | 24,167,737 |  3,872,152 | 5,376,437 |
-| `wasm-opt -O3`          | 21,999,936 |  3,746,982 | 5,219,150 |
-| change                  |     −8.97% |  **−3.23%** | **−2.93%** |
+| stripped, no `wasm-opt` | 23,767,369 |  3,817,908 | 5,311,519 |
+| `wasm-opt -O3`          | 22,329,016 |  3,815,965 | 5,276,125 |
+| change                  |     −6.05% |  **−0.05%** | **−0.67%** |
 
-The optimizer removes about nine percent of the decompressed module and about three percent of both
-compressed streams in the current dependency graph. Keep `wasm-opt` for decompressed size, startup,
-and this smaller transfer benefit; application/dependency reachability remains the route for larger
-transfer-size reductions.
+The optimizer removes about six percent of the decompressed module. Brotli already finds nearly all
+of that redundancy, while gzip retains a small additional benefit. Keep `wasm-opt` for decompressed
+size, startup, and the smaller transfer benefit; application/dependency reachability remains the
+route for larger transfer-size reductions.
 
 **Provenance.** Built with Homebrew Binaryen **132** on darwin/arm64. Appendix C Locks the toolchain
 at `version_131` and records a SHA-256 for the Linux x86-64 tarball only, so this is a close
@@ -68,10 +68,10 @@ Measured 2026-08-31 from the optimized artifact in pinned Chromium `151.0.7922.3
 
 | detail | DPR | median FPS | required floor | p95 frame gap | maximum `EndTurn` latency | JS heap |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| normal | 1 | 59.88 | 20 | 16.8 ms | 33.74 ms | 26.0 MB |
-| low | 1 | 59.88 | 30 | 16.8 ms | 30.32 ms | 26.0 MB |
-| normal | 2 | 59.88 | 15 | 16.8 ms | 36.42 ms | 26.0 MB |
-| low | 2 | 59.88 | 20 | 16.8 ms | 38.67 ms | 26.0 MB |
+| normal | 1 | 59.88 | 20 | 16.8 ms | 51.06 ms | 26.0 MB |
+| low | 1 | 59.88 | 30 | 16.8 ms | 71.51 ms | 26.0 MB |
+| normal | 2 | 59.88 | 15 | 16.8 ms | 56.56 ms | 26.0 MB |
+| low | 2 | 59.88 | 20 | 16.8 ms | 108.26 ms | 26.0 MB |
 
 All four floors, the 150 ms p95 frame-gap ceiling, and the two-second turn-latency ceiling pass.
 The key optimization is appropriate to a turn-based presentation: production disables automatic

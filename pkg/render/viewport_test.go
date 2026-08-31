@@ -75,3 +75,23 @@ func TestViewportCoordinateRoundTripsAndMinimumGate(t *testing.T) {
 		t.Fatalf("uninitialized inverse transform = (%v,%v)", x, y)
 	}
 }
+
+func TestPresentationTransformAspectFitsAndRoundTrips(t *testing.T) {
+	for _, dimensions := range [][2]int{{1280, 720}, {2560, 1440}, {1600, 1200}, {1200, 720}} {
+		transform := FitPresentation(dimensions[0], dimensions[1])
+		for _, point := range [][2]float64{{0, 0}, {640, 360}, {1279, 719}} {
+			x, y := transform.LogicalToRender(point[0], point[1])
+			logicalX, logicalY, inside := transform.RenderToLogical(x, y)
+			if !inside || math.Abs(logicalX-point[0]) > 1e-9 || math.Abs(logicalY-point[1]) > 1e-9 {
+				t.Fatalf("%v in %v round-tripped to (%v,%v,%v)", point, dimensions, logicalX, logicalY, inside)
+			}
+		}
+	}
+	pillarboxed := FitPresentation(1600, 1200)
+	if pillarboxed.OffsetX != 0 || pillarboxed.OffsetY != 150 || pillarboxed.Scale != 1.25 {
+		t.Fatalf("4:3 transform = %#v", pillarboxed)
+	}
+	if _, _, inside := pillarboxed.RenderToLogical(800, 10); inside {
+		t.Fatal("letterbox point reported inside presentation")
+	}
+}

@@ -82,6 +82,27 @@ func TestDecoratorPreservesError(t *testing.T) {
 	_ = session.Close()
 }
 
+func TestActionLoggingRecordsBoundedTypedPayloadsAndBatchRejection(t *testing.T) {
+	output := &bufferCloser{}
+	session := newSession(strings.NewReader(strings.Repeat("a", 16)), "test", output)
+	action := ui.SimulationAction(gameapi.SetAssignment{
+		BandID:       9,
+		AllocationBP: [gameapi.AssignmentCount]uint16{1_000, 2_000, 3_000, 1_500, 2_500},
+	})
+	session.LogActionDispatch(action)
+	session.LogActionRejected(2, ui.ErrInvalidActionBatch)
+	logged := output.String()
+	for _, required := range []string{"action.dispatch", "set_assignment", "foraging_bp", "2500", "action.rejected", "action_count"} {
+		if !strings.Contains(logged, required) {
+			t.Fatalf("action log missing %q: %s", required, logged)
+		}
+	}
+	if strings.Contains(logged, "Field Notes") || strings.Contains(logged, "SaveState") {
+		t.Fatalf("action log leaked free-form or serialized state: %s", logged)
+	}
+	_ = session.Close()
+}
+
 type countingSettingsStore struct {
 	reads, writes, polls int
 	completions          []ui.UISettingsCompletion

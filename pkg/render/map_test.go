@@ -156,8 +156,8 @@ func TestMapSceneCachesTerrainForAnAcceptedFrame(t *testing.T) {
 	defer screen.Deallocate()
 	scene := NewMapScene()
 
-	scene.Draw(screen, frame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{})
-	scene.Draw(screen, frame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{})
+	scene.Draw(screen, frame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
+	scene.Draw(screen, frame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
 	if scene.terrainRebuilds != 1 {
 		t.Fatalf("terrain rebuilds for unchanged accepted frame = %d, want 1", scene.terrainRebuilds)
 	}
@@ -167,15 +167,29 @@ func TestMapSceneCachesTerrainForAnAcceptedFrame(t *testing.T) {
 
 	nextFrame := cloneRenderFrame(frame)
 	nextFrame.WorldRevision++
-	scene.Draw(screen, nextFrame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{})
+	scene.Draw(screen, nextFrame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
 	if scene.terrainRebuilds != 2 {
 		t.Fatalf("terrain rebuilds after accepted frame replacement = %d, want 2", scene.terrainRebuilds)
 	}
 
 	scene.SetTerrainDetail(TerrainDetailLow)
-	scene.Draw(screen, nextFrame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{})
+	scene.Draw(screen, nextFrame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
 	if scene.terrainRebuilds != 3 {
 		t.Fatalf("terrain rebuilds after detail change = %d, want 3", scene.terrainRebuilds)
+	}
+}
+
+func TestMapSceneBuildsOneLogicalPresentationForAHighDPITarget(t *testing.T) {
+	frame := representativeRenderFrame()
+	highDPI := ebiten.NewImage(2560, 1440)
+	defer highDPI.Deallocate()
+	scene := NewMapScene()
+	scene.Draw(highDPI, frame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
+	if scene.frameWidth != 2560 || scene.frameHeight != 1440 {
+		t.Fatalf("cached target dimensions = %dx%d", scene.frameWidth, scene.frameHeight)
+	}
+	if scene.frameImage == nil || scene.frameImage.Bounds() != image.Rect(0, 0, 1280, 720) {
+		t.Fatalf("logical presentation image = %v", scene.frameImage)
 	}
 }
 
@@ -332,7 +346,7 @@ func renderMapOffscreen(t *testing.T, frame *gameapi.Frame, selected gameapi.Ban
 	screen := ebiten.NewImage(1280, 720)
 	scene := NewMapScene()
 	scene.Update()
-	scene.Draw(screen, frame, selected, preview, notice, note, notesVisible, ending)
+	scene.Draw(screen, frame, selected, preview, notice, note, notesVisible, ending, false)
 	if screen.Bounds() != image.Rect(0, 0, 1280, 720) {
 		t.Fatalf("offscreen render bounds = %v", screen.Bounds())
 	}

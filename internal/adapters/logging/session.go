@@ -7,6 +7,9 @@ import (
 	"runtime/debug"
 	"sync/atomic"
 	"time"
+
+	"github.com/adsouza/africa2ice/pkg/gameapi"
+	"github.com/adsouza/africa2ice/pkg/ui"
 )
 
 type Session struct {
@@ -86,4 +89,72 @@ func (session *Session) end(id uint64, started time.Time, layer, operation strin
 	values := []any{"operation_id", id, "layer", layer, "operation", operation, "outcome", outcome, "duration_ms", float64(time.Since(started)) / float64(time.Millisecond)}
 	values = append(values, attributes...)
 	session.logger.Info("operation.end", values...)
+}
+
+// LogActionRejected records one batch-level rejection. Callers must invoke it
+// only after preflight fails and before invoking any member of the batch.
+func (session *Session) LogActionRejected(actionCount int, err error) {
+	if session == nil {
+		return
+	}
+	session.logger.Warn("action.rejected", "action_count", actionCount, "error", err)
+}
+
+// LogActionDispatch records the bounded scalar payload immediately before the
+// host invokes one accepted typed action.
+func (session *Session) LogActionDispatch(action ui.Action) {
+	if session == nil {
+		return
+	}
+	attributes := []any{"kind", action.Kind().String()}
+	switch action.Kind() {
+	case ui.ActionSimulationCommand:
+		attributes = append(attributes, commandLogAttributes(action.Command())...)
+	case ui.ActionSave, ui.ActionLoad, ui.ActionDelete:
+		attributes = append(attributes, "slot", action.Slot())
+	case ui.ActionNavigate:
+		navigation, scene := action.Navigation()
+		attributes = append(attributes, "navigation", uint8(navigation), "scene", uint8(scene))
+	}
+	session.logger.Info("action.dispatch", attributes...)
+}
+
+func commandLogAttributes(command gameapi.Command) []any {
+	attributes := []any{"command", fmtCommandKind(command), "band_id", uint64(command.ActingBandID())}
+	switch value := command.(type) {
+	case gameapi.SetAssignment:
+		attributes = append(attributes,
+			"foraging_bp", value.AllocationBP[gameapi.Foraging],
+			"hunting_fishing_bp", value.AllocationBP[gameapi.HuntingAndFishing],
+			"toolcraft_bp", value.AllocationBP[gameapi.Toolcraft],
+			"megafauna_bp", value.AllocationBP[gameapi.MegafaunaTracking],
+			"shelter_bp", value.AllocationBP[gameapi.Shelter],
+		)
+	case gameapi.QueueMigration:
+		attributes = append(attributes, "tile_id", uint64(value.TileID))
+	case gameapi.SplitBand:
+		attributes = append(attributes, "tile_id", uint64(value.Destination))
+	case gameapi.ResearchTech:
+		attributes = append(attributes, "technology", uint8(value.Tech))
+	case gameapi.Interbreed:
+		attributes = append(attributes, "target_band_id", uint64(value.TargetBandID))
+	}
+	return attributes
+}
+
+func fmtCommandKind(command gameapi.Command) string {
+	switch command.(type) {
+	case gameapi.SetAssignment:
+		return "set_assignment"
+	case gameapi.QueueMigration:
+		return "queue_migration"
+	case gameapi.SplitBand:
+		return "split_band"
+	case gameapi.ResearchTech:
+		return "research_tech"
+	case gameapi.Interbreed:
+		return "interbreed"
+	default:
+		return "unknown"
+	}
 }

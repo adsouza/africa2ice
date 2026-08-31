@@ -129,6 +129,94 @@ func TestTerrainChunkPlansRejectMalformedProjectedGrids(t *testing.T) {
 	}
 }
 
+func TestTerrainScene3DBuildsSixChunksAndPicksOnlyExploredTops(t *testing.T) {
+	tiles := terrainFixture(func(x, y int) float64 {
+		if x >= 40 && x < 48 && y >= 24 && y < 32 {
+			return 1
+		}
+		return 0
+	})
+	for index := range tiles {
+		tiles[index].Land = true
+		tiles[index].Explored = true
+		tiles[index].Biome = gameapi.Savanna
+	}
+	frame := &gameapi.Frame{TerrainRevision: 7, Tiles: tiles, Climate: gameapi.ClimateSummary{AridityIndex: 0.4}}
+	terrain := NewTerrainScene3D()
+	if err := terrain.Rebuild(frame, TerrainDetailNormal); err != nil {
+		t.Fatal(err)
+	}
+	if len(terrain.models) != TerrainChunkCount || len(terrain.plans) != TerrainChunkCount || terrain.rebuilds != 1 {
+		t.Fatalf("terrain graph = models %d plans %d rebuilds %d", len(terrain.models), len(terrain.plans), terrain.rebuilds)
+	}
+	if terrain.material == nil || terrain.material.Shadeless || terrain.directionalLight == nil {
+		t.Fatal("normal detail did not retain the lit shared material and one directional light")
+	}
+	for index, plan := range terrain.plans {
+		if len(terrain.triangleTileIDs[index]) != plan.TriangleCount() {
+			t.Fatalf("chunk %d lookup = %d, want %d", index, len(terrain.triangleTileIDs[index]), plan.TriangleCount())
+		}
+	}
+
+	tileID := gameapi.TileID(30*TerrainGridWidth + 44)
+	x, y, ok := terrain.TilePoint(tileID)
+	if !ok {
+		t.Fatal("explored highland has no screen position")
+	}
+	picked, ok := terrain.PickTile(int(x), int(y))
+	if !ok || picked != tileID {
+		t.Fatalf("picked tile = (%d,%t), want %d", picked, ok, tileID)
+	}
+	terrain.screenTiles[tileID].explored = false
+	if picked, ok := terrain.PickTile(int(x), int(y)); ok && picked == tileID {
+		t.Fatal("hidden tile remained pickable")
+	}
+}
+
+func TestTerrainScene3DLowDetailOmitsEveryWall(t *testing.T) {
+	tiles := terrainFixture(func(x, y int) float64 { return float64((x + y) % 2) })
+	for index := range tiles {
+		tiles[index].Land = true
+		tiles[index].Explored = true
+	}
+	terrain := NewTerrainScene3D()
+	if err := terrain.Rebuild(&gameapi.Frame{Tiles: tiles}, TerrainDetailLow); err != nil {
+		t.Fatal(err)
+	}
+	if terrain.material == nil || !terrain.material.Shadeless || terrain.directionalLight != nil {
+		t.Fatal("low detail retained lighting or lost its shadeless material")
+	}
+	for _, plan := range terrain.plans {
+		if plan.WallTriangles != 0 || len(terrain.triangleTileIDs[plan.Index]) != plan.TopTriangles {
+			t.Fatalf("low detail chunk %d retained walls", plan.Index)
+		}
+	}
+}
+
+func TestTerrainCameraMovementReprojectsWithoutRebuildingChunks(t *testing.T) {
+	tiles := terrainFixture(func(_, _ int) float64 { return 0 })
+	for index := range tiles {
+		tiles[index].Land = true
+		tiles[index].Explored = true
+	}
+	terrain := NewTerrainScene3D()
+	if err := terrain.Rebuild(&gameapi.Frame{TerrainRevision: 4, Tiles: tiles}, TerrainDetailNormal); err != nil {
+		t.Fatal(err)
+	}
+	tile := gameapi.TileID(20*TerrainGridWidth + 70)
+	beforeX, beforeY, _ := terrain.TilePoint(tile)
+	if !terrain.AdjustCamera(0.15, 0.04, 5, 2, -1) {
+		t.Fatal("non-zero camera input reported no change")
+	}
+	afterX, afterY, _ := terrain.TilePoint(tile)
+	if beforeX == afterX && beforeY == afterY {
+		t.Fatal("camera movement did not reproject tile positions")
+	}
+	if terrain.rebuilds != 1 || terrain.orbit.revision != 3 {
+		t.Fatalf("camera movement rebuilt chunks or lost revision: rebuilds=%d orbit=%d", terrain.rebuilds, terrain.orbit.revision)
+	}
+}
+
 func terrainFixture(elevation func(x, y int) float64) []gameapi.Tile {
 	tiles := make([]gameapi.Tile, 0, TerrainGridWidth*TerrainGridHeight)
 	for y := 0; y < TerrainGridHeight; y++ {

@@ -4,10 +4,17 @@ import (
 	"errors"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/adsouza/africa2ice/internal/domain"
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 )
+
+type fakeMonotonicClock struct{ now time.Time }
+
+func (clock *fakeMonotonicClock) Now() time.Time { return clock.now }
+
+func (clock *fakeMonotonicClock) Advance(duration time.Duration) { clock.now = clock.now.Add(duration) }
 
 type repositoryStub struct {
 	writable    bool
@@ -219,6 +226,60 @@ func TestEndTurnRequestsRotatingAutosave(t *testing.T) {
 		if len(results) != 1 || results[0].Slot != int(expected) || results[0].Err != nil {
 			t.Fatalf("turn %d autosave result = %#v", turn+1, results)
 		}
+	}
+}
+
+func TestFiveMinuteAutosaveFallbackRequiresANewerRevision(t *testing.T) {
+	clock := &fakeMonotonicClock{now: time.Unix(1_000, 0)}
+	repository := &repositoryStub{writable: true}
+	service, err := newGameServiceWithRepositoryAndClock(31, repository, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock.Advance(autosaveFallbackInterval)
+	service.PollStorage()
+	if repository.written != nil {
+		t.Fatal("time fallback saved an unchanged initial revision")
+	}
+
+	initial, _ := service.Snapshot()
+	allocation := initial.Bands[0].AllocationBP
+	allocation[0]++
+	allocation[1]--
+	if _, err := service.Apply(gameapi.SetAssignment{BandID: initial.Bands[0].ID, AllocationBP: allocation}); err != nil {
+		t.Fatal(err)
+	}
+	clock.Advance(autosaveFallbackInterval - time.Second)
+	service.PollStorage()
+	if repository.written != nil {
+		t.Fatal("fallback saved before a fresh five-minute interval")
+	}
+	clock.Advance(time.Second)
+	service.PollStorage()
+	if repository.written == nil || repository.writtenSlot != Auto1 || repository.written.WorldRevision != initial.WorldRevision+1 {
+		t.Fatalf("fallback write = slot %d state %#v", repository.writtenSlot, repository.written)
+	}
+}
+
+func TestAutosaveChoosesEmptyThenOldestCommittedSlot(t *testing.T) {
+	clock := &fakeMonotonicClock{now: time.Unix(1_000, 0)}
+	repository := &repositoryStub{writable: true}
+	service, err := newGameServiceWithRepositoryAndClock(31, repository, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.observeAutosaveMetadata(SaveMetadata{SlotID: Auto1, CommitSequence: 8})
+	service.observeAutosaveMetadata(SaveMetadata{SlotID: Auto2, CommitSequence: 3})
+	if got := service.chooseAutosaveSlot(); got != Auto3 {
+		t.Fatalf("first empty autosave slot = %d, want %d", got, Auto3)
+	}
+	service.observeAutosaveMetadata(SaveMetadata{SlotID: Auto3, CommitSequence: 5})
+	if got := service.chooseAutosaveSlot(); got != Auto2 {
+		t.Fatalf("oldest autosave slot = %d, want %d", got, Auto2)
+	}
+	service.observeAutosaveMetadata(SaveMetadata{SlotID: Auto1, CommitSequence: 3})
+	if got := service.chooseAutosaveSlot(); got != Auto1 {
+		t.Fatalf("tie-broken autosave slot = %d, want %d", got, Auto1)
 	}
 }
 

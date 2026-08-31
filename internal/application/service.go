@@ -1,20 +1,26 @@
 package application
 
 import (
+	"time"
+
 	"github.com/adsouza/africa2ice/internal/domain"
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 )
 
 type GameService struct {
-	world           *domain.World
-	worldRevision   uint64
-	terrainRevision uint64
-	repository      CampaignRepository
-	nextStorageID   gameapi.StorageOpID
-	activeStorage   *storageRequest
-	queuedStorage   *storageRequest
-	storageResults  []gameapi.StorageResult
-	autoNeeded      bool
+	world                   *domain.World
+	worldRevision           uint64
+	terrainRevision         uint64
+	repository              CampaignRepository
+	nextStorageID           gameapi.StorageOpID
+	activeStorage           *storageRequest
+	queuedStorage           *storageRequest
+	storageResults          []gameapi.StorageResult
+	autoNeeded              bool
+	clock                   monotonicClock
+	lastAutosaveRevision    uint64
+	nextAutosaveFallback    time.Time
+	autosaveCommitSequences [3]uint64
 }
 
 type storageRequest struct {
@@ -30,11 +36,17 @@ func NewGameService(seed uint64) (*GameService, error) {
 }
 
 func NewGameServiceWithRepository(seed uint64, repository CampaignRepository) (*GameService, error) {
+	return newGameServiceWithRepositoryAndClock(seed, repository, systemMonotonicClock{})
+}
+
+func newGameServiceWithRepositoryAndClock(seed uint64, repository CampaignRepository, clock monotonicClock) (*GameService, error) {
 	world, err := domain.NewWorld(seed)
 	if err != nil {
 		return nil, err
 	}
-	return &GameService{world: world, worldRevision: 1, terrainRevision: 1, repository: repository}, nil
+	service := &GameService{world: world, worldRevision: 1, terrainRevision: 1, repository: repository, clock: clock}
+	service.resetAutosaveClock()
+	return service, nil
 }
 
 func (service *GameService) Snapshot() (*gameapi.Frame, error) { return service.projectFrame() }
@@ -52,6 +64,7 @@ func (service *GameService) NewCampaign() (*gameapi.Frame, error) {
 	service.worldRevision = 1
 	service.terrainRevision++
 	service.autoNeeded = false
+	service.resetAutosaveClock()
 	return service.projectFrame()
 }
 
@@ -186,6 +199,7 @@ func (service *GameService) PollStorage() []gameapi.StorageResult {
 			service.acceptStorageCompletion(completion)
 		}
 	}
+	service.pollAutosaveClock()
 	service.dispatchAutosaveIfIdle()
 	results := service.storageResults
 	service.storageResults = nil
@@ -203,7 +217,11 @@ func (service *GameService) acceptStorageCompletion(completion RepositoryComplet
 		result.Metadata = &metadata
 	}
 	for _, item := range completion.Slots {
+		service.observeAutosaveMetadata(item)
 		result.Slots = append(result.Slots, mapStorageMetadata(item))
+	}
+	if completion.Metadata != nil {
+		service.observeAutosaveMetadata(*completion.Metadata)
 	}
 	if completion.Err != nil {
 		result.Err = &gameapi.GameError{Code: gameapi.ErrStorageFailure, Message: completion.Err.Error()}
@@ -217,8 +235,14 @@ func (service *GameService) acceptStorageCompletion(completion RepositoryComplet
 			service.worldRevision = completion.State.WorldRevision
 			service.terrainRevision++
 			service.autoNeeded = false
+			service.resetAutosaveClock()
 			result.WorldRevision = service.worldRevision
 			result.ReplacementFrame, result.Err = service.projectFrame()
+		}
+	}
+	if result.Err == nil && request.operation == gameapi.StorageSave {
+		if _, ok := autosaveSlotIndex(request.slot); ok {
+			service.acceptSuccessfulAutosave(request, completion.Metadata)
 		}
 	}
 	service.storageResults = append(service.storageResults, result)
@@ -245,11 +269,7 @@ func (service *GameService) dispatchAutosaveIfIdle() {
 	if err != nil {
 		return
 	}
-	turn := service.world.Turn()
-	if turn < 1 {
-		return
-	}
-	slot := SlotID(int(Auto1) + (turn-1)%3)
+	slot := service.chooseAutosaveSlot()
 	service.nextStorageID++
 	request := &storageRequest{id: service.nextStorageID, operation: gameapi.StorageSave, slot: slot, revision: service.worldRevision, state: &state}
 	service.autoNeeded = false

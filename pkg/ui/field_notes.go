@@ -31,13 +31,13 @@ var technologyFieldNotes = [gameapi.TechCount]struct {
 		hint:       "This is especially useful as bands\nenter colder regions.",
 	},
 	gameapi.CordageAndNets: {
-		context:    "Twisted fibers make reusable lines,\nbindings, nets, and carrying gear.",
+		context:    "Katanda points/fish date to ~90 ka;\nJerimalai pelagic catch to ~42 ka.",
 		gameEffect: "Inshore fishing improves and pelagic\nresources become accessible.",
-		hint:       "It unlocks Trapping and is required\nfor Coastal Navigation.",
+		hint:       "Shell hooks date to 23–16 ka; Lake\nCondah stone traps are post-campaign.",
 	},
 	gameapi.Campcraft: {
 		context:    "Organized shelter, hearth, food, and\nwaste practices make camps safer.",
-		gameEffect: "Capacity rises; exposure, disease,\nand camp-predation risks fall.",
+		gameEffect: "Capacity rises; exposure, disease,\nand some acute incident risks fall.",
 		hint:       "Shelter workers compound these gains\nwithout making any risk vanish.",
 	},
 	gameapi.MedicinalKnowledge: {
@@ -55,6 +55,59 @@ var technologyFieldNotes = [gameapi.TechCount]struct {
 		gameEffect: "Pelagic hunting improves and named\nWallacea passages become usable.",
 		hint:       "Move to a passage endpoint; arbitrary\nwater tiles remain impassable.",
 	},
+}
+
+var traitFieldNotes = [gameapi.HeritableTraitCount]struct {
+	context, gameEffect, hint string
+}{
+	gameapi.ColdAdaptation: {
+		context:    "Heritable cold responses can shift over\nmany generations under local selection.",
+		gameEffect: "Higher values reduce cold exposure and\nsupport life in glacial environments.",
+		hint:       "The value is inherited and exchanged by\ngene flow; it is not a technology.",
+	},
+	gameapi.HighAltitudeAdaptation: {
+		context:    "High-altitude populations can accumulate\nphysiological responses to low oxygen.",
+		gameEffect: "Higher values reduce hypoxia pressure in\nmountainous highlands.",
+		hint:       "Selection is strongest where elevation and\noccupancy keep the pressure active.",
+	},
+	gameapi.InnateImmuneReactivity: {
+		context:    "Immune responses trade pathogen defence\nagainst damaging overreaction.",
+		gameEffect: "Local disease pressure selects the trait;\nextreme values carry their own burden.",
+		hint:       "Medicine and camp hygiene remain separate,\nlearned layers of protection.",
+	},
+	gameapi.AridClimateAdaptation: {
+		context:    "Heat and water scarcity create persistent\nselection in arid regions.",
+		gameEffect: "Higher values reduce heat and water stress\nwithout creating water or food.",
+		hint:       "Compare water stocks and demand before a\ndesert migration.",
+	},
+	gameapi.PigmentationLevel: {
+		context:    "Pigmentation balances ultraviolet skin\nprotection against vitamin-D synthesis.",
+		gameEffect: "Latitude-dependent UV pressure favours\ndifferent values in different regions.",
+		hint:       "Neither end is universally best; movement\ncan reverse the local pressure.",
+	},
+	gameapi.FattyAcidMetabolism: {
+		context:    "Dietary fat use varies heritably and can be\nselected where animal foods dominate.",
+		gameEffect: "The value changes usable yield from animal\nand aquatic food sources.",
+		hint:       "It changes conversion, not the number of\nanimals represented by fauna stock.",
+	},
+}
+
+var regionFieldNotes = [gameapi.RegionCount]struct {
+	context, hint string
+}{
+	gameapi.EastAfrica:       {context: "The campaign's sapiens bands begin here\namid riverine and savanna habitats.", hint: "Build resilient bands before committing to\nlonger dispersal routes."},
+	gameapi.RestOfAfrica:     {context: "Africa contains several viable corridors,\nnot a single departure route.", hint: "Regional establishment rewards breadth, not\none prescribed historical path."},
+	gameapi.Arabia:           {context: "Genetic reconstructions put the effective\nfounding dispersal in the low thousands.", hint: "A viable founder band must retain enough\npeople after movement and establishment."},
+	gameapi.Levant:           {context: "The Levant repeatedly connected African\nand Eurasian populations.", hint: "This corridor can be useful without being the\nonly route out of Africa."},
+	gameapi.Frangistan:       {context: "This broad western-Eurasian region is a\ndestination, not a privileged win route.", hint: "Establishment is one regional achievement\namong several route-neutral goals."},
+	gameapi.CentralAsia:      {context: "Interior moisture and temperature shifts can\nopen and close steppe-like opportunities.", hint: "Watch water, exposure, and seasonal food\nrather than relying on colour alone."},
+	gameapi.SouthAsia:        {context: "South Asia links western and eastern routes\nacross diverse monsoon habitats.", hint: "Its flora, fauna, and disease mix differs\nsubstantially by biome."},
+	gameapi.SoutheastAsia:    {context: "Island and coastal routes add aquatic food\nand explicit water-passage constraints.", hint: "Cordage and navigation matter at named\nWallacea crossings."},
+	gameapi.EastAsia:         {context: "East Asian dispersal spans tropical coasts,\ninteriors, and colder northern routes.", hint: "Keep adaptations and clothing aligned with\nthe route's changing pressures."},
+	gameapi.YellowRiverBasin: {context: "The Yellow River basin is a distinct northern\nEast Asian destination.", hint: "Regional establishment remains independent\nof the route used to reach it."},
+	gameapi.Sahul:            {context: "Reaching Sahul requires movement through the\nisland geography of Wallacea.", hint: "Only named passages cross open water; ordinary\nwater tiles remain impassable."},
+	gameapi.Siberia:          {context: "Cold, low-flora habitats make animal foods,\nshelter, and clothing especially important.", hint: "Foraging potential can be low even when\nhunting opportunity remains useful."},
+	gameapi.Beringia:         {context: "The Beringian gate responds to the full\nclimate function and may open repeatedly.", hint: "Inspect the current passage state rather\nthan assuming one fixed opening date."},
 }
 
 func CampaignOverviewFieldNote() render.FieldNote {
@@ -80,6 +133,98 @@ func TechnologyFieldNote(technology gameapi.Tech, bandID gameapi.BandID, discove
 		Topic:        technology.String(),
 		Introduction: introduction,
 		Context:      entry.context,
+		GameEffect:   entry.gameEffect,
+		Hint:         entry.hint,
+	}, true
+}
+
+func TraitFieldNote(trait gameapi.HeritableTrait, value float64) (render.FieldNote, bool) {
+	if trait >= gameapi.HeritableTraitCount {
+		return render.FieldNote{}, false
+	}
+	entry := traitFieldNotes[trait]
+	return render.FieldNote{
+		Topic:        trait.String(),
+		Introduction: fmt.Sprintf("Selected-band value: %.3f", value),
+		Context:      entry.context,
+		GameEffect:   entry.gameEffect,
+		Hint:         entry.hint,
+	}, true
+}
+
+func RegionEstablishedFieldNote(region gameapi.Region) (render.FieldNote, bool) {
+	if region >= gameapi.RegionCount {
+		return render.FieldNote{}, false
+	}
+	entry := regionFieldNotes[region]
+	introduction := "Homo sapiens established " + region.String() + "."
+	if region == gameapi.Arabia || region == gameapi.Levant {
+		introduction += "\nA new founder population endures."
+	}
+	return render.FieldNote{
+		Topic:        "REGION · " + region.String(),
+		Introduction: introduction,
+		Context:      entry.context,
+		GameEffect:   "This route-neutral regional achievement\nremains latched for the campaign.",
+		Hint:         entry.hint,
+	}, true
+}
+
+func MacroEpisodeFieldNote(episode gameapi.MacroEpisodeSummary) (render.FieldNote, bool) {
+	if episode.Episode != gameapi.CampanianIgnimbrite {
+		return render.FieldNote{}, false
+	}
+	state := "elapsed"
+	if episode.Warned {
+		state = "warning"
+	}
+	if episode.Current {
+		state = "active"
+	}
+	return render.FieldNote{
+		Topic:        episode.Episode.String(),
+		Introduction: "Regional volcanic episode: " + state + ".",
+		Context:      "The Campanian Ignimbrite occurred about\n39,850 years before present.",
+		GameEffect:   "The game uses a bounded regional impact\nenvelope, not literal demographic counts.",
+		Hint:         "Warnings annotate explored destinations;\nthey never move a band automatically.",
+	}, true
+}
+
+func TobaFieldNote() render.FieldNote {
+	return render.FieldNote{
+		Topic:        "TOBA · TIMELINE CONTEXT",
+		Introduction: "The campaign has passed ~73,880 BP.",
+		Context:      "Storey et al. (2012) date Toba; Lake\nMalawi shows no catastrophic winter.",
+		GameEffect:   "Toba is a context marker only and has\nno effect on people, climate, or stock.",
+		Hint:         "Lane et al. (2013) and Kappelman et\nal. (2024) argue against a simple collapse.",
+	}
+}
+
+func ClimateEpochFieldNote(epoch gameapi.ClimateEpoch) (render.FieldNote, bool) {
+	if epoch >= gameapi.ClimateEpochCount {
+		return render.FieldNote{}, false
+	}
+	entry := [...]struct{ introduction, gameEffect, hint string }{
+		gameapi.HumidOptimum: {
+			introduction: "The moisture index is in its humid range.",
+			gameEffect:   "The palette shifts greener; biome and\nresource rules still use continuous climate.",
+			hint:         "Epoch names summarize the index and do\nnot impose a separate simulation phase.",
+		},
+		gameapi.AridTransition: {
+			introduction: "The long drying trend is now visible.",
+			gameEffect:   "The palette warms as regional moisture\nand biome boundaries continue to change.",
+			hint:         "Abrupt pulses remain regional overlays,\nnot replacements for the long trend.",
+		},
+		gameapi.GlacialMaximum: {
+			introduction: "The campaign has entered its driest epoch.",
+			gameEffect:   "The palette cools; low vegetation and\ncold can independently constrain habitat.",
+			hint:         "This compressed trend is a game model,\nnot a claim of uniform global aridity.",
+		},
+	}[epoch]
+	return render.FieldNote{
+		Topic:        "CLIMATE · " + epoch.String(),
+		Introduction: entry.introduction,
+		Context:      "MIS framework: Lisiecki & Raymo (2005);\nLGM definition: Clark et al. (2009).",
 		GameEffect:   entry.gameEffect,
 		Hint:         entry.hint,
 	}, true

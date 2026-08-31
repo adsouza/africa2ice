@@ -40,18 +40,24 @@ var (
 )
 
 type MapScene struct {
-	faceSource      *text.GoTextFaceSource
-	detail          TerrainDetailMode
-	terrainImage    *ebiten.Image
-	terrainFrame    *gameapi.Frame
-	terrainDetail   TerrainDetailMode
-	terrainRebuilds uint64
-	frameImage      *ebiten.Image
-	frameKey        mapFrameKey
-	frameWidth      int
-	frameHeight     int
-	frameCached     bool
-	workforce       WorkforceDraft
+	faceSource            *text.GoTextFaceSource
+	detail                TerrainDetailMode
+	terrainImage          *ebiten.Image
+	terrainFrame          *gameapi.Frame
+	terrainDetail         TerrainDetailMode
+	terrainRebuilds       uint64
+	terrain3D             *TerrainScene3D
+	terrainCameraRevision uint64
+	cameraPointerX        int
+	cameraPointerY        int
+	cameraPointerSet      bool
+	frameImage            *ebiten.Image
+	frameKey              mapFrameKey
+	frameWidth            int
+	frameHeight           int
+	frameCached           bool
+	workforce             WorkforceDraft
+	overlay               MenuOverlay
 }
 
 type mapFrameKey struct {
@@ -64,6 +70,9 @@ type mapFrameKey struct {
 	ending            EndScene
 	detail            TerrainDetailMode
 	workforce         WorkforceDraft
+	resizeRequired    bool
+	overlay           MenuOverlay
+	cameraRevision    uint64
 }
 
 type MigrationPreview struct {
@@ -81,6 +90,15 @@ type WorkforceDraft struct {
 	SelectedRole gameapi.WorkforceRole
 	Dirty        bool
 	Valid        bool
+}
+
+type MenuOverlay struct {
+	Visible   bool
+	Heading   string
+	Help      string
+	Lines     [8]string
+	LineCount int
+	Selected  int
 }
 
 // FieldNote is UI-local presentation content. It is never simulation or save
@@ -104,6 +122,36 @@ func NewMapScene() *MapScene {
 
 func (scene *MapScene) Update() {}
 
+// UpdateCameraInput changes presentation state only. Right-drag rotates,
+// middle-drag changes elevation, Shift+middle-drag pans, and the wheel zooms.
+func (scene *MapScene) UpdateCameraInput(x, y int) {
+	insideMap := x >= mapOriginX && x < mapOriginX+mapPixelWidth && y >= mapOriginY && y < mapOriginY+mapPixelHeight
+	deltaX, deltaY := 0, 0
+	if scene.cameraPointerSet {
+		deltaX, deltaY = x-scene.cameraPointerX, y-scene.cameraPointerY
+	}
+	scene.cameraPointerX, scene.cameraPointerY, scene.cameraPointerSet = x, y, true
+	if scene.terrain3D == nil || !insideMap {
+		return
+	}
+	var azimuth, elevation, zoom, panX, panZ float32
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
+		azimuth = -float32(deltaX) * 0.006
+	}
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonMiddle) {
+		if ebiten.IsKeyPressed(ebiten.KeyShift) {
+			panX, panZ = -float32(deltaX)*0.08, -float32(deltaY)*0.08
+		} else {
+			elevation = -float32(deltaY) * 0.004
+		}
+	}
+	_, wheelY := ebiten.Wheel()
+	zoom = float32(wheelY) * 5
+	if scene.terrain3D.AdjustCamera(azimuth, elevation, zoom, panX, panZ) {
+		scene.frameCached = false
+	}
+}
+
 func (scene *MapScene) SetTerrainDetail(detail TerrainDetailMode) {
 	if detail == TerrainDetailNormal || detail == TerrainDetailLow {
 		scene.detail = detail
@@ -111,8 +159,9 @@ func (scene *MapScene) SetTerrainDetail(detail TerrainDetailMode) {
 }
 
 func (scene *MapScene) SetWorkforceDraft(draft WorkforceDraft) { scene.workforce = draft }
+func (scene *MapScene) SetMenuOverlay(overlay MenuOverlay)     { scene.overlay = overlay }
 
-func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, fieldNote FieldNote, fieldNotesVisible bool, ending EndScene) {
+func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, fieldNote FieldNote, fieldNotesVisible bool, ending EndScene, resizeRequired bool) {
 	if frame == nil {
 		screen.Fill(color.RGBA{R: 15, G: 22, B: 29, A: 255})
 		return
@@ -120,7 +169,8 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 	key := mapFrameKey{
 		frame: frame, selectedBand: selectedBand, preview: preview, notice: notice,
 		fieldNote: fieldNote, fieldNotesVisible: fieldNotesVisible, ending: ending, detail: scene.detail,
-		workforce: scene.workforce,
+		workforce: scene.workforce, resizeRequired: resizeRequired, overlay: scene.overlay,
+		cameraRevision: scene.cameraRevision(),
 	}
 	width, height := screen.Bounds().Dx(), screen.Bounds().Dy()
 	if scene.frameCached && scene.frameKey == key && scene.frameWidth == width && scene.frameHeight == height {
@@ -132,13 +182,28 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 	if scene.frameImage != nil {
 		scene.frameImage.Deallocate()
 	}
-	scene.frameImage = ebiten.NewImage(width, height)
+	scene.frameImage = ebiten.NewImage(int(PresentationWidth), int(PresentationHeight))
 	scene.drawFrame(scene.frameImage, frame, selectedBand, preview, notice, fieldNote, fieldNotesVisible, ending)
+	if resizeRequired {
+		scene.drawResizeOverlay(scene.frameImage)
+	}
 	scene.frameKey = key
 	scene.frameWidth = width
 	scene.frameHeight = height
 	scene.frameCached = true
-	screen.DrawImage(scene.frameImage, nil)
+	screen.Fill(color.RGBA{R: 6, G: 11, B: 15, A: 255})
+	transform := FitPresentation(width, height)
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Scale(transform.Scale, transform.Scale)
+	op.GeoM.Translate(transform.OffsetX, transform.OffsetY)
+	op.Filter = ebiten.FilterLinear
+	screen.DrawImage(scene.frameImage, op)
+}
+
+func (scene *MapScene) drawResizeOverlay(screen *ebiten.Image) {
+	vector.FillRect(screen, 0, 0, PresentationWidth, PresentationHeight, color.RGBA{R: 6, G: 11, B: 15, A: 238}, false)
+	scene.drawText(screen, "Window too small", 505, 310, 28, color.RGBA{R: 239, G: 220, B: 178, A: 255})
+	scene.drawText(screen, "Resize to at least 960 × 600 to continue", 445, 360, 15, color.White)
 }
 
 func (scene *MapScene) drawFrame(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, fieldNote FieldNote, fieldNotesVisible bool, ending EndScene) {
@@ -154,7 +219,9 @@ func (scene *MapScene) drawFrame(screen *ebiten.Image, frame *gameapi.Frame, sel
 			continue
 		}
 		from, to := frame.Tiles[passage.From], frame.Tiles[passage.To]
-		vector.StrokeLine(screen, mapOriginX+float32(from.X*mapTileSize)+mapTileSize/2, mapOriginY+float32(from.Y*mapTileSize)+mapTileSize/2, mapOriginX+float32(to.X*mapTileSize)+mapTileSize/2, mapOriginY+float32(to.Y*mapTileSize)+mapTileSize/2, 2, lineColor, false)
+		fromX, fromY := scene.tilePoint(from)
+		toX, toY := scene.tilePoint(to)
+		vector.StrokeLine(screen, fromX, fromY, toX, toY, 2, lineColor, false)
 	}
 	var interbreedTiles map[gameapi.TileID]bool
 	if actor := selectedBandInFrame(frame, selectedBand); actor != nil {
@@ -166,8 +233,7 @@ func (scene *MapScene) drawFrame(screen *ebiten.Image, frame *gameapi.Frame, sel
 			continue
 		}
 		tile := frame.Tiles[band.TileID]
-		centreX := mapOriginX + float32(tile.X*mapTileSize) + mapTileSize/2
-		centreY := mapOriginY + float32(tile.Y*mapTileSize) + mapTileSize/2
+		centreX, centreY := scene.tilePoint(tile)
 		vector.FillCircle(screen, centreX, centreY, 3.6, marker, true)
 		// An archaic band the selected band can interbreed with gets its own
 		// ring, so the option is visible on the map rather than only discovered
@@ -184,10 +250,33 @@ func (scene *MapScene) drawFrame(screen *ebiten.Image, frame *gameapi.Frame, sel
 	scene.drawHUD(screen, frame, selectedBand, preview, fieldNote, fieldNotesVisible)
 	scene.drawResearchKeys(screen, frame, selectedBand)
 	scene.drawEndScene(screen, ending)
+	scene.drawMenuOverlay(screen)
 	if notice != "" {
 		vector.FillRect(screen, 28, 610, 650, 30, color.RGBA{R: 26, G: 38, B: 45, A: 240}, false)
 		scene.drawText(screen, notice, 40, 617, 14, color.RGBA{R: 239, G: 220, B: 178, A: 255})
 	}
+}
+
+func (scene *MapScene) drawMenuOverlay(screen *ebiten.Image) {
+	if !scene.overlay.Visible {
+		return
+	}
+	const x, y, width, height = float32(340), float32(150), float32(600), float32(420)
+	vector.FillRect(screen, x, y, width, height, color.RGBA{R: 10, G: 17, B: 22, A: 248}, false)
+	vector.StrokeRect(screen, x, y, width, height, 2, color.RGBA{R: 203, G: 172, B: 104, A: 255}, false)
+	scene.drawText(screen, scene.overlay.Heading, x+28, y+24, 25, color.RGBA{R: 239, G: 220, B: 178, A: 255})
+	for index := 0; index < scene.overlay.LineCount && index < len(scene.overlay.Lines); index++ {
+		lineY := y + 78 + float32(index)*36
+		lineColor := color.RGBA{R: 220, G: 225, B: 218, A: 255}
+		prefix := "  "
+		if index == scene.overlay.Selected {
+			vector.FillRect(screen, x+20, lineY-5, width-40, 29, color.RGBA{R: 35, G: 51, B: 58, A: 255}, false)
+			lineColor = color.RGBA{R: 245, G: 202, B: 92, A: 255}
+			prefix = "› "
+		}
+		scene.drawText(screen, prefix+scene.overlay.Lines[index], x+36, lineY, 14, lineColor)
+	}
+	scene.drawText(screen, scene.overlay.Help, x+28, y+height-42, 11, color.RGBA{R: 167, G: 184, B: 181, A: 255})
 }
 
 // drawTerrain caches the immutable terrain layer for the lifetime of an
@@ -195,34 +284,86 @@ func (scene *MapScene) drawFrame(screen *ebiten.Image, frame *gameapi.Frame, sel
 // this avoids issuing thousands of vector draw calls on every display refresh
 // without risking stale exploration or climate colors.
 func (scene *MapScene) drawTerrain(screen *ebiten.Image, frame *gameapi.Frame) {
-	if scene.terrainImage == nil || scene.terrainFrame != frame || scene.terrainDetail != scene.detail {
+	fullTerrain := len(frame.Tiles) == TerrainGridWidth*TerrainGridHeight
+	geometryRebuild := scene.terrainDetail != scene.detail
+	if fullTerrain {
+		geometryRebuild = geometryRebuild || scene.terrain3D == nil || scene.terrain3D.terrainRevision != frame.TerrainRevision
+	} else {
+		geometryRebuild = geometryRebuild || scene.terrainFrame != frame
+	}
+	imageRebuild := scene.terrainImage == nil || geometryRebuild
+	if fullTerrain && scene.terrain3D != nil {
+		imageRebuild = imageRebuild || scene.terrainCameraRevision != scene.terrain3D.orbit.revision
+	}
+	if imageRebuild {
 		if scene.terrainImage != nil {
 			scene.terrainImage.Deallocate()
 		}
 		scene.terrainImage = ebiten.NewImage(mapPixelWidth, mapPixelHeight)
 		scene.terrainImage.Fill(unexploredTileColor)
-		tileExtent := float32(mapTileSize - 0.4)
-		if scene.detail == TerrainDetailLow {
-			tileExtent = mapTileSize
-		}
-		for _, tile := range frame.Tiles {
-			vector.FillRect(
-				scene.terrainImage,
-				float32(tile.X*mapTileSize),
-				float32(tile.Y*mapTileSize),
-				tileExtent,
-				tileExtent,
-				tileColorForRender(tile, frame.Climate.AridityIndex),
-				false,
-			)
+		if fullTerrain {
+			if scene.terrain3D == nil {
+				scene.terrain3D = NewTerrainScene3D()
+			}
+			if !geometryRebuild || scene.terrain3D.Rebuild(frame, scene.detail) == nil {
+				scene.terrain3D.Draw(scene.terrainImage)
+			} else {
+				scene.drawFlatTerrain(frame)
+			}
+		} else {
+			scene.drawFlatTerrain(frame)
 		}
 		scene.terrainFrame = frame
 		scene.terrainDetail = scene.detail
+		if scene.terrain3D != nil {
+			scene.terrainCameraRevision = scene.terrain3D.orbit.revision
+		}
 		scene.terrainRebuilds++
 	}
 	options := &ebiten.DrawImageOptions{}
 	options.GeoM.Translate(mapOriginX, mapOriginY)
 	screen.DrawImage(scene.terrainImage, options)
+}
+
+func (scene *MapScene) cameraRevision() uint64 {
+	if scene.terrain3D == nil {
+		return 0
+	}
+	return scene.terrain3D.orbit.revision
+}
+
+func (scene *MapScene) drawFlatTerrain(frame *gameapi.Frame) {
+	tileExtent := float32(mapTileSize - 0.4)
+	if scene.detail == TerrainDetailLow {
+		tileExtent = mapTileSize
+	}
+	for _, tile := range frame.Tiles {
+		vector.FillRect(
+			scene.terrainImage,
+			float32(tile.X*mapTileSize),
+			float32(tile.Y*mapTileSize),
+			tileExtent,
+			tileExtent,
+			tileColorForRender(tile, frame.Climate.AridityIndex),
+			false,
+		)
+	}
+}
+
+func (scene *MapScene) tilePoint(tile gameapi.Tile) (float32, float32) {
+	if scene.terrain3D != nil && len(scene.terrain3D.screenTiles) == TerrainGridWidth*TerrainGridHeight {
+		if x, y, ok := scene.terrain3D.TilePoint(tile.ID); ok {
+			return x, y
+		}
+	}
+	return mapOriginX + float32(tile.X*mapTileSize) + mapTileSize/2, mapOriginY + float32(tile.Y*mapTileSize) + mapTileSize/2
+}
+
+func (scene *MapScene) PickTile(x, y int) (gameapi.TileID, bool) {
+	if scene.terrain3D != nil && len(scene.terrain3D.screenTiles) == TerrainGridWidth*TerrainGridHeight {
+		return scene.terrain3D.PickTile(x, y)
+	}
+	return MapTileAt(x, y)
 }
 
 func (scene *MapScene) drawMigrationPreview(screen *ebiten.Image, frame *gameapi.Frame, preview MigrationPreview) {
@@ -234,10 +375,8 @@ func (scene *MapScene) drawMigrationPreview(screen *ebiten.Image, frame *gameapi
 		return
 	}
 	origin, destination := frame.Tiles[band.TileID], frame.Tiles[preview.TileID]
-	fromX := mapOriginX + float32(origin.X*mapTileSize) + mapTileSize/2
-	fromY := mapOriginY + float32(origin.Y*mapTileSize) + mapTileSize/2
-	toX := mapOriginX + float32(destination.X*mapTileSize) + mapTileSize/2
-	toY := mapOriginY + float32(destination.Y*mapTileSize) + mapTileSize/2
+	fromX, fromY := scene.tilePoint(origin)
+	toX, toY := scene.tilePoint(destination)
 	drawMigrationArrow(screen, fromX, fromY, toX, toY, color.RGBA{R: 255, G: 74, B: 74, A: 255})
 	vector.StrokeCircle(screen, toX, toY, 4.2, 1.2, color.RGBA{R: 255, G: 126, B: 106, A: 255}, true)
 }
@@ -252,10 +391,8 @@ func (scene *MapScene) drawQueuedMigrations(screen *ebiten.Image, frame *gameapi
 		if !origin.Explored || !destination.Explored {
 			continue
 		}
-		fromX := mapOriginX + float32(origin.X*mapTileSize) + mapTileSize/2
-		fromY := mapOriginY + float32(origin.Y*mapTileSize) + mapTileSize/2
-		toX := mapOriginX + float32(destination.X*mapTileSize) + mapTileSize/2
-		toY := mapOriginY + float32(destination.Y*mapTileSize) + mapTileSize/2
+		fromX, fromY := scene.tilePoint(origin)
+		toX, toY := scene.tilePoint(destination)
 		drawMigrationArrow(screen, fromX, fromY, toX, toY, arrowColor)
 	}
 }
@@ -285,11 +422,17 @@ func (scene *MapScene) drawReachableTiles(screen *ebiten.Image, frame *gameapi.F
 			continue
 		}
 		tile := frame.Tiles[candidate.TileID]
-		x := mapOriginX + float32(tile.X*mapTileSize)
-		y := mapOriginY + float32(tile.Y*mapTileSize)
+		x, y := scene.tilePoint(tile)
 		highlight := reachableTileColor(index)
-		vector.FillRect(screen, x+0.7, y+0.7, mapTileSize-1.8, mapTileSize-1.8, color.RGBA{R: highlight.R, G: highlight.G, B: highlight.B, A: 48}, false)
-		vector.StrokeRect(screen, x+0.7, y+0.7, mapTileSize-1.8, mapTileSize-1.8, 1.35, highlight, false)
+		if scene.terrain3D != nil && len(scene.terrain3D.screenTiles) == TerrainGridWidth*TerrainGridHeight {
+			vector.FillCircle(screen, x, y, 4.5, color.RGBA{R: highlight.R, G: highlight.G, B: highlight.B, A: 48}, false)
+			vector.StrokeCircle(screen, x, y, 4.5, 1.35, highlight, false)
+		} else {
+			x -= mapTileSize / 2
+			y -= mapTileSize / 2
+			vector.FillRect(screen, x+0.7, y+0.7, mapTileSize-1.8, mapTileSize-1.8, color.RGBA{R: highlight.R, G: highlight.G, B: highlight.B, A: 48}, false)
+			vector.StrokeRect(screen, x+0.7, y+0.7, mapTileSize-1.8, mapTileSize-1.8, 1.35, highlight, false)
+		}
 	}
 }
 
@@ -464,9 +607,9 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 		if fieldNote.Celebration {
 			vector.StrokeRect(screen, panelX+14, fieldNotesPanelOriginY, 324, fieldNotesPanelHeight, 2, headingColor, false)
 		}
-		headingSuffix := "  [F to hide]"
+		headingSuffix := "  [N to hide]"
 		if fieldNote.Celebration {
-			headingSuffix = "  [F]"
+			headingSuffix = "  [N]"
 		}
 		scene.drawText(screen, heading+headingSuffix, panelX+28, fieldNotesPanelOriginY+9, 10, headingColor)
 		body := fieldNote.Introduction
@@ -481,21 +624,21 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 		}
 		scene.drawText(screen, body, panelX+28, fieldNotesPanelOriginY+29, 9, color.RGBA{R: 202, G: 210, B: 206, A: 255})
 	} else {
-		label := "F: show Field Notes"
+		label := "N: show Field Notes"
 		labelColor := color.RGBA{R: 203, G: 172, B: 104, A: 255}
 		if fieldNote.Celebration {
-			label = "BREAKTHROUGH: " + fieldNote.Topic + " · F for details"
+			label = "BREAKTHROUGH: " + fieldNote.Topic + " · N for details"
 			labelColor = color.RGBA{R: 255, G: 213, B: 92, A: 255}
 		}
 		scene.drawText(screen, label, panelX+18, 574, 12, labelColor)
 	}
 	scene.drawText(screen, "Click: migrate · Arrows: choose · Enter: queue", panelX+18, 636, 10.5, color.White)
 	scene.drawText(screen, "Tab/Shift+Tab: bands · Space: turn", panelX+18, 652, 10.5, color.White)
-	spatialHint := "N: split"
+	spatialHint := "B: split"
 	if actor := selectedBandInFrame(frame, selectedBand); actor != nil {
 		spatialHint = spatialControlHint(interbreedStatus(*actor))
 	}
-	scene.drawText(screen, spatialHint, panelX+18, 668, 10.5, color.White)
+	scene.drawText(screen, spatialHint+" · G: genetics · P: pause", panelX+18, 668, 9.6, color.White)
 	scene.drawText(screen, "Quick-save Ctrl/Cmd+S · Manual F1–F3 · Shift+F1–F3 load", panelX+18, 684, 8.2, color.White)
 }
 

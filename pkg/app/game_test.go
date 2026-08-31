@@ -2,21 +2,27 @@ package app
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	gameaudio "github.com/adsouza/africa2ice/pkg/audio"
 	"github.com/adsouza/africa2ice/pkg/gameapi"
+	"github.com/adsouza/africa2ice/pkg/render"
 	"github.com/adsouza/africa2ice/pkg/ui"
 )
 
 type gameStub struct {
-	frame          *gameapi.Frame
-	results        []gameapi.StorageResult
-	nextStorageID  gameapi.StorageOpID
-	loadedSlot     int
-	savedSlot      int
-	appliedCommand gameapi.Command
-	newCampaigns   int
+	frame           *gameapi.Frame
+	results         []gameapi.StorageResult
+	nextStorageID   gameapi.StorageOpID
+	loadedSlot      int
+	savedSlot       int
+	deletedSlot     int
+	appliedCommand  gameapi.Command
+	appliedCommands []gameapi.Command
+	applyErrorAt    int
+	endTurns        int
+	newCampaigns    int
 }
 
 type soundRecorder struct {
@@ -70,10 +76,17 @@ func (stub *gameStub) NewCampaign() (*gameapi.Frame, error) {
 
 func (stub *gameStub) Apply(command gameapi.Command) (*gameapi.Frame, error) {
 	stub.appliedCommand = command
+	stub.appliedCommands = append(stub.appliedCommands, command)
+	if stub.applyErrorAt > 0 && len(stub.appliedCommands) == stub.applyErrorAt {
+		return nil, errors.New("semantic rejection")
+	}
 	return stub.frame, nil
 }
 
-func (stub *gameStub) EndTurn() (*gameapi.Frame, error) { return stub.frame, nil }
+func (stub *gameStub) EndTurn() (*gameapi.Frame, error) {
+	stub.endTurns++
+	return stub.frame, nil
+}
 
 func (stub *gameStub) BeginSave(slot int) (gameapi.StorageOpID, error) {
 	stub.savedSlot = slot
@@ -85,8 +98,9 @@ func (stub *gameStub) BeginLoad(slot int) (gameapi.StorageOpID, error) {
 	return stub.nextID(), nil
 }
 
-func (stub *gameStub) BeginDelete(int) (gameapi.StorageOpID, error) {
-	return 0, errors.New("unexpected delete")
+func (stub *gameStub) BeginDelete(slot int) (gameapi.StorageOpID, error) {
+	stub.deletedSlot = slot
+	return stub.nextID(), nil
 }
 
 func (stub *gameStub) BeginListSlots() (gameapi.StorageOpID, error) { return stub.nextID(), nil }
@@ -199,6 +213,61 @@ func TestRenderProfileFrameDoesNotReplaceAcceptedApplicationFrame(t *testing.T) 
 	game.SetRenderProfileFrame(profile)
 	if game.displayFrame() != profile || game.frame != accepted {
 		t.Fatalf("render profile crossed drawing seam: display %p accepted %p", game.displayFrame(), game.frame)
+	}
+}
+
+func TestLayoutFUsesCappedDeviceScaleAndOnlyChangesViewportState(t *testing.T) {
+	stub := &gameStub{frame: migrationPreviewFrame()}
+	game := New(stub)
+	game.deviceScaleFactor = func() float64 { return 3 }
+
+	width, height := game.LayoutF(1000.25, 600.25)
+	if width != 2001 || height != 1201 || game.viewport.RenderScale != 2 || game.viewport.ViewportRevision != 1 {
+		t.Fatalf("first layout = %vx%v, viewport %#v", width, height, game.viewport)
+	}
+	game.LayoutF(1000.25, 600.25)
+	if game.viewport.ViewportRevision != 1 {
+		t.Fatalf("identical layout advanced revision to %d", game.viewport.ViewportRevision)
+	}
+	game.deviceScaleFactor = func() float64 { return 1.25 }
+	game.LayoutF(1000.25, 600.25)
+	if game.viewport.ViewportRevision != 2 || game.viewport.RenderWidthPx != 1251 {
+		t.Fatalf("monitor-scale change = %#v", game.viewport)
+	}
+	if stub.appliedCommand != nil || stub.savedSlot != 0 || stub.loadedSlot != 0 || stub.nextStorageID != 0 {
+		t.Fatalf("layout touched game port: %#v", stub)
+	}
+}
+
+func TestActionBatchPreflightRejectsTheWholeMixedBatch(t *testing.T) {
+	stub := &gameStub{frame: migrationPreviewFrame()}
+	game := New(stub)
+	_, accepted := game.dispatchBatch([]ui.Action{
+		ui.SimulationAction(gameapi.ResearchTech{BandID: 7, Tech: gameapi.Firecraft}),
+		ui.SaveAction(1),
+	})
+	if accepted || len(stub.appliedCommands) != 0 || stub.savedSlot != 0 || stub.endTurns != 0 {
+		t.Fatalf("rejected mixed batch invoked port: accepted=%t commands=%d save=%d turns=%d", accepted, len(stub.appliedCommands), stub.savedSlot, stub.endTurns)
+	}
+}
+
+func TestCampaignBatchStopsAfterSemanticFailureAndKeepsEarlierFrame(t *testing.T) {
+	initial := migrationPreviewFrame()
+	firstAccepted := cloneAppFrame(initial)
+	firstAccepted.WorldRevision++
+	stub := &gameStub{frame: firstAccepted, applyErrorAt: 2}
+	game := New(stub)
+	game.frame = initial
+	_, accepted := game.dispatchBatch([]ui.Action{
+		ui.SimulationAction(gameapi.ResearchTech{BandID: 7, Tech: gameapi.Firecraft}),
+		ui.SimulationAction(gameapi.SetAssignment{BandID: 7, AllocationBP: [gameapi.AssignmentCount]uint16{2_000, 2_000, 2_000, 2_000, 2_000}}),
+		ui.EndTurnAction(),
+	})
+	if accepted || len(stub.appliedCommands) != 2 || stub.endTurns != 0 {
+		t.Fatalf("semantic failure sequence = accepted %t commands %d turns %d", accepted, len(stub.appliedCommands), stub.endTurns)
+	}
+	if game.frame != firstAccepted {
+		t.Fatal("semantic failure discarded the frame returned by an earlier accepted command")
 	}
 }
 
@@ -340,6 +409,48 @@ func TestTechnologyDiscoveryIgnoresArchaicLearningAndInheritedTechOnNewBands(t *
 	}
 }
 
+func TestCompletedTurnPrioritizesNewRegionContextWhenThereIsNoBreakthrough(t *testing.T) {
+	before := migrationPreviewFrame()
+	before.SapiensEstablishedRegions = []gameapi.Region{gameapi.EastAfrica}
+	after := cloneAppFrame(before)
+	after.Turn++
+	after.SapiensEstablishedRegions = []gameapi.Region{gameapi.EastAfrica, gameapi.Arabia}
+	after.Events = append(after.Events, gameapi.Event{Turn: after.Turn, Kind: gameapi.EventAchievement, Region: gameapi.Arabia, Summary: "Arabia established"})
+	game := New(&gameStub{frame: before})
+
+	game.acceptCompletedTurn(after)
+	if !strings.Contains(game.fieldNote.Topic, "Arabia") || !strings.Contains(game.fieldNote.Introduction, "founder") {
+		t.Fatalf("new-region note = %#v", game.fieldNote)
+	}
+	if region, ok := newlyEstablishedRegion(after, after); ok || region != 0 {
+		t.Fatalf("latched region replayed = (%d,%t)", region, ok)
+	}
+}
+
+func TestCompletedTurnFocusesTobaAndClimateContextOnlyWhenCrossed(t *testing.T) {
+	before := migrationPreviewFrame()
+	before.YearBP = 74_000
+	after := cloneAppFrame(before)
+	after.Turn++
+	after.YearBP = 73_700
+	game := New(&gameStub{frame: before})
+	game.acceptCompletedTurn(after)
+	if !strings.Contains(game.fieldNote.Topic, "TOBA") || !strings.Contains(game.fieldNote.GameEffect, "no effect") {
+		t.Fatalf("Toba crossing note = %#v", game.fieldNote)
+	}
+
+	climateBefore := cloneAppFrame(after)
+	climateAfter := cloneAppFrame(after)
+	climateAfter.Turn++
+	climateAfter.YearBP -= 300
+	climateAfter.Climate.Epoch = gameapi.AridTransition
+	game.frame = climateBefore
+	game.acceptCompletedTurn(climateAfter)
+	if !strings.Contains(game.fieldNote.Topic, "Arid Transition") {
+		t.Fatalf("climate transition note = %#v", game.fieldNote)
+	}
+}
+
 func TestStartupResumeLoadsNewestQuickOrAutosave(t *testing.T) {
 	initial := migrationPreviewFrame()
 	restored := migrationPreviewFrame()
@@ -408,6 +519,77 @@ func TestManualSlotShortcutsUseExplicitSlotsAndFreezeARequestedLoad(t *testing.T
 	game.beginManualLoad(1)
 	if stub.loadedSlot != 0 || game.notice != "Apply or discard workforce changes before loading" {
 		t.Fatalf("dirty draft load = slot %d notice %q", stub.loadedSlot, game.notice)
+	}
+}
+
+func TestStorageBrowserListsAllGroupsAndActivatesExplicitOperations(t *testing.T) {
+	stub := &gameStub{frame: migrationPreviewFrame()}
+	game := New(stub)
+	game.scenes.Push(ui.ScenePause)
+	game.openStorageBrowser(storageBrowserLoad)
+	if game.scenes.Current() != ui.SceneStorage || game.storageListID == 0 {
+		t.Fatalf("opened browser = scene %d list %d", game.scenes.Current(), game.storageListID)
+	}
+	stub.results = []gameapi.StorageResult{{
+		OperationID: game.storageListID, Operation: gameapi.StorageList,
+		Slots: []gameapi.SlotMetadata{
+			{SlotID: 1, SlotKind: gameapi.ManualSlot, Turn: 4, YearBP: 78_800, SapiensPopulation: 490},
+			{SlotID: 102, SlotKind: gameapi.AutoSlot, Turn: 8, YearBP: 77_600, SapiensPopulation: 510},
+		},
+	}}
+	game.pollStorage()
+	overlay := game.menuOverlayForRender()
+	if overlay.LineCount != 7 || !strings.Contains(overlay.Lines[0], "Turn 4") || !strings.Contains(overlay.Lines[5], "Turn 8") || !strings.Contains(overlay.Lines[3], "Empty") {
+		t.Fatalf("storage overlay = %#v", overlay)
+	}
+
+	game.storageSelection = 5
+	game.activateStorageSelection()
+	if stub.loadedSlot != 102 || game.pendingManualLoadID == 0 {
+		t.Fatalf("autosave load = slot %d pending %d", stub.loadedSlot, game.pendingManualLoadID)
+	}
+	loadID := game.pendingManualLoadID
+	stub.results = []gameapi.StorageResult{{OperationID: loadID, Operation: gameapi.StorageLoad, Slot: 102, ReplacementFrame: migrationPreviewFrame()}}
+	game.pollStorage()
+	if game.scenes.Current() != ui.SceneGameplay || game.notice != "Loaded Auto 2" {
+		t.Fatalf("completed browser load = scene %d notice %q", game.scenes.Current(), game.notice)
+	}
+}
+
+func TestStorageBrowserRestrictsWritesButCanDeleteAnyOccupiedGroup(t *testing.T) {
+	stub := &gameStub{frame: migrationPreviewFrame()}
+	game := New(stub)
+	game.scenes.Push(ui.ScenePause)
+	game.openStorageBrowser(storageBrowserSave)
+	game.storageListID = 0
+	game.storageSlots = []gameapi.SlotMetadata{{SlotID: 99, SlotKind: gameapi.QuickSlot}}
+
+	game.storageSelection = 3
+	game.activateStorageSelection()
+	if stub.savedSlot != 0 || !strings.Contains(game.notice, "Only Manual 1–3") {
+		t.Fatalf("quick-slot overwrite = saved %d notice %q", stub.savedSlot, game.notice)
+	}
+	game.deleteStorageSelection()
+	if stub.deletedSlot != 99 || game.storageOperationID == 0 {
+		t.Fatalf("quick-slot delete = slot %d operation %d", stub.deletedSlot, game.storageOperationID)
+	}
+}
+
+func TestSettingsSceneReportsLivePreferencesAndSessionDetail(t *testing.T) {
+	game := New(&gameStub{frame: migrationPreviewFrame()})
+	game.scenes.Push(ui.ScenePause)
+	game.scenes.Push(ui.SceneSettings)
+	game.settings.MasterVolume = 0.7
+	game.settings.Muted = true
+	game.fieldNotesVisible = false
+	game.SetTerrainDetail(render.TerrainDetailLow)
+
+	overlay := game.menuOverlayForRender()
+	joined := strings.Join(overlay.Lines[:overlay.LineCount], " ")
+	for _, required := range []string{"70%", "Muted  On", "Field Notes  Hidden", "Terrain detail  Low"} {
+		if !strings.Contains(joined, required) {
+			t.Fatalf("settings overlay missing %q: %#v", required, overlay)
+		}
 	}
 }
 

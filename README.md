@@ -11,11 +11,13 @@ Current controls:
 - click a cyan- or gold-outlined reachable tile to migrate the selected sapiens band (gold is the current recommendation);
 - use the arrow keys to move a destination cursor anywhere in the band's one-turn neighborhood, including corners; Enter queues the selected migration and Esc clears it (named passages remain clickable);
 - a red arrow marks the keyboard-selected or queued migration until it is cleared or the next turn resolves it;
+- right-drag rotates the terrain camera, middle-drag changes its elevation, Shift+middle-drag pans,
+  and the mouse wheel zooms;
 - band rows show last-turn population and health changes, while the selected band names the leading causes of any decline;
 - click any other map tile to see why it is not currently reachable, including water, uninhabitable terrain, and locked passages;
 - Tab/Shift+Tab selects the next/previous sapiens band, with wraparound;
 - Space ends the turn;
-- 1–9 selects the named research shown in the persistent research-key legend, and N splits a band;
+- 1–9 selects the named research shown in the persistent research-key legend, and B splits a band;
 - W cycles the workforce roles, [ and ] adjust the highlighted share by one percentage point,
   A applies an exact 100% draft, and D discards it; changing bands or ending the turn is blocked while
   a draft is dirty;
@@ -23,11 +25,15 @@ Current controls:
   selected band's tile, where a violet ring marks it on the map and the panel names it, and pressing
   I otherwise explains why it is unavailable;
 - completing a technology triggers a breakthrough toast and updates Field Notes with context, its game effect, and a hint;
-- F toggles the Field Notes panel;
+- N toggles the Field Notes panel (F remains a compatibility alias);
+- G cycles contextual Field Notes for the selected band's six heritable traits;
 - M toggles mute, while - and + adjust the synthesized-effect master volume in 10% steps;
 - Ctrl+S (Cmd+S on macOS) quick-saves to the desktop filesystem or browser IndexedDB.
 - F1–F3 save Manual 1–3, and Shift+F1–F3 load them; loading is blocked until any dirty workforce
   draft is applied or discarded.
+- P or Esc opens Pause; S opens grouped Save/Delete slots, L opens grouped Load/Delete slots,
+  and O opens settings for sound, Field Notes, and the session-local terrain-detail toggle.
+  The browser lists Manual 1–3, Quick Save, and rolling Auto 1–3 together.
 
 Victory, extinction, and turn-400 dispersal failure open a campaign epilogue with final
 population, destination, and geographic-breadth results. Planning then stops, but Ctrl/Cmd+S can
