@@ -32,7 +32,6 @@ const (
 )
 
 var (
-	waterTileColor         = color.RGBA{R: 31, G: 64, B: 82, A: 255}
 	unexploredTileColor    = color.RGBA{R: 6, G: 11, B: 15, A: 255}
 	archaicBandMarkerColor = color.RGBA{R: 201, G: 103, B: 82, A: 255}
 )
@@ -73,29 +72,20 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 	if frame == nil {
 		return
 	}
-	scene.drawTimeline(screen, frame)
+	grade := EpochGrade(frame.Climate.AridityIndex)
+	scene.drawTimeline(screen, frame, grade)
 	scene.drawMapLegend(screen, frame.Climate.AridityIndex)
 	for _, tile := range frame.Tiles {
-		tileColor := unexploredTileColor
-		if tile.Explored {
-			if tile.Land {
-				tileColor = climateBiomeColor(tile.Biome, frame.Climate.AridityIndex)
-			} else {
-				tileColor = waterTileColor
-			}
-		}
+		tileColor := tileColorForRender(tile, frame.Climate.AridityIndex)
 		vector.FillRect(screen, mapOriginX+float32(tile.X*mapTileSize), mapOriginY+float32(tile.Y*mapTileSize), mapTileSize-0.4, mapTileSize-0.4, tileColor, false)
 	}
 	scene.drawReachableTiles(screen, frame, selectedBand)
 	for _, passage := range frame.Passages {
-		if !passage.Explored || int(passage.From) >= len(frame.Tiles) || int(passage.To) >= len(frame.Tiles) {
+		lineColor, visible := passageColorForRender(frame, passage)
+		if !visible {
 			continue
 		}
 		from, to := frame.Tiles[passage.From], frame.Tiles[passage.To]
-		lineColor := color.RGBA{R: 203, G: 172, B: 104, A: 210}
-		if passage.Status == gameapi.PassageLocked {
-			lineColor = color.RGBA{R: 124, G: 111, B: 101, A: 180}
-		}
 		vector.StrokeLine(screen, mapOriginX+float32(from.X*mapTileSize)+mapTileSize/2, mapOriginY+float32(from.Y*mapTileSize)+mapTileSize/2, mapOriginX+float32(to.X*mapTileSize)+mapTileSize/2, mapOriginY+float32(to.Y*mapTileSize)+mapTileSize/2, 2, lineColor, false)
 	}
 	var interbreedTiles map[gameapi.TileID]bool
@@ -103,16 +93,13 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 		interbreedTiles = interbreedCandidateTiles(frame, *actor)
 	}
 	for _, band := range frame.Bands {
-		if int(band.TileID) >= len(frame.Tiles) || !frame.Tiles[band.TileID].Explored && band.Species != gameapi.HomoSapiens {
+		marker, visible := bandColorForRender(frame, band)
+		if !visible {
 			continue
 		}
 		tile := frame.Tiles[band.TileID]
 		centreX := mapOriginX + float32(tile.X*mapTileSize) + mapTileSize/2
 		centreY := mapOriginY + float32(tile.Y*mapTileSize) + mapTileSize/2
-		marker := color.RGBA{R: 245, G: 202, B: 92, A: 255}
-		if band.Species == gameapi.ArchaicHominin {
-			marker = archaicBandMarkerColor
-		}
 		vector.FillCircle(screen, centreX, centreY, 3.6, marker, true)
 		// An archaic band the selected band can interbreed with gets its own
 		// ring, so the option is visible on the map rather than only discovered
@@ -197,13 +184,50 @@ func (scene *MapScene) drawReachableTiles(screen *ebiten.Image, frame *gameapi.F
 		tile := frame.Tiles[candidate.TileID]
 		x := mapOriginX + float32(tile.X*mapTileSize)
 		y := mapOriginY + float32(tile.Y*mapTileSize)
-		highlight := color.RGBA{R: 87, G: 211, B: 211, A: 255}
-		if index == 0 {
-			highlight = color.RGBA{R: 245, G: 202, B: 92, A: 255}
-		}
+		highlight := reachableTileColor(index)
 		vector.FillRect(screen, x+0.7, y+0.7, mapTileSize-1.8, mapTileSize-1.8, color.RGBA{R: highlight.R, G: highlight.G, B: highlight.B, A: 48}, false)
 		vector.StrokeRect(screen, x+0.7, y+0.7, mapTileSize-1.8, mapTileSize-1.8, 1.35, highlight, false)
 	}
+}
+
+func tileColorForRender(tile gameapi.Tile, aridity float64) color.RGBA {
+	if !tile.Explored {
+		return unexploredTileColor
+	}
+	if !tile.Land {
+		return EpochGrade(aridity).Water
+	}
+	return climateBiomeColor(tile.Biome, aridity)
+}
+
+func passageColorForRender(frame *gameapi.Frame, passage gameapi.Passage) (color.RGBA, bool) {
+	if frame == nil || !passage.Explored || int(passage.From) >= len(frame.Tiles) || int(passage.To) >= len(frame.Tiles) {
+		return color.RGBA{}, false
+	}
+	if passage.Status == gameapi.PassageLocked {
+		return color.RGBA{R: 124, G: 111, B: 101, A: 180}, true
+	}
+	return color.RGBA{R: 203, G: 172, B: 104, A: 210}, true
+}
+
+func bandColorForRender(frame *gameapi.Frame, band gameapi.Band) (color.RGBA, bool) {
+	if frame == nil || int(band.TileID) >= len(frame.Tiles) {
+		return color.RGBA{}, false
+	}
+	if !frame.Tiles[band.TileID].Explored && band.Species != gameapi.HomoSapiens {
+		return color.RGBA{}, false
+	}
+	if band.Species == gameapi.ArchaicHominin {
+		return archaicBandMarkerColor, true
+	}
+	return color.RGBA{R: 245, G: 202, B: 92, A: 255}, true
+}
+
+func reachableTileColor(candidateIndex int) color.RGBA {
+	if candidateIndex == 0 {
+		return color.RGBA{R: 245, G: 202, B: 92, A: 255}
+	}
+	return color.RGBA{R: 87, G: 211, B: 211, A: 255}
 }
 
 func MapTileAt(x, y int) (gameapi.TileID, bool) {
@@ -215,28 +239,53 @@ func MapTileAt(x, y int) (gameapi.TileID, bool) {
 	return gameapi.TileID(gridY*96 + gridX), true
 }
 
-func (scene *MapScene) drawTimeline(screen *ebiten.Image, frame *gameapi.Frame) {
+func (scene *MapScene) drawTimeline(screen *ebiten.Image, frame *gameapi.Frame, grade GradeColors) {
 	const left, right, y = float32(20), float32(1260), float32(38)
+	state := deriveTimelineState(frame)
 	vector.StrokeLine(screen, left, y, right, y, 2, color.RGBA{R: 91, G: 110, B: 117, A: 255}, false)
-	for boundary := 0; boundary <= 4; boundary++ {
-		x := left + (right-left)*float32(boundary)/4
-		vector.StrokeLine(screen, x, y-5, x, y+5, 1, color.RGBA{R: 137, G: 151, B: 152, A: 255}, false)
+	progressX := timelinePosition(left, right, state.Progress)
+	vector.StrokeLine(screen, left, y, progressX, y, 2.5, grade.HUDChromeAccent, false)
+	for _, boundary := range timelineEraBoundaries {
+		x := timelinePosition(left, right, boundary.Progress)
+		vector.StrokeLine(screen, x, y-4, x, y+4, 0.7, color.RGBA{R: 105, G: 119, B: 122, A: 210}, false)
 	}
-	progressX := left + (right-left)*float32(frame.CalendarProgress)
-	vector.FillCircle(screen, progressX, y, 5, color.RGBA{R: 245, G: 202, B: 92, A: 255}, true)
+	for index, tick := range timelineMajorTicks {
+		x := timelinePosition(left, right, tick.Progress)
+		vector.StrokeLine(screen, x, y-6, x, y+6, 1, color.RGBA{R: 151, G: 165, B: 165, A: 255}, false)
+		labelX := x - 24
+		if index == 0 {
+			labelX = x
+		} else if index == len(timelineMajorTicks)-1 {
+			labelX = x - 55
+		}
+		scene.drawText(screen, formatTimelineYear(tick.YearBP), labelX, 14, 8.5, color.RGBA{R: 174, G: 188, B: 185, A: 255})
+	}
+	markerColor := grade.HUDChromeAccent
+	if state.PulseDirection > 0 {
+		markerColor = color.RGBA{R: 224, G: 128, B: 83, A: 255}
+	} else if state.PulseDirection < 0 {
+		markerColor = color.RGBA{R: 117, G: 177, B: 218, A: 255}
+	}
+	vector.FillCircle(screen, progressX, y, 5, markerColor, true)
+	if !state.CurrentOnMajor {
+		labelX := min(max(progressX-25, left), right-57)
+		scene.drawText(screen, state.CurrentLabel, labelX, 1, 8.5, markerColor)
+	}
 	for _, episode := range frame.MacroEpisodes {
 		if episode.Episode != gameapi.CampanianIgnimbrite {
 			continue
 		}
-		x := left + (right-left)*float32((80_000.0-39_850.0)/60_000.0)
+		x := timelinePosition(left, right, timelineProgressForYear(39_850))
 		glyph := color.RGBA{R: 118, G: 126, B: 128, A: 220}
 		if episode.Warned || episode.Current {
 			glyph = color.RGBA{R: 213, G: 115, B: 80, A: 255}
 		}
 		vector.FillCircle(screen, x, y, 3.5, glyph, true)
 	}
-	scene.drawText(screen, "80,000 BP", left, 13, 12, color.RGBA{R: 191, G: 202, B: 199, A: 255})
-	scene.drawText(screen, "20,000 BP", right-62, 13, 12, color.RGBA{R: 191, G: 202, B: 199, A: 255})
+	if state.ShowTobaContext {
+		x := timelinePosition(left, right, timelineProgressForYear(73_880))
+		vector.FillCircle(screen, x, y, 2.6, color.RGBA{R: 143, G: 132, B: 123, A: 220}, true)
+	}
 }
 
 func (scene *MapScene) drawMapLegend(screen *ebiten.Image, aridity float64) {
@@ -299,15 +348,12 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 	}
 	scene.drawTileInspector(screen, frame, selectedBand, preview)
 	if fieldNotesVisible {
-		panelColor := color.RGBA{R: 19, G: 28, B: 34, A: 255}
-		headingColor := color.RGBA{R: 203, G: 172, B: 104, A: 255}
+		panelColor, headingColor := fieldNotePanelColors(fieldNote.Celebration)
 		heading := "FIELD NOTES"
 		if fieldNote.Topic != "" {
 			heading += " · " + fieldNote.Topic
 		}
 		if fieldNote.Celebration {
-			panelColor = color.RGBA{R: 45, G: 39, B: 24, A: 255}
-			headingColor = color.RGBA{R: 255, G: 213, B: 92, A: 255}
 			heading = "BREAKTHROUGH · " + fieldNote.Topic
 		}
 		vector.FillRect(screen, panelX+14, fieldNotesPanelOriginY, 324, fieldNotesPanelHeight, panelColor, false)
@@ -347,6 +393,13 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 	}
 	scene.drawText(screen, spatialHint, panelX+18, 664, 12, color.White)
 	scene.drawText(screen, "Ctrl/Cmd+S: quick-save", panelX+18, 684, 12, color.White)
+}
+
+func fieldNotePanelColors(celebration bool) (color.RGBA, color.RGBA) {
+	if celebration {
+		return color.RGBA{R: 45, G: 39, B: 24, A: 255}, color.RGBA{R: 255, G: 213, B: 92, A: 255}
+	}
+	return color.RGBA{R: 19, G: 28, B: 34, A: 255}, color.RGBA{R: 203, G: 172, B: 104, A: 255}
 }
 
 func (scene *MapScene) drawTileInspector(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview) {
@@ -462,14 +515,11 @@ func (scene *MapScene) drawText(destination *ebiten.Image, value string, x, y, s
 	text.Draw(destination, value, &text.GoTextFace{Source: scene.faceSource, Size: float64(size)}, options)
 }
 
-func climateBiomeColor(biome gameapi.Biome, aridity float64) color.RGBA {
-	base := [gameapi.BiomeCount]color.RGBA{
+func climateBiomeColor(biome gameapi.Biome, _ float64) color.RGBA {
+	return [gameapi.BiomeCount]color.RGBA{
 		{R: 55, G: 105, B: 66, A: 255}, {R: 126, G: 137, B: 70, A: 255}, {R: 112, G: 126, B: 79, A: 255},
 		{R: 103, G: 104, B: 94, A: 255}, {R: 166, G: 134, B: 77, A: 255}, {R: 150, G: 166, B: 169, A: 255},
 	}[biome]
-	dry := color.RGBA{R: 151, G: 112, B: 69, A: 255}
-	mix := clampRender(aridity * 0.35)
-	return color.RGBA{R: uint8(float64(base.R)*(1-mix) + float64(dry.R)*mix), G: uint8(float64(base.G)*(1-mix) + float64(dry.G)*mix), B: uint8(float64(base.B)*(1-mix) + float64(dry.B)*mix), A: 255}
 }
 
 func clampRender(value float64) float64 {

@@ -180,7 +180,7 @@ func (g *Game) Update() error {
 		if err == nil {
 			g.acceptCompletedTurn(frame)
 		} else {
-			g.showNotice(err.Error())
+			g.showNotice(ui.ErrorMessage(err))
 		}
 	}
 	return nil
@@ -435,7 +435,7 @@ func (g *Game) apply(command gameapi.Command) bool {
 		g.ensureSelection()
 		return true
 	} else {
-		g.showNotice(err.Error())
+		g.showNotice(ui.ErrorMessage(err))
 		return false
 	}
 }
@@ -443,7 +443,7 @@ func (g *Game) apply(command gameapi.Command) bool {
 func (g *Game) startNewCampaign() {
 	frame, err := g.port.NewCampaign()
 	if err != nil {
-		g.showNotice("Could not start a new campaign: " + err.Error())
+		g.showNotice("Could not start a new campaign: " + ui.ErrorMessage(err))
 		return
 	}
 	g.frame = frame
@@ -464,7 +464,7 @@ func (g *Game) clearMigrationPreview() {
 func (g *Game) beginQuickSave() {
 	operationID, err := g.port.BeginSave(99)
 	if err != nil {
-		g.showNotice("Save failed: " + err.Error())
+		g.showNotice("Save failed: " + ui.ErrorMessage(err))
 		return
 	}
 	g.pendingQuickSaveIDs[operationID] = struct{}{}
@@ -473,7 +473,7 @@ func (g *Game) beginQuickSave() {
 func (g *Game) beginStartupResume() {
 	operationID, err := g.port.BeginListSlots()
 	if err != nil {
-		g.showNotice("Storage failed: " + err.Error())
+		g.showNotice("Storage failed: " + ui.ErrorMessage(err))
 		return
 	}
 	g.startupRestorePending = true
@@ -495,7 +495,7 @@ func (g *Game) pollStorage() {
 					operationID, err := g.port.BeginLoad(slot)
 					if err != nil {
 						g.startupRestorePending = false
-						g.showNotice("Storage failed: " + err.Error())
+						g.showNotice("Storage failed: " + ui.ErrorMessage(err))
 					} else {
 						g.startupRestoreLoadID = operationID
 						g.startupRestoreSlot = slot
@@ -524,7 +524,7 @@ func (g *Game) pollStorage() {
 			if isStartupLoad {
 				g.startupRestoreSlot = 0
 			}
-			g.showNotice("Storage failed: " + result.Err.Error())
+			g.showNotice("Storage failed: " + ui.ErrorMessage(result.Err))
 			continue
 		}
 		switch {

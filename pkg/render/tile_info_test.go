@@ -30,16 +30,19 @@ func TestMapLegendExplainsEveryRenderedTileClass(t *testing.T) {
 	}
 }
 
-func TestLegendBiomeSwatchesFollowTheLiveClimatePalette(t *testing.T) {
+func TestLegendUsesStableBiomeIdentityAndTheLiveAtmosphericWaterGrade(t *testing.T) {
 	humid := mapLegendEntries(0)
 	arid := mapLegendEntries(1)
 	for biome := gameapi.Biome(0); biome < gameapi.BiomeCount; biome++ {
 		if humid[biome].color != climateBiomeColor(biome, 0) || arid[biome].color != climateBiomeColor(biome, 1) {
 			t.Fatalf("legend swatch for %s diverges from map palette", biome)
 		}
+		if humid[biome].color != arid[biome].color {
+			t.Fatalf("atmospheric grade changed %s's biome identity", biome)
+		}
 	}
-	if humid[6].color != arid[6].color || humid[7].color != arid[7].color {
-		t.Fatal("water or unexplored swatch changed with aridity")
+	if humid[6].color == arid[6].color || humid[7].color != arid[7].color {
+		t.Fatal("water did not follow the grade, or unexplored terrain did")
 	}
 }
 

@@ -46,13 +46,7 @@ func (scene *MapScene) drawEndScene(screen *ebiten.Image, ending EndScene) {
 	if !ending.Visible {
 		return
 	}
-	accent := color.RGBA{R: 203, G: 172, B: 104, A: 255}
-	switch ending.Result {
-	case gameapi.Victory:
-		accent = color.RGBA{R: 121, G: 195, B: 137, A: 255}
-	case gameapi.Extinction:
-		accent = color.RGBA{R: 232, G: 112, B: 92, A: 255}
-	}
+	accent := endSceneAccent(ending.Result)
 
 	vector.FillRect(screen, 0, 0, 1280, 720, color.RGBA{R: 2, G: 5, B: 7, A: 205}, false)
 	vector.FillRect(screen, 240, 70, 800, 508, color.RGBA{R: 20, G: 29, B: 35, A: 252}, false)
@@ -75,4 +69,15 @@ func (scene *MapScene) drawEndScene(screen *ebiten.Image, ending EndScene) {
 	vector.StrokeRect(screen, newCampaignButtonX, newCampaignButtonY, newCampaignButtonWidth, newCampaignButtonHeight, 2, accent, false)
 	scene.drawText(screen, "NEW CAMPAIGN   [N]", 548, 507, 16, color.White)
 	scene.drawText(screen, "Ctrl/Cmd+S saves this final state", 509, 551, 11, color.RGBA{R: 177, G: 190, B: 188, A: 255})
+}
+
+func endSceneAccent(result gameapi.CampaignResult) color.RGBA {
+	accent := color.RGBA{R: 203, G: 172, B: 104, A: 255}
+	switch result {
+	case gameapi.Victory:
+		accent = color.RGBA{R: 121, G: 195, B: 137, A: 255}
+	case gameapi.Extinction:
+		accent = color.RGBA{R: 232, G: 112, B: 92, A: 255}
+	}
+	return accent
 }

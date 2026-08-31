@@ -23,7 +23,7 @@ func mapLegendEntries(aridity float64) [8]mapLegendEntry {
 		{label: "Mountain highlands", meaning: "low capacity; cold/falls", color: climateBiomeColor(gameapi.MountainousHighlands, aridity)},
 		{label: "Semi-arid desert", meaning: "little food/water; heat", color: climateBiomeColor(gameapi.SemiAridDesert, aridity)},
 		{label: "Glacial tundra", meaning: "little plant food; freezing", color: climateBiomeColor(gameapi.GlacialTundra, aridity)},
-		{label: "Water", meaning: "cannot be occupied", color: waterTileColor},
+		{label: "Water", meaning: "cannot be occupied", color: EpochGrade(aridity).Water},
 		{label: "Unknown", meaning: "not yet explored", color: unexploredTileColor},
 	}
 }
