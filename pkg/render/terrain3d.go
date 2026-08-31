@@ -3,7 +3,6 @@ package render
 import (
 	"fmt"
 	"image/color"
-	"math"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -28,7 +27,7 @@ type terrainScreenTile struct {
 
 // TerrainScene3D owns the retained Tetra3D terrain graph. The simulation only
 // supplies immutable projected tiles; camera, meshes, triangle lookup, and
-// screen-space picking remain presentation state.
+// triangle-collider picking remain presentation state.
 type TerrainScene3D struct {
 	scene            *tetra3d.Scene
 	camera           *tetra3d.Camera
@@ -39,6 +38,9 @@ type TerrainScene3D struct {
 	tiles            []gameapi.Tile
 	screenTiles      []terrainScreenTile
 	triangleTileIDs  [][]gameapi.TileID
+	colliders        tetra3d.NodeList
+	triangleTiles    map[*tetra3d.Triangle]gameapi.TileID
+	exploredTiles    []bool
 	detail           TerrainDetailMode
 	terrainRevision  uint64
 	rebuilds         uint64
@@ -84,6 +86,8 @@ func (terrain *TerrainScene3D) Rebuild(frame *gameapi.Frame, detail TerrainDetai
 	}
 	models := make([]*tetra3d.Model, 0, len(plans))
 	triangleTileIDs := make([][]gameapi.TileID, len(plans))
+	colliders := make(tetra3d.NodeList, 0, len(plans))
+	triangleTiles := make(map[*tetra3d.Triangle]gameapi.TileID)
 	for _, plan := range plans {
 		mesh := tetra3d.NewMesh(fmt.Sprintf("terrain-chunk-%d", plan.Index))
 		part := mesh.AddMeshPart(material)
@@ -145,7 +149,13 @@ func (terrain *TerrainScene3D) Rebuild(frame *gameapi.Frame, detail TerrainDetai
 		mesh.AutoNormal()
 		model := tetra3d.NewModel(fmt.Sprintf("terrain-chunk-%d", plan.Index), mesh)
 		scene.Root.AddChildren(model)
+		collider := tetra3d.NewBoundingTriangles(fmt.Sprintf("terrain-collider-%d", plan.Index), mesh, 4)
+		scene.Root.AddChildren(collider)
 		models = append(models, model)
+		colliders = append(colliders, collider)
+		for index, triangle := range mesh.Triangles {
+			triangleTiles[triangle] = tileIDs[index]
+		}
 		triangleTileIDs[plan.Index] = tileIDs
 	}
 
@@ -163,6 +173,12 @@ func (terrain *TerrainScene3D) Rebuild(frame *gameapi.Frame, detail TerrainDetai
 	terrain.plans = plans
 	terrain.tiles = frame.Tiles
 	terrain.triangleTileIDs = triangleTileIDs
+	terrain.colliders = colliders
+	terrain.triangleTiles = triangleTiles
+	terrain.exploredTiles = make([]bool, len(frame.Tiles))
+	for _, tile := range frame.Tiles {
+		terrain.exploredTiles[tile.ID] = tile.Explored
+	}
 	terrain.detail = detail
 	terrain.terrainRevision = frame.TerrainRevision
 	terrain.rebuilds++
@@ -203,21 +219,34 @@ func (terrain *TerrainScene3D) TilePoint(tile gameapi.TileID) (float32, float32,
 }
 
 func (terrain *TerrainScene3D) PickTile(x, y int) (gameapi.TileID, bool) {
-	if terrain == nil || terrain.camera == nil {
+	if terrain == nil || terrain.camera == nil || len(terrain.colliders) == 0 {
 		return 0, false
 	}
-	localX, localY := float32(x-mapOriginX), float32(y-mapOriginY)
-	var selected gameapi.TileID
-	selectedDepth := float32(math.Inf(1))
-	found := false
-	for _, tile := range terrain.screenTiles {
-		if !tile.explored || !screenQuadContains(tile.corners, localX, localY) {
-			continue
-		}
-		if !found || tile.center.depth < selectedDepth {
-			selected, selectedDepth, found = tile.id, tile.center.depth, true
-		}
+	localX, localY := x-mapOriginX, y-mapOriginY
+	if localX < 0 || localX >= terrain3DWidth || localY < 0 || localY >= terrain3DHeight {
+		return 0, false
 	}
+	var selected gameapi.TileID
+	found := false
+	width, height := terrain.camera.Size()
+	worldRotation := terrain.camera.WorldRotation()
+	horizontalOffset := (float32(localX) - float32(width)/2) / float32(width) * terrain.camera.OrthoScale()
+	verticalSpan := terrain.camera.OrthoScale() / terrain.camera.AspectRatio()
+	verticalOffset := (float32(height)/2 - float32(localY)) / float32(height) * verticalSpan
+	from := terrain.camera.WorldPosition().
+		Add(worldRotation.Right().Scale(horizontalOffset)).
+		Add(worldRotation.Up().Scale(verticalOffset))
+	to := from.Add(worldRotation.Forward().Invert().Scale(terrain.camera.Far() * 2))
+	tetra3d.RayTest(tetra3d.RayTestOptions{
+		From: from, To: to, TestAgainst: terrain.colliders, Doublesided: true,
+		OnHit: func(hit tetra3d.RayHit, _, _ int) bool {
+			tileID, ok := terrain.triangleTiles[hit.Triangle]
+			if ok && int(tileID) < len(terrain.exploredTiles) && terrain.exploredTiles[tileID] {
+				selected, found = tileID, true
+			}
+			return false
+		},
+	})
 	return selected, found
 }
 
@@ -264,18 +293,4 @@ func projectTerrainTiles(camera *tetra3d.Camera, tiles []gameapi.Tile) []terrain
 		projected[tile.ID] = entry
 	}
 	return projected
-}
-
-func screenQuadContains(corners [4]terrainScreenPoint, x, y float32) bool {
-	return screenTriangleContains(corners[0], corners[1], corners[2], x, y) || screenTriangleContains(corners[0], corners[2], corners[3], x, y)
-}
-
-func screenTriangleContains(a, b, c terrainScreenPoint, x, y float32) bool {
-	sign := func(first, second terrainScreenPoint) float32 {
-		return (x-second.x)*(first.y-second.y) - (first.x-second.x)*(y-second.y)
-	}
-	d1, d2, d3 := sign(a, b), sign(b, c), sign(c, a)
-	hasNegative := d1 < 0 || d2 < 0 || d3 < 0
-	hasPositive := d1 > 0 || d2 > 0 || d3 > 0
-	return !hasNegative || !hasPositive
 }

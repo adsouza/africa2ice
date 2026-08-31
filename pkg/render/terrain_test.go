@@ -149,6 +149,9 @@ func TestTerrainScene3DBuildsSixChunksAndPicksOnlyExploredTops(t *testing.T) {
 	if len(terrain.models) != TerrainChunkCount || len(terrain.plans) != TerrainChunkCount || terrain.rebuilds != 1 {
 		t.Fatalf("terrain graph = models %d plans %d rebuilds %d", len(terrain.models), len(terrain.plans), terrain.rebuilds)
 	}
+	if len(terrain.colliders) != TerrainChunkCount || len(terrain.triangleTiles) == 0 {
+		t.Fatalf("terrain colliders = %d, triangle lookup = %d", len(terrain.colliders), len(terrain.triangleTiles))
+	}
 	if terrain.material == nil || terrain.material.Shadeless || terrain.directionalLight == nil {
 		t.Fatal("normal detail did not retain the lit shared material and one directional light")
 	}
@@ -167,7 +170,7 @@ func TestTerrainScene3DBuildsSixChunksAndPicksOnlyExploredTops(t *testing.T) {
 	if !ok || picked != tileID {
 		t.Fatalf("picked tile = (%d,%t), want %d", picked, ok, tileID)
 	}
-	terrain.screenTiles[tileID].explored = false
+	terrain.exploredTiles[tileID] = false
 	if picked, ok := terrain.PickTile(int(x), int(y)); ok && picked == tileID {
 		t.Fatal("hidden tile remained pickable")
 	}
@@ -214,6 +217,10 @@ func TestTerrainCameraMovementReprojectsWithoutRebuildingChunks(t *testing.T) {
 	}
 	if terrain.rebuilds != 1 || terrain.orbit.revision != 3 {
 		t.Fatalf("camera movement rebuilt chunks or lost revision: rebuilds=%d orbit=%d", terrain.rebuilds, terrain.orbit.revision)
+	}
+	picked, ok := terrain.PickTile(int(afterX), int(afterY))
+	if !ok || picked != tile {
+		t.Fatalf("camera-adjusted pick = (%d,%t), want %d", picked, ok, tile)
 	}
 }
 

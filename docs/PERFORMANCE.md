@@ -14,23 +14,23 @@ ceiling that has gone stale enough to stop constraining the build. The budget li
 increase from CI's trusted base revision. The original `5_500_000` ceiling remains only the bootstrap
 upper bound for a history with no prior budget.
 
-Measured 2026-08-30 from a full `./build_web.sh --release` build — stripped, trimmed, and
+Measured 2026-08-31 from a full `./build_web.sh --release` build — stripped, trimmed, and
 `wasm-opt -O3` optimized:
 
 | measurement            |      bytes |
 |------------------------|-----------:|
-| raw                    | 22,329,016 |
-| `brotli -q 11` (gated) |  3,815,965 |
-| `gzip -9`              |  5,276,125 |
+| raw                    | 22,333,333 |
+| `brotli -q 11` (gated) |  3,796,829 |
+| `gzip -9`              |  5,277,562 |
 
 **`wasm-opt` is primarily a decompressed-size optimization.** Measuring the same build with and
 without the optimizer shows a modest compressed improvement rather than a second-order transfer-size lever:
 
 |                         |        raw |     brotli |      gzip |
 |-------------------------|-----------:|-----------:|----------:|
-| stripped, no `wasm-opt` | 23,767,369 |  3,817,908 | 5,311,519 |
-| `wasm-opt -O3`          | 22,329,016 |  3,815,965 | 5,276,125 |
-| change                  |     −6.05% |  **−0.05%** | **−0.67%** |
+| stripped, no `wasm-opt` | 23,772,052 |  3,817,531 | 5,313,107 |
+| `wasm-opt -O3`          | 22,333,333 |  3,796,829 | 5,277,562 |
+| change                  |     −6.05% |  **−0.54%** | **−0.67%** |
 
 The optimizer removes about six percent of the decompressed module. Brotli already finds nearly all
 of that redundancy, while gzip retains a small additional benefit. Keep `wasm-opt` for decompressed
@@ -68,10 +68,10 @@ Measured 2026-08-31 from the optimized artifact in pinned Chromium `151.0.7922.3
 
 | detail | DPR | median FPS | required floor | p95 frame gap | maximum `EndTurn` latency | JS heap |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| normal | 1 | 59.88 | 20 | 16.8 ms | 51.06 ms | 26.0 MB |
-| low | 1 | 59.88 | 30 | 16.8 ms | 71.51 ms | 26.0 MB |
-| normal | 2 | 59.88 | 15 | 16.8 ms | 56.56 ms | 26.0 MB |
-| low | 2 | 59.88 | 20 | 16.8 ms | 108.26 ms | 26.0 MB |
+| normal | 1 | 59.88 | 20 | 16.7 ms | 54.85 ms | 26.0 MB |
+| low | 1 | 59.88 | 30 | 16.8 ms | 43.36 ms | 26.0 MB |
+| normal | 2 | 59.88 | 15 | 16.8 ms | 49.66 ms | 26.0 MB |
+| low | 2 | 59.88 | 20 | 16.8 ms | 185.49 ms | 26.0 MB |
 
 All four floors, the 150 ms p95 frame-gap ceiling, and the two-second turn-latency ceiling pass.
 The key optimization is appropriate to a turn-based presentation: production disables automatic
