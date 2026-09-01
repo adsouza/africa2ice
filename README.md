@@ -106,6 +106,24 @@ not):
 `MaxCompressedWasmBytes` and when that ceiling has gone stale enough to stop constraining the
 build — see [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) for the current measurements.
 
+## Cut a release
+
+```sh
+./tools/release.sh 0.0.1
+```
+
+That is the whole procedure. The script refuses before it touches the remote unless the version is
+`MAJOR.MINOR.PATCH`, `HEAD` is a clean `main` identical to `origin/main`, and the tag is unused both
+locally and on `origin`; every one of those mirrors a gate that `.github/workflows/release.yml`
+would otherwise apply minutes later, after the tag was already published. It then pushes an
+annotated tag, follows the triggered run, and prints the release URL. Pass `--no-watch` to stop
+after the push.
+
+The tag builds and publishes three unsigned portable archives — Linux amd64, Windows amd64, and
+macOS arm64 — plus a `SHA256SUMS` over the exact uploaded bytes. To exercise that pipeline without
+publishing anything, run the `Native release` workflow manually from the Actions tab: every job runs
+except the final release-creating step.
+
 ## Verify
 
 ```sh
@@ -121,6 +139,7 @@ node tools/run_wasm_go_tests.mjs
 node tools/run_wasm_checkpoint.mjs
 npm --prefix tools/web-e2e test
 ./tools/check_release_readiness.sh
+./tools/release_test.sh
 ```
 
 Useful display-free diagnostics are:
