@@ -42,7 +42,10 @@ jobs:
         if: runner.os == 'Linux'
         run: Xvfb :99 -screen 0 1280x720x24 > /tmp/xvfb.log 2>&1 &
       - name: Install pinned golangci-lint
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+        shell: bash
+        run: |
+          ./tools/install_golangci_lint.sh "$RUNNER_TEMP/golangci-lint"
+          echo "$RUNNER_TEMP/golangci-lint" >> "$GITHUB_PATH"
       - run: golangci-lint config verify
       - run: golangci-lint run
       - run: go vet ./...
