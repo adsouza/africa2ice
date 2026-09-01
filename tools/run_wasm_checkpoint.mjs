@@ -50,20 +50,45 @@ try {
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   const failures = [];
+  const pageErrors = [];
   page.on("console", message => {
     if (message.type() === "error") failures.push(`console.error: ${message.text()}`);
   });
-  page.on("pageerror", error => failures.push(`pageerror: ${error.message}`));
+  page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto(`http://127.0.0.1:${address.port}/?checkpoint=1`, { waitUntil: "load" });
-  await page.waitForFunction(() => document.documentElement.dataset.done === "true" || document.documentElement.dataset.failed === "true", null, { timeout: 30_000 });
+  await page.waitForFunction(() => {
+    const state = document.documentElement.dataset;
+    return state.failed === "true" || (state.done === "true" && state.exitCode !== undefined);
+  }, null, { timeout: 30_000 });
   const result = await page.evaluate(() => ({
     payload: globalThis.africa2iceCheckpointPayload,
     error: globalThis.africa2iceCheckpointError,
+    exitCode: document.documentElement.dataset.exitCode,
   }));
   if (result.error) failures.push(`checkpoint: ${result.error}`);
+  if (result.exitCode !== "0") failures.push(`Go checkpoint exit code: ${result.exitCode ?? "missing"}`);
+  let validPayload = false;
+  if (typeof result.payload !== "string" || result.payload.length === 0) {
+    failures.push("optimized module produced no checkpoint payload");
+  } else {
+    try {
+      JSON.parse(result.payload);
+      validPayload = true;
+    } catch (error) {
+      failures.push(`invalid checkpoint payload: ${error.message}`);
+    }
+  }
+
+  // Go may leave a scheduler callback queued while a short-lived WASM main
+  // returns. Newer browser/Node timing can dispatch it after the clean exit,
+  // at which point wasm_exec.js reports this exact message. It is benign only
+  // after the checkpoint and zero exit code have both been validated.
+  await page.waitForTimeout(100);
+  for (const message of pageErrors) {
+    const expectedAfterCleanExit = validPayload && result.exitCode === "0" && message === "Go program has already exited";
+    if (!expectedAfterCleanExit) failures.push(`pageerror: ${message}`);
+  }
   if (failures.length > 0) throw new Error(failures.join("\n"));
-  if (typeof result.payload !== "string" || result.payload.length === 0) throw new Error("optimized module produced no checkpoint payload");
-  JSON.parse(result.payload);
   await writeFile(resolve(root, "reference-checkpoints.json"), `${result.payload}\n`);
   process.stdout.write(`wrote reference-checkpoints.json from optimized web/main.wasm (${Buffer.byteLength(result.payload)} bytes)\n`);
 } finally {
