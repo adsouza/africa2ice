@@ -33,9 +33,14 @@ const (
 	interbreedPanelLineY   = 446
 	fieldNotesPanelOriginY = 462
 	fieldNotesPanelHeight  = 138
-	fieldNoteWrapLimit     = 49
+	fieldNoteWrapLimit     = 78
 	visibleFieldNoteLines  = 5
 	workforcePanelOriginY  = 604
+	workforceRoleOriginY   = 612
+	workforceRoleRowGap    = 9
+	controlsDividerY       = 641
+	controlsReferenceY     = 645
+	controlsReferenceGap   = 13
 	bottomInspectorOriginY = 590
 	bottomInspectorHeight  = 118
 )
@@ -701,14 +706,20 @@ func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selec
 		scene.drawText(screen, recentEventLines(frame.Events, 1, 55)[0], panelX+18, 562, 7.6, color.RGBA{R: 202, G: 210, B: 206, A: 255})
 		scene.drawText(screen, label, panelX+18, 584, 10.5, labelColor)
 	}
-	scene.drawText(screen, "Click: migrate · Arrows: choose · Enter: queue", panelX+18, 636, 10.5, color.White)
-	scene.drawText(screen, "Tab/Shift+Tab: bands · Space: turn", panelX+18, 652, 10.5, color.White)
+	scene.drawControlsReference(screen, frame, selectedBand)
+}
+
+func (scene *MapScene) drawControlsReference(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID) {
+	const panelX = float32(908)
+	vector.StrokeLine(screen, panelX+14, controlsDividerY, panelX+338, controlsDividerY, 1, color.RGBA{R: 58, G: 76, B: 82, A: 210}, false)
+	scene.drawText(screen, "Click: migrate · Arrows: choose · Enter: queue", panelX+18, controlsReferenceY, 10.5, color.White)
+	scene.drawText(screen, "Tab/Shift+Tab: bands · Space: turn", panelX+18, controlsReferenceY+controlsReferenceGap, 10.5, color.White)
 	spatialHint := "N: split"
 	if actor := selectedBandInFrame(frame, selectedBand); actor != nil {
 		spatialHint = spatialControlHint(interbreedStatus(*actor))
 	}
-	scene.drawText(screen, spatialHint+" · G: genetics · Esc: menu", panelX+18, 668, 9.6, color.White)
-	scene.drawText(screen, "Quick-save Ctrl/Cmd+S · Manual F1–F3 · Shift+F1–F3 load", panelX+18, 684, 8.2, color.White)
+	scene.drawText(screen, spatialHint+" · G: genetics · Esc: menu", panelX+18, controlsReferenceY+2*controlsReferenceGap, 9.6, color.White)
+	scene.drawText(screen, "Quick-save Ctrl/Cmd+S · Manual F1–F3 · Shift+F1–F3 load", panelX+18, controlsReferenceY+3*controlsReferenceGap, 8.2, color.White)
 }
 
 func fieldNoteLines(note FieldNote) []string {
@@ -796,11 +807,9 @@ func (scene *MapScene) drawWorkforceDraft(screen logicalCanvas) {
 		return
 	}
 	const panelX = float32(922)
-	var total uint32
 	labels := [...]string{"Foraging", "Hunt/fish", "Toolcraft", "Megafauna", "Shelter/care"}
 	parts := [gameapi.AssignmentCount]string{}
 	for role, points := range scene.workforce.AllocationBP {
-		total += uint32(points)
 		marker := " "
 		if gameapi.WorkforceRole(role) == scene.workforce.SelectedRole {
 			marker = "›"
@@ -808,25 +817,32 @@ func (scene *MapScene) drawWorkforceDraft(screen logicalCanvas) {
 		workers := float64(scene.workforce.Population) * float64(points) / 10_000
 		parts[role] = fmt.Sprintf("%s%s %.0f%% · %.1fp", marker, labels[role], float64(points)/100, workers)
 	}
-	status := "accepted"
-	statusColor := color.RGBA{R: 121, G: 195, B: 137, A: 255}
-	if scene.workforce.Dirty {
-		status = "DIRTY"
-		statusColor = color.RGBA{R: 245, G: 202, B: 92, A: 255}
-	}
-	if !scene.workforce.Valid {
-		status = fmt.Sprintf("%+.0f%%", (float64(total)-10_000)/100)
-		statusColor = color.RGBA{R: 232, G: 112, B: 92, A: 255}
-	}
+	status, statusColor := workforceDraftStatus(scene.workforce)
 	scene.drawText(screen, "WORKFORCE · W role/context · [/] edit · A apply · D discard", panelX+8, workforcePanelOriginY-2, 6.7, color.RGBA{R: 167, G: 184, B: 181, A: 255})
 	for role := range parts {
 		column := role % 2
 		row := role / 2
 		x := panelX + 8 + float32(column)*158
-		y := workforcePanelOriginY + 9 + float32(row)*10
+		y := float32(workforceRoleOriginY + row*workforceRoleRowGap)
 		scene.drawText(screen, parts[role], x, y, 6.8, color.White)
 	}
-	scene.drawText(screen, status, panelX+276, workforcePanelOriginY+29, 6.8, statusColor)
+	if status != "" {
+		scene.drawText(screen, status, panelX+276, workforceRoleOriginY+2*workforceRoleRowGap, 6.8, statusColor)
+	}
+}
+
+func workforceDraftStatus(draft WorkforceDraft) (string, color.RGBA) {
+	if !draft.Valid {
+		var total uint32
+		for _, points := range draft.AllocationBP {
+			total += uint32(points)
+		}
+		return fmt.Sprintf("%+.0f%%", (float64(total)-10_000)/100), color.RGBA{R: 232, G: 112, B: 92, A: 255}
+	}
+	if draft.Dirty {
+		return "DIRTY", color.RGBA{R: 245, G: 202, B: 92, A: 255}
+	}
+	return "", color.RGBA{}
 }
 
 func fieldNotePanelColors(celebration bool) (color.RGBA, color.RGBA) {

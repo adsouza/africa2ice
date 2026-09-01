@@ -3391,6 +3391,10 @@ current frame. Each slider edits one draft entry independently, so the draft sum
 be below or above 10,000. The inspector shows the allocated total, the
 remaining or excess amount, and draft percentages and derived people. Domain-derived outcome fields,
 including `OriginalResearchGainPreview`, continue to describe the accepted frame until Apply.
+The clean baseline has no permanent success badge: yellow `DIRTY` or red remaining/excess text appears
+only while the draft needs attention, and successful Apply feedback remains transient. The beginner
+controls reference occupies its own reserved region below the workforce editor, so neither section may
+draw into the other.
 
 Apply is enabled only when every entry is in bounds, a `uint32` sum is exactly 10,000, the draft
 differs from its accepted baseline, and no Apply result or load is pending. Slider edits emit no
@@ -7039,7 +7043,9 @@ not cover the top bar, selected-band controls, tile inspector, or required alert
 book-button toggle; plain `F` performs the same action when no text-editing control has keyboard
 focus. Hiding the panel leaves a small labeled tab that can restore it. On narrow windows, the panel
 may become a lower drawer, but it retains the same visible/hidden states and never replaces a
-simulation inspector.
+simulation inspector. Text wrapping uses the available inner panel width rather than an artificially
+narrow text column; the scroll bound is derived from those same wrapped lines. Catalog entries contain
+no presentation-only line breaks: the renderer alone chooses line boundaries for the current layout.
 
 The displayed entry follows a stable context priority:
 

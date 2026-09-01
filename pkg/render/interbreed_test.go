@@ -78,8 +78,15 @@ func TestInspectorAndFieldNotesHaveDedicatedVerticalSpace(t *testing.T) {
 	if tileInspectorOriginY+tileInspectorHeight >= fieldNotesPanelOriginY {
 		t.Fatal("Field Notes panel covers the tile inspector")
 	}
-	if fieldNotesPanelOriginY+fieldNotesPanelHeight > 610 {
-		t.Fatal("Field Notes panel overlaps the controls")
+	if fieldNotesPanelOriginY+fieldNotesPanelHeight > workforcePanelOriginY {
+		t.Fatal("Field Notes panel overlaps the workforce editor")
+	}
+	workforceContentBottom := workforceRoleOriginY + 2*workforceRoleRowGap + 8
+	if workforceContentBottom >= controlsDividerY || controlsDividerY >= controlsReferenceY {
+		t.Fatalf("workforce/control boundary is not separated: content %d divider %d controls %d", workforceContentBottom, controlsDividerY, controlsReferenceY)
+	}
+	if controlsReferenceY+3*controlsReferenceGap != 684 {
+		t.Fatal("controls reference no longer fits its reserved HUD region")
 	}
 }
 

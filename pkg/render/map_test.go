@@ -147,6 +147,35 @@ func TestFieldNoteMaxScrollUsesRenderedLineLayout(t *testing.T) {
 	}
 }
 
+func TestFieldNoteWrapUsesAvailablePanelWidth(t *testing.T) {
+	note := FieldNote{Introduction: "The campaign begins in East Africa.", Context: "It is 80,000 years before present; the map reveals as sapiens expand."}
+	lines := fieldNoteLines(note)
+	if len(lines) != 3 {
+		t.Fatalf("representative Field Note wrapped into %d lines, want 3: %#v", len(lines), lines)
+	}
+	for _, line := range lines {
+		if len([]rune(line)) > fieldNoteWrapLimit {
+			t.Fatalf("Field Note line exceeds wrap limit: %q", line)
+		}
+	}
+}
+
+func TestCleanWorkforceDraftHasNoPersistentStatus(t *testing.T) {
+	clean := WorkforceDraft{Valid: true}
+	if status, _ := workforceDraftStatus(clean); status != "" {
+		t.Fatalf("clean workforce status = %q, want no permanent badge", status)
+	}
+	dirty := clean
+	dirty.Dirty = true
+	if status, _ := workforceDraftStatus(dirty); status != "DIRTY" {
+		t.Fatalf("dirty workforce status = %q, want DIRTY", status)
+	}
+	invalid := WorkforceDraft{AllocationBP: [gameapi.AssignmentCount]uint16{2_100, 2_000, 2_000, 2_000, 2_000}}
+	if status, _ := workforceDraftStatus(invalid); status != "+1%" {
+		t.Fatalf("invalid workforce status = %q, want +1%%", status)
+	}
+}
+
 func TestRecentEventLinesShowNewestFirstAndStayBounded(t *testing.T) {
 	events := []gameapi.Event{
 		{Turn: 4, Kind: gameapi.EventMigration, Summary: "The first event"},
