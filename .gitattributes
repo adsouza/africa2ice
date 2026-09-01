@@ -1,0 +1,3 @@
+# Go formatters emit LF. Keep checkouts identical on Windows so goimports
+# validates source content instead of reporting line-ending-only rewrites.
+*.go text eol=lf
