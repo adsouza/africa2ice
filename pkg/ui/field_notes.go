@@ -390,7 +390,7 @@ func MacroEpisodeFieldNote(episode gameapi.MacroEpisodeSummary) (render.FieldNot
 		Context:      "The Campanian Ignimbrite occurred about 39,850 years before present.",
 		GameEffect:   "The game uses a bounded regional impact envelope, not literal demographic counts.",
 		Hint:         "Warnings annotate explored destinations; they never move a band automatically.",
-		References:   "Giaccio et al. (2017); Scarpati et al. (2020); USGS.",
+		References:   "Giaccio et al. (2017); Silleni et al. (2020); Smith et al. (2016); Pyle et al. (2006).",
 	}, true
 }
 

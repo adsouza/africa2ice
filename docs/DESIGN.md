@@ -5472,7 +5472,7 @@ This is still a conservative gameplay interpretation of a sparse deposit record,
 ash-thickness surface. The source basis is
 [Smith et al. (2016)](https://ora.ox.ac.uk/objects/uuid%3A66ec6abc-0d75-46ca-9cf8-edfe256d1cde),
 [Pyle et al. (2006)](https://doi.org/10.1016/j.quascirev.2006.06.008), and
-[Scarpati et al. (2020)](https://doi.org/10.3389/feart.2020.543399).
+[Silleni et al. (2020)](https://doi.org/10.3389/feart.2020.543399).
 
 Vertices are `(longitude, latitude)` in degrees, ordered clockwise; the closing edge from the final
 vertex to the first is implicit:
@@ -7119,9 +7119,12 @@ Climate entries additionally cite Lisiecki and Raymo (2005) for the marine isoto
 that anchors the epoch thresholds, Clark et al. (2009) for the Last Glacial Maximum definition,
 Rasmussen et al. (2014) for the selected GI onset chronology, and
 Capron et al. (2021) for the varied anatomy of abrupt last-glacial warmings. Macro-event entries cite
-the USGS for pyroclastic-flow scale and volcanic-climate duration, Giaccio et al. (2017) for the
-Campanian Ignimbrite date, Scarpati et al. (2020) for the mapped local deposits, and Smith et al.
-(2016) plus Pyle et al. (2006) for the wider eastward dispersal. The Toba context entry cites Storey et al. (2012) for its date, Lane et al.
+the USGS Volcano Hazards Program pages on
+[pyroclastic flows](https://www.usgs.gov/programs/VHP/pyroclastic-flows-move-fast-and-destroy-everything-their-path)
+and [volcanic climate effects](https://www.usgs.gov/programs/VHP/volcanoes-can-affect-climate)
+for the generic mechanisms, Giaccio et al. (2017) for the Campanian Ignimbrite date, Silleni et al.
+(2020) for the mapped local deposits, and Smith et al. (2016) plus Pyle et al. (2006) for the wider
+eastward dispersal. The Toba context entry cites Storey et al. (2012) for its date, Lane et al.
 (2013) for the absence of a catastrophic East African volcanic-winter signal in Lake Malawi, and
 Kappelman et al. (2024) for adaptive behavior around the ash horizon in the Horn of Africa. It must
 present Toba population effects as uncertain rather than a settled extinction bottleneck and state
@@ -8745,8 +8748,10 @@ stock-unit and conversion values are already selected; step 5 implements and ver
     Complete the release surface before enabling delivery: update `README.md` with desktop and web
     launch instructions, controls, save locations, the announced desktop session-log path, browser
     console-log instructions, and the unsigned-native trust prompt; verify `LICENSE`; generate and
-    review `THIRD_PARTY_NOTICES.md`; audit every Field Notes citation and bundled-font/dependency
-    license; and record §8's reference-machine profile in `docs/PERFORMANCE.md`. A release candidate
+    review `THIRD_PARTY_NOTICES.md`; audit every Field Notes citation in `docs/CITATIONS.md` and every
+    bundled-font/dependency license; make `go run ./tools/check_audits` reject citation, Go-module,
+    npm-package, Binaryen, or bundled-font inventory drift; and record §8's reference-machine profile
+    in `docs/PERFORMANCE.md`. A release candidate
     must load the oldest supported save fixture, complete a turn, save again, and reload on desktop
     and web. The release record names the SemVer tag, VCS revision, Go/Binaryen/browser versions,
     clean/modified status, save schema and algorithm versions, raw/Brotli/gzip WASM sizes, and performance

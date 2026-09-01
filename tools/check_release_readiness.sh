@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
+go run ./tools/check_audits
+
 if awk -F '|' '
 	/^## Appendix C/ { appendix = 1 }
 	appendix && /^\|/ {
