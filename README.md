@@ -55,6 +55,12 @@ still being written, shutdown waits for that write to finish.
 
 ## Run locally
 
+On Debian or Ubuntu, install Ebitengine's native audio and graphics development headers first:
+
+```sh
+sudo apt-get install libasound2-dev libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev
+```
+
 ```sh
 go run .
 ```
