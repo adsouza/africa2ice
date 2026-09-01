@@ -98,19 +98,28 @@ Browser verification and profiling pin Playwright `1.62.1` and Chromium `151.0.7
 
 ## Native benchmark baseline
 
-The maximum-workload `World.AdvanceTurn` and frame-projection benchmarks now exercise exactly 6,144
-tiles and 256 bands, alongside the fixed pure-Go calibration benchmark. Five-sample medians on the
-interactive reference Mac are:
+The maximum-workload `World.AdvanceTurn` and frame-projection benchmarks exercise exactly 6,144
+tiles and 256 bands, alongside the fixed pure-Go calibration benchmark. The authoritative
+five-sample medians were recorded by the `release-readiness` job on 2026-09-01 using the
+GitHub-hosted `ubuntu-24.04` `linux/amd64` runner, image `20260823.283.1`, with an AMD EPYC 7763:
 
 | benchmark | median ratio to calibration | bytes/op | allocs/op |
 | --- | ---: | ---: | ---: |
-| maximum turn | 1,432 | 1,882,144 | 3,265 |
-| maximum frame projection | 131 | 3,728,414 | 1,998 |
+| maximum turn | 2,367.88 | 1,881,824 | 3,267 |
+| maximum frame projection | 285.24 | 3,728,429 | 1,998 |
 
 These medians include the current reusable migration-candidate workspace and seed-independent
 world data. The memory ceilings are `2,350,000 B/op` and `4,500,000 B/op`; the allocation ceilings
-are `4,080` and `2,490`. Each is no more than 25% above its measured median. The approved normalized
-time ceilings remain `1,900` and `165`; this refresh does not redefine the timing policy.
+are `4,080` and `2,490`. The normalized-time ceilings are `2,950` and `355`. Each ceiling is less
+than 25% above its corresponding authoritative median.
+
+The earlier `1,900` and `165` timing ceilings were derived from the interactive M4 reference Mac
+before the CI reference lane had completed successfully. They could not describe
+`NativeBenchmarkReference`: two consecutive runs on the pinned Ubuntu image produced maximum-turn
+ratios of `2,368.25` and `2,367.88`, and frame-projection ratios of `275.12` and `285.24`. This
+record replaces that bootstrap mismatch; it does not relax the independently passing byte or
+allocation limits. On the interactive reference Mac, the same current workloads remain a useful
+cross-check at ratios of approximately `1,490` and `138`, but they are not the release baseline.
 
 The seed-independent canonical-grid cache is measured separately because its cold initialization
 happens only once per process and does not belong inside the maximum-turn workload. Three one-second
@@ -120,10 +129,9 @@ diagnostic benchmarks are not release gates, but they prevent a future edit from
 grid rebuild inside ordinary construction again.
 
 `tools/check_benchmarks.sh` repeats the samples and gates normalized time, bytes, and allocations
-against `testdata/performance_baseline.json`. Its checked-in byte and allocation ceilings are no more
-than 25% above these reviewed local medians. The `release-readiness` job repeats the same gate on
-`NativeBenchmarkReference`; its GitHub runner image and medians become the authoritative release
-record when that job first runs.
+against `testdata/performance_baseline.json`. The `release-readiness` job repeats the same gate on
+`NativeBenchmarkReference`; its GitHub runner image and medians above are the authoritative release
+record.
 
 The CI reference baseline is recordable because
 `NativeBenchmarkReference` is defined as the GitHub-hosted `ubuntu-24.04` `linux/amd64` runner, and
