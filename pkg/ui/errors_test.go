@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -41,6 +42,7 @@ func TestRequiredPlayerErrorCopyNamesTheActionableConstraint(t *testing.T) {
 		want string
 	}{
 		{code: gameapi.ErrComputerControlledBand, want: "computer-controlled"},
+		{code: gameapi.ErrSplitPopulationTooLow, want: fmt.Sprintf("%d people", gameapi.MinSplitSourcePopulation)},
 		{code: gameapi.ErrBandLimitReached, want: "256-band limit"},
 		{code: gameapi.ErrMissingTechnologyPrerequisite, want: "prerequisite"},
 	}

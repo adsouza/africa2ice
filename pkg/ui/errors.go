@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 )
@@ -14,7 +15,7 @@ var playerErrorMessages = map[gameapi.ErrorCode]string{
 	gameapi.ErrSpatialActionUsed:             "This band has already used its migration, split, or interbreeding action this turn.",
 	gameapi.ErrInvalidMigration:              "That destination is not currently reachable by this band.",
 	gameapi.ErrSplitStressTooLow:             "This band is not under enough pressure to split.",
-	gameapi.ErrSplitPopulationTooLow:         "This band is too small to divide into two viable bands.",
+	gameapi.ErrSplitPopulationTooLow:         fmt.Sprintf("This band needs at least %d people to split into two viable bands.", gameapi.MinSplitSourcePopulation),
 	gameapi.ErrSplitDestinationNotAdjacent:   "A new band can only establish on an eligible neighboring tile.",
 	gameapi.ErrSplitDestinationUninhabitable: "The proposed new band cannot survive on that destination tile.",
 	gameapi.ErrSplitDestinationUnexplored:    "That area is unexplored; scout it before settling a new band there.",

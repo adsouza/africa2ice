@@ -19,9 +19,9 @@ Measured 2026-08-31 from a full `./build_web.sh --release` build — stripped, t
 
 | measurement            |      bytes |
 |------------------------|-----------:|
-| raw                    | 17,796,811 |
-| `brotli -q 11` (gated) |  3,195,059 |
-| `gzip -9`              |  4,428,884 |
+| raw                    | 17,800,040 |
+| `brotli -q 11` (gated) |  3,194,386 |
+| `gzip -9`              |  4,430,556 |
 
 **`wasm-opt` is primarily a decompressed-size optimization.** Measuring the same build with and
 without the optimizer shows a mixed, roughly one-percent compressed effect rather than a
@@ -29,9 +29,9 @@ second-order transfer-size lever:
 
 |                         |        raw |     brotli |      gzip |
 |-------------------------|-----------:|-----------:|----------:|
-| stripped, no `wasm-opt` | 19,024,402 |  3,163,708 | 4,447,446 |
-| `wasm-opt -O3`          | 17,796,811 |  3,195,059 | 4,428,884 |
-| change                  |     −6.45% |  **+0.99%** | **−0.42%** |
+| stripped, no `wasm-opt` | 19,027,866 |  3,161,497 | 4,449,773 |
+| `wasm-opt -O3`          | 17,800,040 |  3,194,386 | 4,430,556 |
+| change                  |     −6.45% |  **+1.04%** | **−0.43%** |
 
 The optimizer removes about six percent of the decompressed module. Brotli already finds all of
 that redundancy and compresses this optimized build slightly worse, while gzip retains a small

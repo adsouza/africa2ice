@@ -39,6 +39,7 @@ var (
 	unexploredTileColor    = color.RGBA{R: 6, G: 11, B: 15, A: 255}
 	archaicBandMarkerColor = color.RGBA{R: 201, G: 103, B: 82, A: 255}
 	escarpmentColor        = color.RGBA{R: 220, G: 142, B: 88, A: 255}
+	queuedMigrationColor   = color.RGBA{R: 232, G: 72, B: 72, A: 255}
 )
 
 type MapScene struct {
@@ -347,7 +348,6 @@ func (scene *MapScene) drawMigrationPreview(screen logicalCanvas, frame *gameapi
 }
 
 func (scene *MapScene) drawQueuedMigrations(screen logicalCanvas, frame *gameapi.Frame) {
-	arrowColor := color.RGBA{R: 232, G: 72, B: 72, A: 255}
 	for _, band := range frame.Bands {
 		if band.Species != gameapi.HomoSapiens || !band.HasQueuedMigration || int(band.TileID) >= len(frame.Tiles) || int(band.QueuedMigration) >= len(frame.Tiles) {
 			continue
@@ -358,7 +358,7 @@ func (scene *MapScene) drawQueuedMigrations(screen logicalCanvas, frame *gameapi
 		}
 		fromX, fromY := scene.tilePoint(origin)
 		toX, toY := scene.tilePoint(destination)
-		drawMigrationArrow(screen, fromX, fromY, toX, toY, arrowColor)
+		drawMigrationArrow(screen, fromX, fromY, toX, toY, queuedMigrationColor)
 	}
 }
 
@@ -526,13 +526,30 @@ func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selec
 	}
 	scene.drawText(screen, fmt.Sprintf("Homo sapiens: %d", totalPopulation), panelX+18, 188, 17, color.RGBA{R: 245, G: 202, B: 92, A: 255})
 	bandWindow := visibleSapiensBandWindow(frame.Bands, selectedBand)
-	scene.drawText(screen, fmt.Sprintf("%s  ·  Regions: %d", bandWindow.label(), len(frame.SapiensEstablishedRegions)), panelX+18, 215, 14, color.White)
+	scene.drawText(screen, fmt.Sprintf("%s  ·  Regions %d", bandWindow.label(), len(frame.SapiensEstablishedRegions)), panelX+18, 215, 11.5, color.White)
+	scene.drawText(screen, "! DANGER  !! SUFFERING", panelX+178, 217, 7.5, color.RGBA{R: 224, G: 173, B: 112, A: 255})
+	scene.drawText(screen, "ACTION", panelX+286, 217, 8, color.RGBA{R: 203, G: 172, B: 104, A: 255})
 	y := float32(bandListOriginY)
 	for row := 0; row < bandWindow.count; row++ {
 		band := &frame.Bands[bandWindow.indices[row]]
-		prefix := "  "
+		condition := conditionForSapiensBand(*band)
+		conditionMarker := ""
+		conditionColor := color.RGBA{R: 167, G: 184, B: 181, A: 255}
+		switch condition {
+		case bandConditionDanger:
+			conditionMarker = "!"
+			conditionColor = color.RGBA{R: 237, G: 176, B: 84, A: 255}
+			vector.FillRect(screen, panelX+14, y-2, 266, 14, color.RGBA{R: 91, G: 64, B: 30, A: 100}, false)
+		case bandConditionSuffering:
+			conditionMarker = "!!"
+			conditionColor = color.RGBA{R: 247, G: 137, B: 119, A: 255}
+			vector.FillRect(screen, panelX+14, y-2, 266, 14, color.RGBA{R: 92, G: 38, B: 35, A: 120}, false)
+		}
 		if band.ID == selectedBand {
-			prefix = "› "
+			scene.drawText(screen, "›", panelX+18, y, 10.5, color.White)
+		}
+		if conditionMarker != "" {
+			scene.drawText(screen, conditionMarker, panelX+28, y, 8.5, conditionColor)
 		}
 		summary := summarizeBandOutcome(band)
 		populationChange, healthChange := "", ""
@@ -542,7 +559,18 @@ func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selec
 		if summary.available && math.Abs(summary.healthDeltaPoints) >= 0.005 {
 			healthChange = " (" + formatHealthDelta(summary.healthDeltaPoints) + ")"
 		}
-		scene.drawText(screen, fmt.Sprintf("%sB%d  Pop %d%s  Health %.1f%%%s", prefix, band.ID, band.Population, populationChange, band.Health*100, healthChange), panelX+18, y, 10.5, color.White)
+		scene.drawText(screen, fmt.Sprintf("B%d  Pop %d%s  Health %.1f%%%s", band.ID, band.Population, populationChange, band.Health*100, healthChange), panelX+42, y, 10.5, color.White)
+		actionLabel := sapiensBandActionLabel(*band)
+		actionColor := color.RGBA{R: 167, G: 184, B: 181, A: 255}
+		switch actionLabel {
+		case bandActionMoveSet:
+			actionColor = queuedMigrationColor
+		case bandActionInterbreed:
+			actionColor = interbreedMarkerColor
+		case bandActionDone:
+			actionColor = color.RGBA{R: 245, G: 202, B: 92, A: 255}
+		}
+		scene.drawText(screen, actionLabel, panelX+286, y+1, 8, actionColor)
 		y += bandRowHeight
 	}
 	if band := selectedBandInFrame(frame, selectedBand); band != nil {

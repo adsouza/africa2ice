@@ -6835,6 +6835,18 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   never silently hidden and the selected band is always visible. Archaic bands count in neither the
   range nor the total. This page is derived from the selected ID and accepted frame and adds no
   independent scroll position or saved UI state.
+  A fixed right-aligned `ACTION` column makes every visible band's planning state scannable without
+  selecting it: `READY` means the spatial action remains available, `MOVE SET` means a migration is
+  queued, `INTERBREED` names that accepted intent, and `DONE` means another spatial action has
+  already been consumed. The first two accepted states come only from their projected presence/value
+  pairs; `DONE` deliberately does not infer an action type from `SpatialActionUsed`. Text labels make
+  the distinction independent of their supporting colors.
+  The same rows reserve a fixed warning gutter: `!! SUFFERING` with a dark-red row tint means the
+  latest completed turn lost population or health, had a food shortfall, or current health is below
+  `0.50`; `! DANGER` with an amber tint means health is below `0.80` or the projected sum of current
+  seasonal and chronic mortality rates is at least `0.004`. Suffering takes precedence over danger.
+  These are presentation-only interpretations of projected values, not simulation inputs, stored
+  flags, forecasts of acute events, or guarantees that an unmarked band is safe.
 - **Persistent terrain legend:** the strip immediately above the map shows a swatch and a short
   liveability explanation for each of the six biome classes, plus open water, unexplored terrain,
   and the ochre escarpment-edge mark.
@@ -9657,6 +9669,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | Top-down drawn tile extent                 | `8.6 × 8.6` logical pixels within each cell                    | Locked                                          | §8    |
 | `MaxRenderScale`                           | `2.0`                                                          | Policy                                          | §8    |
 | Minimum gameplay viewport                  | `1,280 × 720 DIPs`                                             | Policy                                          | §8    |
+| Sapiens band warning thresholds            | suffering: latest decline/food shortfall or `Health < 0.50`; danger: `Health < 0.80` or seasonal + chronic rate `>= 0.004` | Policy | §8 |
 | High-DPI coordinate contract               | physical input is inverse-mapped once; HUD and grid picking share logical presentation coordinates | Locked | §8 |
 | Browser `DisableHiDPI`                     | `false`                                                        | Locked                                          | §10   |
 | Operational-log target sinks               | Desktop: new temp JSONL file/session; web: JS console          | Locked                                          | §3    |
