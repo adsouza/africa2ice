@@ -613,9 +613,11 @@ already walking; it is a derived frame value, never persisted, never hashed, and
 input. It starts at `1` on the first published frame and increments only when its named projected
 inputs differ. It belongs to the long-lived application projector and is not reset when a load or
 new campaign replaces the world; such a replacement therefore increments it whenever it replaces
-those inputs. `pkg/render` keys its cached tile layer by `(TerrainRevision, AridityIndex)`: the
-revision covers land biomes and exploration, while the continuous index covers water color. A
-planning-only frame therefore reuses the tile layer, and a changed water grade cannot become stale.
+those inputs. `pkg/render` keys its cached tile layer by
+`(TerrainRevision, AridityIndex, PresentationScale)`: the revision covers land biomes and
+exploration, the continuous index covers water color, and the presentation scale keeps the cached
+surface native to the current physical target. A planning-only frame at the same scale therefore
+reuses the tile layer, and neither a changed water grade nor a DPI transition can become stale.
 
 **Band markers need no such key.** A frame is published only after an accepted command, a completed
 turn, or a successful load — never on an idle update or draw — so the renderer already rebuilds
@@ -6608,12 +6610,14 @@ The gameplay map is a fixed top-down **96 × 64** tile grid. Its logical rectang
 8.6 colored rectangle at the cell's upper-left corner. The sub-pixel gap keeps adjacent biomes
 legible without creating a second geometric interpretation of the world.
 
-`map.go` keeps one `864 × 576` Ebitengine image for the terrain layer. Whenever the accepted frame's
-`(TerrainRevision, AridityIndex)` key changes, it fills the image with the unexplored color and draws
-all 6,144 tiles in stable tile order. Explored water uses the continuous epoch water grade, explored
-land uses its current biome color, and unexplored tiles retain the opaque unknown color. Planning-
-only frames reuse the image; the completed presentation frame is separately cached until frame or
-UI-local presentation state changes.
+`map.go` keeps one physical-resolution Ebitengine image for the terrain layer, sized
+`ceil(864 × PresentationScale) × ceil(576 × PresentationScale)`. Whenever the accepted frame's
+`(TerrainRevision, AridityIndex, PresentationScale)` key changes, it fills the image with the
+unexplored color and draws all 6,144 tiles in stable tile order. Explored water uses the continuous
+epoch water grade, explored land uses its current biome color, and unexplored tiles retain the
+opaque unknown color. Planning-only frames at the same scale reuse the image; the completed
+physical presentation frame is separately cached until frame, UI-local presentation state, or
+target geometry changes.
 
 Elevation remains load-bearing simulation and inspector data, but does not displace pixels. There
 are no side walls, lighting, depth targets, 3D camera, orbit/pan/zoom controls, colliders, or terrain-
@@ -6667,11 +6671,11 @@ inputs preserve the revision. `Update` and `Draw` each load one complete value, 
 browser resize cannot expose mixed old/new dimensions. `ViewportRevision`, like font and terrain
 caches, is absent from `gameapi.Frame`, `WorldRevision`, `TerrainRevision`, saves, hashes, and RNG.
 
-All HUD layout constants, responsive breakpoints, scroll distances, and hit rectangles are authored
-in DIPs. The supported minimum gameplay viewport is **`960 × 600 DIPs`**; smaller windows show a
-resize overlay and suspend every gameplay/scene action except resize and application exit, without
-advancing or resizing the simulation. The narrow-layout
-breakpoint is **`1,100 DIPs`** wide. Drawing maps DIP positions through `ScaleX`/`ScaleY`; one-DIP vector rules snap their edges
+All HUD layout constants, scroll distances, and hit rectangles are authored in DIPs. The supported
+minimum gameplay viewport is **`1,280 × 720 DIPs`**. The desktop window manager enforces that floor;
+smaller browser viewports show a resize overlay and suspend every gameplay/scene action except
+resize and application exit, without advancing or resizing the simulation. Drawing maps DIP
+positions through `ScaleX`/`ScaleY`; one-DIP vector rules snap their edges
 to the nearest physical-pixel boundary after scaling. `pkg/render/map.go` owns the fixed face source
 and draws each of the three current logical sizes through the current transform rather than
 accumulating one cache entry per resize or monitor. Text measurement and drawing use the same face
@@ -6689,10 +6693,13 @@ Widgets, HUD exclusion zones, and `MapTileAt` consume `PointerLogical`. No handl
 pixels with a logical rectangle. The same logical point must hit the same control and map tile at
 1×, fractional scale, and 2×.
 
-A viewport change reallocates screen-sized presentation buffers once, replaces the scaled font set
-if necessary, and recomputes responsive HUD geometry. It does **not** rebuild the logical terrain
-image, band markers, or any simulation frame. Resize or monitor movement emits no UI action,
-storage operation, sound, revision outside `ViewportRevision`, or RNG draw.
+A viewport change reallocates the physical presentation target once and, when its final
+presentation scale changes, replaces the scale-specific terrain target. `logicalCanvas` multiplies
+every vector coordinate and stroke width before rasterization, and text uses the same scale for
+glyph size, origin, and line spacing. The renderer therefore rasterizes vectors and fonts at native
+physical resolution rather than upscaling a completed 1280 × 720 bitmap. It does **not** rebuild or
+change band state or any simulation frame. Resize or monitor movement emits no UI action, storage
+operation, sound, revision outside `ViewportRevision`, or RNG draw.
 
 High-DPI scaling is automatic, not another `UISettings` field. There is no terrain-detail toggle or
 dynamic-resolution path. If either mandatory DPR profile misses its release floor, optimize it or
@@ -8348,17 +8355,18 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    highlights, migration arrows, escarpment and passage states, species-distinct markers, and at most one marker for
    each of the at most 256 bands. Fog tests cover exact explored cutouts, no hidden
    biome/elevation/marker/full-passage leakage, and ignored hidden picking. A planning-only frame and
-   idle drawing reuse the cached terrain image; a terrain revision or changed water grade rebuilds
-   it exactly once without RNG.
+   idle drawing at the same presentation scale reuse the cached terrain image; a terrain revision,
+   changed water grade, or changed presentation scale rebuilds it exactly once without RNG.
 
    Add table-driven viewport tests at `1`, `1.25`, `1.5`, `2`, and `3` device scale: assert the `2`
    cap, ceiling of fractional render dimensions, invalid/non-finite fallback to `1`, and exact
-   render-pixel↔logical round trips within one physical pixel. At `960 × 600` DIPs all required
+   render-pixel↔logical round trips within one physical pixel. At `1,280 × 720` DIPs all required
    controls remain available; one DIP below either bound shows the resize overlay and emits no
    gameplay or scene action. The same logical point must hit the same HUD control and map tile at
    every scale. A changed viewport advances `ViewportRevision` once and reallocates screen-sized
-   presentation targets once; an identical layout call does neither. Neither case may rebuild the
-   logical terrain image or change an action, simulation revision, save, hash, or RNG state.
+   presentation targets once; an identical layout call does neither. A changed final presentation
+   scale also replaces the physical terrain target once, while an identical scale reuses it. Neither
+   case may change an action, simulation revision, save, hash, or RNG state.
    Screenshot fixtures inject `1×` or `2×` explicitly and record both logical and render dimensions.
    Finish the step by adding the maximum-workload `World.AdvanceTurn` and frame-projection
    benchmarks plus calibration benchmark named in §8, running them repeatedly on
@@ -9648,7 +9656,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | Top-down map rectangle                     | origin `(20, 74)`; `96 × 64` cells of `9 × 9` logical pixels  | Locked                                          | §8    |
 | Top-down drawn tile extent                 | `8.6 × 8.6` logical pixels within each cell                    | Locked                                          | §8    |
 | `MaxRenderScale`                           | `2.0`                                                          | Policy                                          | §8    |
-| Minimum gameplay viewport / narrow breakpoint | `960 × 600 DIPs` / `1,100 DIPs`                            | Policy                                          | §8    |
+| Minimum gameplay viewport                  | `1,280 × 720 DIPs`                                             | Policy                                          | §8    |
 | High-DPI coordinate contract               | physical input is inverse-mapped once; HUD and grid picking share logical presentation coordinates | Locked | §8 |
 | Browser `DisableHiDPI`                     | `false`                                                        | Locked                                          | §10   |
 | Operational-log target sinks               | Desktop: new temp JSONL file/session; web: JS console          | Locked                                          | §3    |

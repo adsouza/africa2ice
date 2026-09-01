@@ -103,7 +103,7 @@ try {
   await context.close();
 
   for (const deviceScaleFactor of [1, 1.25, 3]) {
-    const dpiContext = await browser.newContext({ viewport: { width: 960, height: 600 }, deviceScaleFactor });
+    const dpiContext = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor });
     const dpiPage = await dpiContext.newPage();
     await openGame(dpiContext, dpiPage);
     await dpiContext.close();

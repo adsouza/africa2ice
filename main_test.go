@@ -22,6 +22,7 @@ func TestInitialDesktopWindowSize(t *testing.T) {
 		{name: "full HD", monitorWidth: 1920, monitorHeight: 1080, wantWidth: 1728, wantHeight: 972},
 		{name: "4K", monitorWidth: 3840, monitorHeight: 2160, wantWidth: 3456, wantHeight: 1944},
 		{name: "ultrawide is height limited", monitorWidth: 3440, monitorHeight: 1440, wantWidth: 2304, wantHeight: 1296},
+		{name: "small monitor bottoms out", monitorWidth: 1024, monitorHeight: 768, wantWidth: app.LogicalWidth, wantHeight: app.LogicalHeight},
 		{name: "invalid monitor falls back", monitorWidth: 0, monitorHeight: 0, wantWidth: app.LogicalWidth, wantHeight: app.LogicalHeight},
 	}
 	for _, test := range tests {

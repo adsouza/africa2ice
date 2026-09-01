@@ -3,11 +3,11 @@ package render
 import "math"
 
 const (
-	MaxRenderScale       = 2.0
-	MinViewportWidthDIP  = 960.0
-	MinViewportHeightDIP = 600.0
 	PresentationWidth    = 1280.0
 	PresentationHeight   = 720.0
+	MaxRenderScale       = 2.0
+	MinViewportWidthDIP  = PresentationWidth
+	MinViewportHeightDIP = PresentationHeight
 )
 
 // Viewport is presentation-only state. It converts the window's logical DIPs

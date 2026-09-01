@@ -19,18 +19,19 @@ Measured 2026-08-31 from a full `./build_web.sh --release` build — stripped, t
 
 | measurement            |      bytes |
 |------------------------|-----------:|
-| raw                    | 17,791,203 |
-| `brotli -q 11` (gated) |  3,181,831 |
-| `gzip -9`              |  4,427,891 |
+| raw                    | 17,796,811 |
+| `brotli -q 11` (gated) |  3,195,059 |
+| `gzip -9`              |  4,428,884 |
 
 **`wasm-opt` is primarily a decompressed-size optimization.** Measuring the same build with and
-without the optimizer shows a modest compressed improvement rather than a second-order transfer-size lever:
+without the optimizer shows a mixed, roughly one-percent compressed effect rather than a
+second-order transfer-size lever:
 
 |                         |        raw |     brotli |      gzip |
 |-------------------------|-----------:|-----------:|----------:|
-| stripped, no `wasm-opt` | 19,018,448 |  3,163,704 | 4,446,208 |
-| `wasm-opt -O3`          | 17,791,203 |  3,181,831 | 4,427,891 |
-| change                  |     −6.45% |  **+0.57%** | **−0.41%** |
+| stripped, no `wasm-opt` | 19,024,402 |  3,163,708 | 4,447,446 |
+| `wasm-opt -O3`          | 17,796,811 |  3,195,059 | 4,428,884 |
+| change                  |     −6.45% |  **+0.99%** | **−0.42%** |
 
 The optimizer removes about six percent of the decompressed module. Brotli already finds all of
 that redundancy and compresses this optimized build slightly worse, while gzip retains a small
@@ -68,14 +69,16 @@ Measured 2026-08-31 from the optimized artifact in pinned Chromium `151.0.7922.3
 
 | view | DPR | median FPS | required floor | p95 frame gap | maximum `EndTurn` latency | JS heap |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| top-down | 1 | 72.46 | 30 | 26.2 ms | 100.17 ms | 24.5 MB |
-| top-down | 2 | 70.42 | 20 | 26.2 ms | 145.19 ms | 24.5 MB |
+| top-down | 1 | 71.94 | 30 | 26.2 ms | 196.30 ms | 24.5 MB |
+| top-down | 2 | 71.43 | 20 | 26.2 ms | 223.97 ms | 24.5 MB |
 
 Both floors, the 150 ms p95 frame-gap ceiling, and the two-second turn-latency ceiling pass.
 The key optimization is appropriate to a turn-based presentation: production disables automatic
 screen clearing, caches one complete immutable presentation frame, and leaves the screen untouched
 until either the accepted frame or UI-local presentation key changes. This lets Ebitengine skip idle
-GPU work rather than continually redrawing an unchanged high-DPI canvas.
+GPU work rather than continually redrawing an unchanged high-DPI canvas. The DPR 2 result above uses
+native 2560 × 1440 presentation and scale-specific terrain targets; it is not an upscale of a
+completed 1280 × 720 frame.
 
 ### Reference machine identity
 

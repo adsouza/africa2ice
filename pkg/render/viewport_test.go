@@ -13,15 +13,15 @@ func TestNextViewportUsesDPIAwareBoundedPhysicalDimensions(t *testing.T) {
 		wantWidth  int
 		wantHeight int
 	}{
-		{name: "one", scale: 1, wantScale: 1, wantWidth: 1001, wantHeight: 601},
-		{name: "one and a quarter", scale: 1.25, wantScale: 1.25, wantWidth: 1251, wantHeight: 751},
-		{name: "one and a half", scale: 1.5, wantScale: 1.5, wantWidth: 1501, wantHeight: 901},
-		{name: "two", scale: 2, wantScale: 2, wantWidth: 2001, wantHeight: 1201},
-		{name: "three caps at two", scale: 3, wantScale: 2, wantWidth: 2001, wantHeight: 1201},
+		{name: "one", scale: 1, wantScale: 1, wantWidth: 1281, wantHeight: 721},
+		{name: "one and a quarter", scale: 1.25, wantScale: 1.25, wantWidth: 1601, wantHeight: 901},
+		{name: "one and a half", scale: 1.5, wantScale: 1.5, wantWidth: 1921, wantHeight: 1081},
+		{name: "two", scale: 2, wantScale: 2, wantWidth: 2561, wantHeight: 1441},
+		{name: "three caps at two", scale: 3, wantScale: 2, wantWidth: 2561, wantHeight: 1441},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := NextViewport(Viewport{}, 1000.25, 600.25, test.scale)
+			got := NextViewport(Viewport{}, 1280.25, 720.25, test.scale)
 			if got.RenderScale != test.wantScale || got.RenderWidthPx != test.wantWidth || got.RenderHeightPx != test.wantHeight || got.ViewportRevision != 1 {
 				t.Fatalf("viewport = %#v", got)
 			}
@@ -57,8 +57,8 @@ func TestNextViewportScaleFallbackMinimizationAndRevision(t *testing.T) {
 }
 
 func TestViewportCoordinateRoundTripsAndMinimumGate(t *testing.T) {
-	viewport := NextViewport(Viewport{}, 1000.25, 600.25, 1.25)
-	for _, point := range [][2]float64{{0, 0}, {1, 1}, {377.125, 244.5}, {1000.25, 600.25}} {
+	viewport := NextViewport(Viewport{}, 1280.25, 720.25, 1.25)
+	for _, point := range [][2]float64{{0, 0}, {1, 1}, {377.125, 244.5}, {1280.25, 720.25}} {
 		xPx, yPx := viewport.DIPToRender(point[0], point[1])
 		xDIP, yDIP := viewport.RenderToDIP(xPx, yPx)
 		if math.Abs(xDIP-point[0])*viewport.ScaleX > 1 || math.Abs(yDIP-point[1])*viewport.ScaleY > 1 {
@@ -70,6 +70,9 @@ func TestViewportCoordinateRoundTripsAndMinimumGate(t *testing.T) {
 	}
 	if NextViewport(Viewport{}, MinViewportWidthDIP, MinViewportHeightDIP-1, 1).SupportsGameplay() {
 		t.Fatal("one DIP below minimum height enabled gameplay")
+	}
+	if !NextViewport(Viewport{}, MinViewportWidthDIP, MinViewportHeightDIP, 1).SupportsGameplay() {
+		t.Fatal("exact minimum disabled gameplay")
 	}
 	if x, y := (Viewport{}).RenderToDIP(10, 10); x != 0 || y != 0 {
 		t.Fatalf("uninitialized inverse transform = (%v,%v)", x, y)

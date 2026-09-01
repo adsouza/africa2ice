@@ -5,8 +5,6 @@ import (
 	"image/color"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
 const (
@@ -42,7 +40,7 @@ func NewCampaignButtonContains(x, y int) bool {
 		y >= newCampaignButtonY && y < newCampaignButtonY+newCampaignButtonHeight
 }
 
-func (scene *MapScene) drawEndScene(screen *ebiten.Image, ending EndScene) {
+func (scene *MapScene) drawEndScene(screen logicalCanvas, ending EndScene) {
 	if !ending.Visible {
 		return
 	}

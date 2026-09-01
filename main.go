@@ -58,6 +58,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if monitor := ebiten.Monitor(); monitor != nil {
 		windowWidth, windowHeight = initialDesktopWindowSize(monitor.Size())
 	}
+	ebiten.SetWindowSizeLimits(app.LogicalWidth, app.LogicalHeight, -1, -1)
 	ebiten.SetWindowSize(windowWidth, windowHeight)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	ebiten.SetWindowClosingHandled(true)
@@ -222,6 +223,9 @@ func initialDesktopWindowSize(monitorWidth, monitorHeight int) (int, int) {
 		windowWidth = windowHeight * app.LogicalWidth / app.LogicalHeight
 	}
 	if windowWidth <= 0 || windowHeight <= 0 {
+		return app.LogicalWidth, app.LogicalHeight
+	}
+	if windowWidth < app.LogicalWidth || windowHeight < app.LogicalHeight {
 		return app.LogicalWidth, app.LogicalHeight
 	}
 	return windowWidth, windowHeight

@@ -241,7 +241,7 @@ func TestTopDownTerrainKeepsColorPickingAndMarkersOnTheSameGrid(t *testing.T) {
 	}
 }
 
-func TestMapSceneBuildsOneLogicalPresentationForAHighDPITarget(t *testing.T) {
+func TestMapSceneBuildsPhysicalPresentationForAHighDPITarget(t *testing.T) {
 	frame := representativeRenderFrame()
 	highDPI := ebiten.NewImage(2560, 1440)
 	defer highDPI.Deallocate()
@@ -250,8 +250,33 @@ func TestMapSceneBuildsOneLogicalPresentationForAHighDPITarget(t *testing.T) {
 	if scene.frameWidth != 2560 || scene.frameHeight != 1440 {
 		t.Fatalf("cached target dimensions = %dx%d", scene.frameWidth, scene.frameHeight)
 	}
-	if scene.frameImage == nil || scene.frameImage.Bounds() != image.Rect(0, 0, 1280, 720) {
-		t.Fatalf("logical presentation image = %v", scene.frameImage)
+	if scene.frameImage == nil || scene.frameImage.Bounds() != image.Rect(0, 0, 2560, 1440) || scene.frameScale != 2 {
+		t.Fatalf("physical presentation image = %v at scale %v", scene.frameImage, scene.frameScale)
+	}
+	if scene.terrainImage == nil || scene.terrainImage.Bounds() != image.Rect(0, 0, 1728, 1152) || scene.terrainScale != 2 {
+		t.Fatalf("physical terrain image = %v at scale %v", scene.terrainImage, scene.terrainScale)
+	}
+}
+
+func TestMapSceneRebuildsTerrainOnlyWhenPhysicalScaleChanges(t *testing.T) {
+	frame := representativeRenderFrame()
+	scene := NewMapScene()
+	standard := ebiten.NewImage(1280, 720)
+	defer standard.Deallocate()
+	highDPI := ebiten.NewImage(2560, 1440)
+	defer highDPI.Deallocate()
+
+	scene.Draw(standard, frame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
+	if scene.terrainRebuilds != 1 || scene.terrainScale != 1 {
+		t.Fatalf("standard terrain cache = %d rebuilds at scale %v", scene.terrainRebuilds, scene.terrainScale)
+	}
+	scene.Draw(highDPI, frame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
+	if scene.terrainRebuilds != 2 || scene.terrainScale != 2 {
+		t.Fatalf("high-DPI terrain cache = %d rebuilds at scale %v", scene.terrainRebuilds, scene.terrainScale)
+	}
+	scene.Draw(highDPI, frame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
+	if scene.terrainRebuilds != 2 {
+		t.Fatalf("unchanged high-DPI draw rebuilt terrain %d times", scene.terrainRebuilds)
 	}
 }
 
@@ -284,7 +309,7 @@ func TestMapSceneDrawsQueuedAndPreviewMigrationsOffscreen(t *testing.T) {
 
 	blank := ebiten.NewImage(32, 32)
 	defer blank.Deallocate()
-	drawMigrationArrow(blank, 12, 12, 12, 12, color.White)
+	drawMigrationArrow(newLogicalCanvas(blank, 1), 12, 12, 12, 12, color.White)
 	if blank.Bounds() != image.Rect(0, 0, 32, 32) {
 		t.Fatalf("zero-length arrow changed image bounds to %v", blank.Bounds())
 	}

@@ -9,7 +9,6 @@ import (
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
-	"github.com/hajimehoshi/ebiten/v2/vector"
 	"golang.org/x/image/font/gofont/goregular"
 )
 
@@ -47,12 +46,14 @@ type MapScene struct {
 	terrainImage    *ebiten.Image
 	terrainRevision uint64
 	terrainAridity  float64
+	terrainScale    float32
 	terrainCached   bool
 	terrainRebuilds uint64
 	frameImage      *ebiten.Image
 	frameKey        mapFrameKey
 	frameWidth      int
 	frameHeight     int
+	frameScale      float64
 	frameCached     bool
 	workforce       WorkforceDraft
 	overlay         MenuOverlay
@@ -141,32 +142,34 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 	if scene.frameImage != nil {
 		scene.frameImage.Deallocate()
 	}
-	scene.frameImage = ebiten.NewImage(int(PresentationWidth), int(PresentationHeight))
-	scene.drawFrame(scene.frameImage, frame, selectedBand, preview, notice, fieldNote, fieldNotesVisible, ending)
+	transform := FitPresentation(width, height)
+	contentWidth := max(1, int(math.Ceil(PresentationWidth*transform.Scale)))
+	contentHeight := max(1, int(math.Ceil(PresentationHeight*transform.Scale)))
+	scene.frameImage = ebiten.NewImage(contentWidth, contentHeight)
+	canvas := newLogicalCanvas(scene.frameImage, transform.Scale)
+	scene.drawFrame(canvas, frame, selectedBand, preview, notice, fieldNote, fieldNotesVisible, ending)
 	if resizeRequired {
-		scene.drawResizeOverlay(scene.frameImage)
+		scene.drawResizeOverlay(canvas)
 	}
 	scene.frameKey = key
 	scene.frameWidth = width
 	scene.frameHeight = height
+	scene.frameScale = transform.Scale
 	scene.frameCached = true
 	screen.Fill(color.RGBA{R: 6, G: 11, B: 15, A: 255})
-	transform := FitPresentation(width, height)
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Scale(transform.Scale, transform.Scale)
 	op.GeoM.Translate(transform.OffsetX, transform.OffsetY)
-	op.Filter = ebiten.FilterLinear
 	screen.DrawImage(scene.frameImage, op)
 }
 
-func (scene *MapScene) drawResizeOverlay(screen *ebiten.Image) {
+func (scene *MapScene) drawResizeOverlay(screen logicalCanvas) {
 	vector.FillRect(screen, 0, 0, PresentationWidth, PresentationHeight, color.RGBA{R: 6, G: 11, B: 15, A: 238}, false)
 	scene.drawText(screen, "Window too small", 505, 310, 28, color.RGBA{R: 239, G: 220, B: 178, A: 255})
-	scene.drawText(screen, "Resize to at least 960 × 600 to continue", 445, 360, 15, color.White)
+	scene.drawText(screen, "Resize to at least 1280 × 720 to continue", 440, 360, 15, color.White)
 }
 
-func (scene *MapScene) drawFrame(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, fieldNote FieldNote, fieldNotesVisible bool, ending EndScene) {
-	screen.Fill(color.RGBA{R: 15, G: 22, B: 29, A: 255})
+func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, fieldNote FieldNote, fieldNotesVisible bool, ending EndScene) {
+	screen.image.Fill(color.RGBA{R: 15, G: 22, B: 29, A: 255})
 	grade := EpochGrade(frame.Climate.AridityIndex)
 	scene.drawTimeline(screen, frame, grade)
 	scene.drawMapLegend(screen, frame.Climate.AridityIndex)
@@ -217,7 +220,7 @@ func (scene *MapScene) drawFrame(screen *ebiten.Image, frame *gameapi.Frame, sel
 	}
 }
 
-func (scene *MapScene) drawEscarpments(screen *ebiten.Image, frame *gameapi.Frame) {
+func (scene *MapScene) drawEscarpments(screen logicalCanvas, frame *gameapi.Frame) {
 	for _, edge := range frame.Escarpments {
 		if int(edge.First) >= len(frame.Tiles) || int(edge.Second) >= len(frame.Tiles) {
 			continue
@@ -257,7 +260,7 @@ func absRenderInt(value int) int {
 	return value
 }
 
-func (scene *MapScene) drawMenuOverlay(screen *ebiten.Image) {
+func (scene *MapScene) drawMenuOverlay(screen logicalCanvas) {
 	if !scene.overlay.Visible {
 		return
 	}
@@ -284,29 +287,32 @@ func (scene *MapScene) drawMenuOverlay(screen *ebiten.Image) {
 // that reveal terrain (including a successful split) advance that revision;
 // other planning-only frames can reuse it without stale exploration, biome,
 // macro-impact, or climate colors.
-func (scene *MapScene) drawTerrain(screen *ebiten.Image, frame *gameapi.Frame) {
-	if !scene.terrainCached || scene.terrainRevision != frame.TerrainRevision || scene.terrainAridity != frame.Climate.AridityIndex {
+func (scene *MapScene) drawTerrain(screen logicalCanvas, frame *gameapi.Frame) {
+	if !scene.terrainCached || scene.terrainRevision != frame.TerrainRevision || scene.terrainAridity != frame.Climate.AridityIndex || scene.terrainScale != screen.scale {
 		if scene.terrainImage != nil {
 			scene.terrainImage.Deallocate()
 		}
-		scene.terrainImage = ebiten.NewImage(mapPixelWidth, mapPixelHeight)
+		terrainWidth := max(1, int(math.Ceil(float64(mapPixelWidth)*float64(screen.scale))))
+		terrainHeight := max(1, int(math.Ceil(float64(mapPixelHeight)*float64(screen.scale))))
+		scene.terrainImage = ebiten.NewImage(terrainWidth, terrainHeight)
 		scene.terrainImage.Fill(unexploredTileColor)
-		scene.drawFlatTerrain(frame)
+		scene.drawFlatTerrain(newLogicalCanvas(scene.terrainImage, float64(screen.scale)), frame)
 		scene.terrainRevision = frame.TerrainRevision
 		scene.terrainAridity = frame.Climate.AridityIndex
+		scene.terrainScale = screen.scale
 		scene.terrainCached = true
 		scene.terrainRebuilds++
 	}
 	options := &ebiten.DrawImageOptions{}
-	options.GeoM.Translate(mapOriginX, mapOriginY)
-	screen.DrawImage(scene.terrainImage, options)
+	options.GeoM.Translate(float64(mapOriginX)*float64(screen.scale), float64(mapOriginY)*float64(screen.scale))
+	screen.image.DrawImage(scene.terrainImage, options)
 }
 
-func (scene *MapScene) drawFlatTerrain(frame *gameapi.Frame) {
+func (scene *MapScene) drawFlatTerrain(screen logicalCanvas, frame *gameapi.Frame) {
 	tileExtent := float32(mapTileSize - 0.4)
 	for _, tile := range frame.Tiles {
 		vector.FillRect(
-			scene.terrainImage,
+			screen,
 			float32(tile.X*mapTileSize),
 			float32(tile.Y*mapTileSize),
 			tileExtent,
@@ -325,7 +331,7 @@ func (scene *MapScene) PickTile(x, y int) (gameapi.TileID, bool) {
 	return MapTileAt(x, y)
 }
 
-func (scene *MapScene) drawMigrationPreview(screen *ebiten.Image, frame *gameapi.Frame, preview MigrationPreview) {
+func (scene *MapScene) drawMigrationPreview(screen logicalCanvas, frame *gameapi.Frame, preview MigrationPreview) {
 	if !preview.Visible || int(preview.TileID) >= len(frame.Tiles) {
 		return
 	}
@@ -340,7 +346,7 @@ func (scene *MapScene) drawMigrationPreview(screen *ebiten.Image, frame *gameapi
 	vector.StrokeCircle(screen, toX, toY, 4.2, 1.2, color.RGBA{R: 255, G: 126, B: 106, A: 255}, true)
 }
 
-func (scene *MapScene) drawQueuedMigrations(screen *ebiten.Image, frame *gameapi.Frame) {
+func (scene *MapScene) drawQueuedMigrations(screen logicalCanvas, frame *gameapi.Frame) {
 	arrowColor := color.RGBA{R: 232, G: 72, B: 72, A: 255}
 	for _, band := range frame.Bands {
 		if band.Species != gameapi.HomoSapiens || !band.HasQueuedMigration || int(band.TileID) >= len(frame.Tiles) || int(band.QueuedMigration) >= len(frame.Tiles) {
@@ -356,7 +362,7 @@ func (scene *MapScene) drawQueuedMigrations(screen *ebiten.Image, frame *gameapi
 	}
 }
 
-func drawMigrationArrow(screen *ebiten.Image, fromX, fromY, toX, toY float32, arrowColor color.Color) {
+func drawMigrationArrow(screen logicalCanvas, fromX, fromY, toX, toY float32, arrowColor color.Color) {
 	dx, dy := toX-fromX, toY-fromY
 	length := float32(math.Hypot(float64(dx), float64(dy)))
 	if length <= 0 {
@@ -371,7 +377,7 @@ func drawMigrationArrow(screen *ebiten.Image, fromX, fromY, toX, toY float32, ar
 	vector.StrokeLine(screen, toX, toY, baseX-perpendicularX, baseY-perpendicularY, 1.8, arrowColor, true)
 }
 
-func (scene *MapScene) drawReachableTiles(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID) {
+func (scene *MapScene) drawReachableTiles(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID) {
 	band := selectedBandInFrame(frame, selectedBand)
 	if band == nil || band.SpatialActionUsed {
 		return
@@ -439,7 +445,7 @@ func MapTileAt(x, y int) (gameapi.TileID, bool) {
 	return gameapi.TileID(gridY*96 + gridX), true
 }
 
-func (scene *MapScene) drawTimeline(screen *ebiten.Image, frame *gameapi.Frame, grade GradeColors) {
+func (scene *MapScene) drawTimeline(screen logicalCanvas, frame *gameapi.Frame, grade GradeColors) {
 	const left, right, y = float32(20), float32(1260), float32(38)
 	state := deriveTimelineState(frame)
 	vector.StrokeLine(screen, left, y, right, y, 2, color.RGBA{R: 91, G: 110, B: 117, A: 255}, false)
@@ -488,7 +494,7 @@ func (scene *MapScene) drawTimeline(screen *ebiten.Image, frame *gameapi.Frame, 
 	}
 }
 
-func (scene *MapScene) drawMapLegend(screen *ebiten.Image, aridity float64) {
+func (scene *MapScene) drawMapLegend(screen logicalCanvas, aridity float64) {
 	vector.FillRect(screen, mapOriginX, mapLegendOriginY, 864, mapLegendHeight, color.RGBA{R: 18, G: 27, B: 33, A: 245}, false)
 	entries := mapLegendEntries(aridity)
 	const entryWidth = float32(96)
@@ -506,7 +512,7 @@ func (scene *MapScene) drawMapLegend(screen *ebiten.Image, aridity float64) {
 	}
 }
 
-func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, fieldNote FieldNote, fieldNotesVisible bool) {
+func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, fieldNote FieldNote, fieldNotesVisible bool) {
 	const panelX = float32(908)
 	vector.FillRect(screen, panelX, 68, 352, 626, color.RGBA{R: 25, G: 35, B: 42, A: 238}, false)
 	scene.drawText(screen, "Africa 2 Ice", panelX+18, 88, 24, color.RGBA{R: 239, G: 220, B: 178, A: 255})
@@ -601,7 +607,7 @@ func (scene *MapScene) drawHUD(screen *ebiten.Image, frame *gameapi.Frame, selec
 	scene.drawText(screen, "Quick-save Ctrl/Cmd+S · Manual F1–F3 · Shift+F1–F3 load", panelX+18, 684, 8.2, color.White)
 }
 
-func (scene *MapScene) drawWorkforceDraft(screen *ebiten.Image) {
+func (scene *MapScene) drawWorkforceDraft(screen logicalCanvas) {
 	if !scene.workforce.Visible {
 		return
 	}
@@ -639,7 +645,7 @@ func fieldNotePanelColors(celebration bool) (color.RGBA, color.RGBA) {
 	return color.RGBA{R: 19, G: 28, B: 34, A: 255}, color.RGBA{R: 203, G: 172, B: 104, A: 255}
 }
 
-func (scene *MapScene) drawTileInspector(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview) {
+func (scene *MapScene) drawTileInspector(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview) {
 	const panelX = float32(922)
 	const currentX = panelX + 8
 	const targetX = panelX + 167
@@ -705,7 +711,7 @@ func formatHealthDelta(points float64) string {
 	return fmt.Sprintf("%+.1fpp", points)
 }
 
-func (scene *MapScene) drawResearchKeys(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID) {
+func (scene *MapScene) drawResearchKeys(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID) {
 	const top = float32(656)
 	vector.FillRect(screen, 20, top, 864, 52, color.RGBA{R: 25, G: 35, B: 42, A: 245}, false)
 	scene.drawText(screen, "RESEARCH KEYS  ·  gold current  ·  green learned  ·  grey locked", 30, top+4, 10, color.RGBA{R: 203, G: 172, B: 104, A: 255})
@@ -744,12 +750,13 @@ func selectedBandInFrame(frame *gameapi.Frame, selectedBand gameapi.BandID) *gam
 	return nil
 }
 
-func (scene *MapScene) drawText(destination *ebiten.Image, value string, x, y, size float32, textColor color.Color) {
+func (scene *MapScene) drawText(destination logicalCanvas, value string, x, y, size float32, textColor color.Color) {
 	options := &text.DrawOptions{}
-	options.GeoM.Translate(float64(x), float64(y))
+	scale := float64(destination.scale)
+	options.GeoM.Translate(float64(x)*scale, float64(y)*scale)
 	options.ColorScale.ScaleWithColor(textColor)
-	options.LineSpacing = float64(size) * 1.35
-	text.Draw(destination, value, &text.GoTextFace{Source: scene.faceSource, Size: float64(size)}, options)
+	options.LineSpacing = float64(size) * 1.35 * scale
+	text.Draw(destination.image, value, &text.GoTextFace{Source: scene.faceSource, Size: float64(size) * scale}, options)
 }
 
 func climateBiomeColor(biome gameapi.Biome, _ float64) color.RGBA {
