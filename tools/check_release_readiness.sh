@@ -19,6 +19,8 @@ else
 	exit 1
 fi
 
+./tools/check_moisture_balance.sh
+
 for policy in reference toward-south-asia toward-yellow-river toward-sahul toward-beringia; do
 	checkpoint="$(mktemp)"
 	trap 'rm -f "$checkpoint"' EXIT HUP INT TERM

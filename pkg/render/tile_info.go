@@ -39,6 +39,7 @@ type tileLiveabilitySummary struct {
 	foodCap            float64
 	floraStock         float64
 	faunaStock         float64
+	faunaOpportunity   string
 	waterStock         float64
 	waterCap           float64
 	ecologicalK        float64
@@ -53,6 +54,7 @@ type tileLiveabilitySummary struct {
 	naturalShelter     float64
 	movementCost       float64
 	visibleMacroImpact gameapi.MacroImpactSummary
+	abruptClimate      float64
 	archaicBandCount   int
 	archaicPopulation  uint64
 	showDetails        bool
@@ -89,6 +91,9 @@ func targetTileSummary(frame *gameapi.Frame, band *gameapi.Band, preview Migrati
 	}
 	if candidate, ok := migrationCandidate(*band, tileID); ok {
 		summary.status = status + " · reachable"
+		if candidate.RequiresPassage {
+			summary.status += " via " + candidate.Passage.String()
+		}
 		summary.seasonalRisk = candidate.SeasonalMortalityRate
 		summary.chronicRisk = candidate.ChronicMortalityRate
 		summary.crowdingDecline = candidate.CrowdingDecline
@@ -126,6 +131,7 @@ func summarizeTile(frame *gameapi.Frame, tileID gameapi.TileID, heading string) 
 	summary.foodCap = tile.FloraCap + tile.FaunaCap
 	summary.floraStock = tile.FloraStock
 	summary.faunaStock = tile.FaunaStock
+	summary.faunaOpportunity = dominantFaunaOpportunity(tile.Fauna)
 	summary.waterStock = tile.WaterStock
 	summary.waterCap = tile.WaterCap
 	summary.ecologicalK = tile.EcologicalK
@@ -136,6 +142,9 @@ func summarizeTile(frame *gameapi.Frame, tileID gameapi.TileID, heading string) 
 	summary.naturalShelter = tile.NaturalShelter
 	summary.movementCost = tile.MovementCost
 	summary.visibleMacroImpact = tile.VisibleMacroImpact
+	if tile.Region < gameapi.RegionCount {
+		summary.abruptClimate = frame.Climate.RegionalAbrupt[tile.Region]
+	}
 	for _, band := range frame.Bands {
 		if band.Species != gameapi.ArchaicHominin || band.TileID != tileID || band.Population == 0 {
 			continue
@@ -161,9 +170,9 @@ func liveabilityLines(summary tileLiveabilitySummary) [9]string {
 		return lines
 	}
 	lines[0] = summary.biome
-	lines[1] = fmt.Sprintf("%s · %.0f°C · %.1f km", summary.region, summary.temperatureC, summary.elevationKm)
+	lines[1] = fmt.Sprintf("%s · %.0f°C · %.1f km · pulse %+.2f", summary.region, summary.temperatureC, summary.elevationKm, summary.abruptClimate)
 	lines[2] = fmt.Sprintf("Food stock %.0f/%.0f FU", summary.foodStock, summary.foodCap)
-	lines[3] = fmt.Sprintf("Plants %.0f · animals %.0f", summary.floraStock, summary.faunaStock)
+	lines[3] = fmt.Sprintf("Plants %.0f · animals %.0f · %s", summary.floraStock, summary.faunaStock, summary.faunaOpportunity)
 	lines[4] = fmt.Sprintf("Water %.0f/%.0f WU", summary.waterStock, summary.waterCap)
 	lines[5] = fmt.Sprintf("Capacity %.0f/%.0f · degraded %.0f%%", summary.ecologicalK, summary.baselineK, summary.degradation*100)
 	lines[archaicPresenceLineIndex] = formatArchaicPresence(summary.archaicBandCount, summary.archaicPopulation)
@@ -186,6 +195,28 @@ func liveabilityLines(summary tileLiveabilitySummary) [9]string {
 		lines[8] = fmt.Sprintf("Impact food ×%.2f · K ×%.2f", summary.visibleMacroImpact.ResourceFactor, summary.visibleMacroImpact.HabitatFactor)
 	}
 	return lines
+}
+
+func dominantFaunaOpportunity(summary gameapi.FaunaSummary) string {
+	best, second := gameapi.FaunaGroup(0), gameapi.FaunaGroup(0)
+	bestWeight, secondWeight := -1.0, -1.0
+	for group := gameapi.FaunaGroup(0); group < gameapi.FaunaGroupCount; group++ {
+		if summary.Weights[group] > bestWeight {
+			second, secondWeight = best, bestWeight
+			best, bestWeight = group, summary.Weights[group]
+		} else if summary.Weights[group] > secondWeight {
+			second, secondWeight = group, summary.Weights[group]
+		}
+	}
+	if bestWeight <= 0 {
+		return "no prey mix"
+	}
+	labels := [...]string{"Sm", "Md", "Lg", "Mega", "Inshore", "Pelagic"}
+	result := fmt.Sprintf("%s%.0f%%", labels[best], bestWeight*100)
+	if secondWeight > 0 {
+		result += fmt.Sprintf("/%s%.0f%%", labels[second], secondWeight*100)
+	}
+	return result
 }
 
 func formatArchaicPresence(bandCount int, population uint64) string {

@@ -14,14 +14,14 @@ ceiling that has gone stale enough to stop constraining the build. The budget li
 increase from CI's trusted base revision. The original `5_500_000` ceiling remains only the bootstrap
 upper bound for a history with no prior budget.
 
-Measured 2026-08-31 from a full `./build_web.sh --release` build — stripped, trimmed, and
+Measured 2026-09-01 from a full `./build_web.sh --release` build — stripped, trimmed, and
 `wasm-opt -O3` optimized:
 
 | measurement            |      bytes |
 |------------------------|-----------:|
-| raw                    | 17,800,040 |
-| `brotli -q 11` (gated) |  3,194,386 |
-| `gzip -9`              |  4,430,556 |
+| raw                    | 17,877,252 |
+| `brotli -q 11` (gated) |  3,209,520 |
+| `gzip -9`              |  4,450,862 |
 
 **`wasm-opt` is primarily a decompressed-size optimization.** Measuring the same build with and
 without the optimizer shows a mixed, roughly one-percent compressed effect rather than a
@@ -29,9 +29,9 @@ second-order transfer-size lever:
 
 |                         |        raw |     brotli |      gzip |
 |-------------------------|-----------:|-----------:|----------:|
-| stripped, no `wasm-opt` | 19,027,866 |  3,161,497 | 4,449,773 |
-| `wasm-opt -O3`          | 17,800,040 |  3,194,386 | 4,430,556 |
-| change                  |     −6.45% |  **+1.04%** | **−0.43%** |
+| stripped, no `wasm-opt` | 19,110,814 |  3,194,787 | 4,469,521 |
+| `wasm-opt -O3`          | 17,877,252 |  3,209,520 | 4,450,862 |
+| change                  |     −6.45% |  **+0.46%** | **−0.42%** |
 
 The optimizer removes about six percent of the decompressed module. Brotli already finds all of
 that redundancy and compresses this optimized build slightly worse, while gzip retains a small
@@ -65,12 +65,12 @@ that exact save into the drawing seam while simulation actions and the semantic 
 the ordinary live campaign. Each locked configuration receives a five-second warmup and a 30-second
 sample with one successful `EndTurn` every five seconds.
 
-Measured 2026-08-31 from the optimized artifact in pinned Chromium `151.0.7922.34`:
+Measured 2026-09-01 from the optimized artifact in pinned Chromium `151.0.7922.34`:
 
 | view | DPR | median FPS | required floor | p95 frame gap | maximum `EndTurn` latency | JS heap |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| top-down | 1 | 71.94 | 30 | 26.2 ms | 196.30 ms | 24.5 MB |
-| top-down | 2 | 71.43 | 20 | 26.2 ms | 223.97 ms | 24.5 MB |
+| top-down | 1 | 59.88 | 30 | 16.8 ms | 68.71 ms | 26.0 MB |
+| top-down | 2 | 59.88 | 20 | 16.8 ms | 212.36 ms | 24.5 MB |
 
 Both floors, the 150 ms p95 frame-gap ceiling, and the two-second turn-latency ceiling pass.
 The key optimization is appropriate to a turn-based presentation: production disables automatic
@@ -102,8 +102,8 @@ interactive reference Mac are:
 
 | benchmark | median ratio to calibration | bytes/op | allocs/op |
 | --- | ---: | ---: | ---: |
-| maximum turn | 1,469 | 1,882,172 | 3,265 |
-| maximum frame projection | 136 | 3,603,129 | 1,998 |
+| maximum turn | 1,432 | 1,882,144 | 3,265 |
+| maximum frame projection | 131 | 3,728,414 | 1,998 |
 
 These medians include the current reusable migration-candidate workspace and seed-independent
 world data. The memory ceilings are `2,350,000 B/op` and `4,500,000 B/op`; the allocation ceilings

@@ -217,6 +217,12 @@ func TestFrameProjectsQueuedMigrationUntilTurnResolution(t *testing.T) {
 	}
 	initial, _ := service.Snapshot()
 	band := initial.Bands[0]
+	for technology := gameapi.Tech(0); technology < gameapi.TechCount; technology++ {
+		option := band.ResearchOptions[technology]
+		if option.Cost != domain.ResearchCost[domain.Technology(technology)] || option.PrerequisiteMask != domain.TechnologyPrerequisiteMask(domain.Technology(technology)) {
+			t.Fatalf("technology %s projection = cost %.0f mask %#x", technology, option.Cost, option.PrerequisiteMask)
+		}
+	}
 	if len(band.MigrationCandidates) == 0 {
 		t.Fatal("initial band has no migration candidate")
 	}

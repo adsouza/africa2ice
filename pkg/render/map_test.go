@@ -109,6 +109,36 @@ func TestClampRender(t *testing.T) {
 	}
 }
 
+func TestOverlayAndFieldNotesHitTargets(t *testing.T) {
+	for row, y := range []int{228, 264, 300} {
+		if got := MenuOverlayRowAt(500, y, 3); got != row {
+			t.Fatalf("overlay row at y=%d = %d, want %d", y, got, row)
+		}
+	}
+	if MenuOverlayRowAt(100, 228, 3) != -1 || MenuOverlayRowAt(500, 336, 3) != -1 {
+		t.Fatal("overlay accepted a point outside its rows")
+	}
+	if !FieldNotesToggleContains(1200, 90) || FieldNotesToggleContains(900, 90) {
+		t.Fatal("Field Notes top-bar hit target is inconsistent")
+	}
+	if !FieldNotesPanelContains(1000, 500) || FieldNotesPanelContains(1000, 620) {
+		t.Fatal("Field Notes scroll hit target is inconsistent")
+	}
+}
+
+func TestFieldNoteWrappingPreservesWordsAndBoundsLines(t *testing.T) {
+	value := "Historical context uses several words that need wrapping.\nHint remains separate."
+	lines := wrapTextLines(value, 24)
+	if len(lines) < 3 || strings.Join(lines, " ") != strings.ReplaceAll(value, "\n", " ") {
+		t.Fatalf("wrapped lines = %#v", lines)
+	}
+	for _, line := range lines {
+		if len([]rune(line)) > 24 {
+			t.Fatalf("overlong wrapped line %q", line)
+		}
+	}
+}
+
 func TestMapSceneDrawsTerrainVisibilityBandsAndPassagesOffscreen(t *testing.T) {
 	frame := representativeRenderFrame()
 	wantFrame := cloneRenderFrame(frame)
@@ -253,7 +283,7 @@ func TestMapSceneBuildsPhysicalPresentationForAHighDPITarget(t *testing.T) {
 	if scene.frameImage == nil || scene.frameImage.Bounds() != image.Rect(0, 0, 2560, 1440) || scene.frameScale != 2 {
 		t.Fatalf("physical presentation image = %v at scale %v", scene.frameImage, scene.frameScale)
 	}
-	if scene.terrainImage == nil || scene.terrainImage.Bounds() != image.Rect(0, 0, 1728, 1152) || scene.terrainScale != 2 {
+	if scene.terrainImage == nil || scene.terrainImage.Bounds() != image.Rect(0, 0, mapPixelWidth*2, mapPixelHeight*2) || scene.terrainScale != 2 {
 		t.Fatalf("physical terrain image = %v at scale %v", scene.terrainImage, scene.terrainScale)
 	}
 }

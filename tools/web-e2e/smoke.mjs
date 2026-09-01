@@ -50,6 +50,8 @@ const openGame = async (context, page) => {
   await page.goto(`${origin}/?e2e=1`, { waitUntil: "load" });
   await page.waitForFunction(() => document.documentElement.dataset.africa2iceReady === "true", null, { timeout: 10_000 });
   await page.waitForFunction(() => Boolean(document.documentElement.dataset.africa2iceSummary), null, { timeout: 5_000 });
+  await pressGameKey(page, "Enter");
+  await page.waitForTimeout(50);
   if (failures.length > 0) throw new Error(failures.join("\n"));
   return failures;
 };

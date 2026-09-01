@@ -8,6 +8,9 @@ filesystem/IndexedDB saves, and automated native/browser release gates.
 
 Current controls:
 
+- the title scene offers Continue, New Campaign, and explicit checkpoint loading; the Game Menu's
+  T shortcut returns there without changing the current campaign;
+
 - click a cyan- or gold-outlined reachable tile to migrate the selected sapiens band (gold is the current recommendation);
 - use the arrow keys to move a destination cursor anywhere in the band's one-turn neighborhood, including corners; Enter queues the selected migration and Esc clears it (named passages remain clickable);
 - a red arrow marks the keyboard-selected or queued migration until it is cleared or the next turn resolves it;
@@ -19,22 +22,24 @@ Current controls:
   terrain, steep escarpments, and locked passages;
 - Tab/Shift+Tab selects the next/previous sapiens band, with wraparound;
 - Space ends the turn;
-- 1–9 selects the named research shown in the persistent research-key legend, and N splits a band;
+- 1–9 selects the named research shown in the persistent prerequisite DAG, and N splits a band;
 - W cycles the workforce roles, [ and ] adjust the highlighted share by one percentage point,
   A applies an exact 100% draft, and D discards it; changing bands or ending the turn is blocked while
   a draft is dirty;
 - I interbreeds with a co-located archaic band; the option is offered only when one shares the
   selected band's tile, where a violet ring marks it on the map and the panel names it, and pressing
-  I otherwise explains why it is unavailable;
+  I otherwise explains why it is unavailable; when several are eligible, J cycles the highlighted target;
 - completing a technology triggers a breakthrough toast and updates Field Notes with context, its game effect, and a hint;
-- F toggles the Field Notes panel;
+- F or the top-bar Notes button toggles the Field Notes panel; the mouse wheel and Page Up/Page Down
+  scroll longer entries, whose historical context includes compact references;
 - G cycles contextual Field Notes for the selected band's six heritable traits;
 - M toggles mute, while - and + adjust the synthesized-effect master volume in 10% steps;
 - Ctrl+S (Cmd+S on macOS) quick-saves to the desktop filesystem or browser IndexedDB.
 - F1–F3 save Manual 1–3, and Shift+F1–F3 load them; loading is blocked until any dirty workforce
   draft is applied or discarded.
 - Esc opens the Game Menu; S opens grouped Save/Delete slots, L opens grouped Load/Delete slots,
-  and O opens settings for sound and Field Notes.
+  and O opens settings for sound and Field Notes. Settings supports a pointer-driven volume slider
+  and mute/Field Notes checkboxes as well as the listed keyboard controls.
   The browser lists Manual 1–3, Quick Save, and rolling Auto 1–3 together.
 
 Victory, extinction, and turn-400 dispersal failure open a campaign epilogue with final

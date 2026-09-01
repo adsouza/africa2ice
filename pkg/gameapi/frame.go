@@ -148,9 +148,11 @@ type Band struct {
 // ResearchOption is a projected view of the authoritative prerequisite DAG.
 // Available excludes already learned technologies.
 type ResearchOption struct {
-	Available bool
-	Acquired  bool
-	Current   bool
+	Available        bool
+	Acquired         bool
+	Current          bool
+	Cost             float64
+	PrerequisiteMask uint16
 }
 
 type FoodTurnReport struct {

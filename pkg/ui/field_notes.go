@@ -2,10 +2,77 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/adsouza/africa2ice/pkg/render"
 )
+
+type AcuteContext uint8
+
+const (
+	AcutePredationContext AcuteContext = iota
+	AcuteDiseaseOutbreakContext
+	AcuteFloodStormContext
+	AcuteExposureFallContext
+	AcuteCrossingMishapContext
+	AcuteContextCount
+)
+
+func AcuteIncidentFieldNote(kind AcuteContext) (render.FieldNote, bool) {
+	if kind >= AcuteContextCount {
+		return render.FieldNote{}, false
+	}
+	entry := [...]struct{ topic, context, effect, hint, references string }{
+		{"PREDATION", "Large predators and dangerous prey made subsistence work acutely hazardous.", "A bounded incident can remove people; shelter security, tools, trapping, and work choices modify risk multiplicatively.", "A low displayed chronic rate does not rule out an acute event on a later turn.", "Game hazard synthesis; sources in DESIGN §7."},
+		{"DISEASE OUTBREAK", "Close contact, water, food, and camp conditions can amplify infectious disease.", "One shared draw can cause direct deaths and health loss; immunity, medicine, and hygiene affect different factors.", "Camp care reduces probability but never guarantees prevention.", "Game disease synthesis; sources in DESIGN §7."},
+		{"FLOOD OR STORM", "River and coastal opportunity also carries episodic flood and storm exposure.", "A bounded incident can cause direct mortality according to biome, season, and uncovered protection.", "Natural caves are not a universal storm shield; inspect the modeled shelter and biome.", "Game hazard synthesis; sources in DESIGN §7."},
+		{"EXPOSURE OR FALL", "Cold, heat, mountains, and travel create acute exposure and fall hazards.", "Clothing, firecraft, campcraft, shelter work, and adaptation reduce components without adding them together.", "Highland and glacial routes need both habitat capacity and risk preparation.", "Game hazard synthesis; sources in DESIGN §7."},
+		{"CROSSING MISHAP", "Open-water crossings require craft, route knowledge, and coordinated movement.", "This risk activates only on a named passage and is resolved as a bounded incident.", "An open passage is usable, not safe; retain a viable founder population before crossing.", "O'Connor et al. (2011); game passage abstraction."},
+	}[kind]
+	return render.FieldNote{Topic: "ACUTE EVENT · " + entry.topic, Introduction: "This is a possible acute incident class.", Context: entry.context, GameEffect: entry.effect, Hint: entry.hint, References: entry.references}, true
+}
+
+var workforceFieldNotes = [gameapi.AssignmentCount]struct {
+	gameEffect string
+	hint       string
+}{
+	gameapi.Foraging: {
+		gameEffect: "Foragers create potential plant-food\nyield; shared flora scarcity still limits harvest.",
+		hint:       "Most useful where the tile's forageable\nplant-food stock and vegetation are high.",
+	},
+	gameapi.HuntingAndFishing: {
+		gameEffect: "Hunters and fishers create potential animal\nyield from one shared fauna stock.",
+		hint:       "Fauna weights are opportunities, not prey\npopulation counts or guaranteed catches.",
+	},
+	gameapi.Toolcraft: {
+		gameEffect: "Toolcraft workers advance the selected\nresearch target with diminishing returns.",
+		hint:       "Choose a target with keys 1–9; the DAG\nshows cost, progress, and prerequisites.",
+	},
+	gameapi.MegafaunaTracking: {
+		gameEffect: "Trackers create high terrestrial hunting\npotential only where megafauna are supported.",
+		hint:       "An unsupported allocation remains explicit;\nthe game never silently reassigns it.",
+	},
+	gameapi.Shelter: {
+		gameEffect: "Shelter and camp care reduce exposure,\ndisease, predation, and incident pressure.",
+		hint:       "Natural caves reduce exposure labor only;\nmitigations multiply and never erase all risk.",
+	},
+}
+
+func WorkforceRoleFieldNote(role gameapi.WorkforceRole) (render.FieldNote, bool) {
+	if role >= gameapi.AssignmentCount {
+		return render.FieldNote{}, false
+	}
+	entry := workforceFieldNotes[role]
+	return render.FieldNote{
+		Topic:        "WORKFORCE · " + role.String(),
+		Introduction: "A workforce share is a plan, not an outcome percentage.",
+		Context:      "Bands combine learned skills with local\nresources and environmental limits.",
+		GameEffect:   entry.gameEffect,
+		Hint:         entry.hint,
+		References:   "Game model; see DESIGN §7.",
+	}, true
+}
 
 var technologyFieldNotes = [gameapi.TechCount]struct {
 	context, gameEffect, hint string
@@ -110,6 +177,103 @@ var regionFieldNotes = [gameapi.RegionCount]struct {
 	gameapi.Beringia:         {context: "The Beringian gate responds to the full\nclimate function and may open repeatedly.", hint: "Inspect the current passage state rather\nthan assuming one fixed opening date."},
 }
 
+var biomeFieldNotes = [gameapi.BiomeCount]struct {
+	context, gameEffect, hint, references string
+}{
+	gameapi.RiverineWoodland: {
+		context:    "Rivers concentrate water, plant foods, and\nanimals, while also concentrating pathogens.",
+		gameEffect: "High forage opportunity and water can pair\nwith elevated disease pressure.",
+		hint:       "Camp care and medicine mitigate disease;\nthey do not manufacture food or water.", references: "Game ecology synthesis; sources in DESIGN §7.",
+	},
+	gameapi.Savanna: {
+		context:    "Open grassland mosaics support mixed plant\nand terrestrial-animal opportunities.",
+		gameEffect: "A balanced biome whose usefulness shifts\nwith moisture, season, and fauna mix.",
+		hint:       "Compare current stocks rather than assuming\nthe greenest-looking tile is best.", references: "Game ecology synthesis; sources in DESIGN §7.",
+	},
+	gameapi.CoastalShrubland: {
+		context:    "Coastal settings can combine terrestrial and\naquatic resources with storm exposure.",
+		gameEffect: "Inshore opportunity is baseline; pelagic\nuse and passages need later capabilities.",
+		hint:       "Cordage and Nets improves aquatic use, but\nordinary open water remains uninhabitable.", references: "O'Connor et al. (2011); Yellen et al. (1995).",
+	},
+	gameapi.MountainousHighlands: {
+		context:    "Elevation changes temperature, oxygen, travel,\nand local resource capacity.",
+		gameEffect: "Highlands carry hypoxia, fall, and exposure\npressure plus slower movement.",
+		hint:       "High-altitude adaptation and shelter help,\nbut steep authored escarpments still block entry.", references: "Game highland abstraction; sources in DESIGN §6.",
+	},
+	gameapi.SemiAridDesert: {
+		context:    "Low forageable vegetation and scarce water\nmake arid routes sensitive to timing.",
+		gameEffect: "Low capacity and heat/water stress can make\nstored food alone insufficient.",
+		hint:       "Inspect both water and food before moving;\narid adaptation reduces stress, not scarcity.", references: "Game climate synthesis; sources in DESIGN §7.",
+	},
+	gameapi.GlacialTundra: {
+		context:    "Cold low-vegetation landscapes can offer more\nanimal than plant-food opportunity.",
+		gameEffect: "Foraging is weak while hunting, clothing,\nshelter, and cold adaptation gain importance.",
+		hint:       "A low flora stock does not imply an empty fauna\nstock; read the tile's prey opportunity.", references: "Clark et al. (2009); game ecology abstraction.",
+	},
+}
+
+func BiomeFieldNote(biome gameapi.Biome) (render.FieldNote, bool) {
+	if biome >= gameapi.BiomeCount {
+		return render.FieldNote{}, false
+	}
+	entry := biomeFieldNotes[biome]
+	return render.FieldNote{Topic: "BIOME · " + biome.String(), Introduction: "Environmental opportunities and hazards are continuous beneath this label.", Context: entry.context, GameEffect: entry.gameEffect, Hint: entry.hint, References: entry.references}, true
+}
+
+func PassageFieldNote(passage gameapi.PassageID, status gameapi.PassageStatus) (render.FieldNote, bool) {
+	if passage >= gameapi.PassageCount {
+		return render.FieldNote{}, false
+	}
+	context := [...]string{
+		"Northern Wallacea represents one modeled island-hopping corridor toward Sahul.",
+		"Southern Wallacea represents a second modeled island-hopping corridor toward Sahul.",
+		"Beringia responds to the full climate function and can open more than once.",
+	}[passage]
+	references := "O'Connor et al. (2011); Clarkson et al. (2017)."
+	if passage == gameapi.BeringStrait {
+		references = "Clark et al. (2009); game sea-level abstraction."
+	}
+	return render.FieldNote{
+		Topic: "PASSAGE · " + passage.String(), Introduction: "Current status: " + status.String() + ".",
+		Context: context, GameEffect: "Only named endpoints can cross open water; the destination cost and capability gates still apply.",
+		Hint: "Select an endpoint and inspect the target status before committing the band's spatial action.", References: references,
+	}, true
+}
+
+func SpeciesFieldNote(species gameapi.Species) (render.FieldNote, bool) {
+	if species >= gameapi.SpeciesCount {
+		return render.FieldNote{}, false
+	}
+	if species == gameapi.HomoSapiens {
+		return render.FieldNote{Topic: species.String(), Introduction: "The player directs only Homo sapiens bands.", Context: "The campaign models multiple dispersing bands rather than a single species-wide population.", GameEffect: "Each band owns its food, health, workforce, technology, genetics, and spatial action.", Hint: "Tab and Shift+Tab cycle player bands; click visible markers to inspect any resident band.", References: "Game population abstraction; dispersal sources in DESIGN §1."}, true
+	}
+	return render.FieldNote{Topic: species.String(), Introduction: "Archaic bands are computer controlled and inspectable when explored.", Context: "Neanderthal- and Denisovan-related populations contributed ancestry to later human populations.", GameEffect: "Archaic bands survive, move, research, and adapt independently; co-location alone transfers no genes.", Hint: "A sapiens band sharing a tile may explicitly choose interbreeding if its spatial action remains.", References: "Reich et al. (2010); Chen et al. (2019)."}, true
+}
+
+func InterbreedingFieldNote(candidateCount int) render.FieldNote {
+	return render.FieldNote{
+		Topic: "INTERBREEDING", Introduction: fmt.Sprintf("%d eligible archaic band(s) share this tile.", candidateCount),
+		Context:    "Archaic admixture contributed inherited variants to some later human populations.",
+		GameEffect: "Interbreeding is an explicit spatial action that exchanges the whole modeled heritable vector reciprocally; ordinary co-location does nothing automatically.",
+		Hint:       "Press J to cycle eligible targets and I to accept the highlighted one; migration and splitting then remain unavailable until next turn.",
+		References: "Reich et al. (2010); Dannemann et al. (2016).",
+	}
+}
+
+func EventKindFieldNote(kind gameapi.EventKind) (render.FieldNote, bool) {
+	if kind >= gameapi.EventKindCount {
+		return render.FieldNote{}, false
+	}
+	return render.FieldNote{Topic: "EVENT · " + kind.String(), Introduction: "Events summarize accepted changes in the bounded campaign feed.", Context: "Historical evidence rarely resolves a single band's turn-by-turn experience.", GameEffect: "The event text reports a modeled outcome; the accepted frame contains its actual mechanical consequences.", Hint: "Inspect the selected band's last-turn food, mortality, health, and population reports.", References: "Game abstraction; event-specific context in DESIGN §7."}, true
+}
+
+func AbruptClimateFieldNote(region gameapi.Region, magnitude float64) (render.FieldNote, bool) {
+	if region >= gameapi.RegionCount {
+		return render.FieldNote{}, false
+	}
+	return render.FieldNote{Topic: "REGIONAL CLIMATE PULSE · " + region.String(), Introduction: fmt.Sprintf("Current explored regional anomaly: %+.3f.", magnitude), Context: "Last-glacial abrupt warmings varied in timing, shape, and regional expression.", GameEffect: "A deterministic regional overlay temporarily changes moisture; it is not a separate campaign era or future-event forecast.", Hint: "Compare the same explored tile over later turns; the ecology can recover after the pulse passes.", References: "Rasmussen et al. (2014); Capron et al. (2021)."}, true
+}
+
 func CampaignOverviewFieldNote() render.FieldNote {
 	return render.FieldNote{
 		Topic:        "WELCOME",
@@ -117,6 +281,7 @@ func CampaignOverviewFieldNote() render.FieldNote {
 		Context:      "It is 80,000 years before present;\nthe map reveals as sapiens expand.",
 		GameEffect:   "Outlined tiles are reachable; arrows\nchoose and Enter queues migration.",
 		Hint:         "Archaic hominins—including a Tibetan\nDenisovan band—are computer-controlled.",
+		References:   "Reich et al. (2010); Chen et al. (2019).",
 	}
 }
 
@@ -135,7 +300,32 @@ func TechnologyFieldNote(technology gameapi.Tech, bandID gameapi.BandID, discove
 		Context:      entry.context,
 		GameEffect:   entry.gameEffect,
 		Hint:         entry.hint,
+		References:   technologyReferences(technology),
 	}, true
+}
+
+func TechnologyContextFieldNote(technology gameapi.Tech, band *gameapi.Band) (render.FieldNote, bool) {
+	if band == nil {
+		return render.FieldNote{}, false
+	}
+	note, ok := TechnologyFieldNote(technology, band.ID, 1)
+	if !ok {
+		return render.FieldNote{}, false
+	}
+	option := band.ResearchOptions[technology]
+	state := fmt.Sprintf("Progress %.1f/%.0f.", band.ResearchProgress[technology], option.Cost)
+	switch {
+	case option.Acquired:
+		state += " Learned by this band."
+	case option.Current:
+		state += " This band's active target."
+	case option.Available:
+		state += " Available to select."
+	default:
+		state += " Locked by direct prerequisites."
+	}
+	note.Introduction = state
+	return note, true
 }
 
 func TraitFieldNote(trait gameapi.HeritableTrait, value float64) (render.FieldNote, bool) {
@@ -149,6 +339,7 @@ func TraitFieldNote(trait gameapi.HeritableTrait, value float64) (render.FieldNo
 		Context:      entry.context,
 		GameEffect:   entry.gameEffect,
 		Hint:         entry.hint,
+		References:   traitReferences(trait),
 	}, true
 }
 
@@ -167,6 +358,7 @@ func RegionEstablishedFieldNote(region gameapi.Region) (render.FieldNote, bool) 
 		Context:      entry.context,
 		GameEffect:   "This route-neutral regional achievement\nremains latched for the campaign.",
 		Hint:         entry.hint,
+		References:   regionReferences(region),
 	}, true
 }
 
@@ -187,6 +379,7 @@ func MacroEpisodeFieldNote(episode gameapi.MacroEpisodeSummary) (render.FieldNot
 		Context:      "The Campanian Ignimbrite occurred about\n39,850 years before present.",
 		GameEffect:   "The game uses a bounded regional impact\nenvelope, not literal demographic counts.",
 		Hint:         "Warnings annotate explored destinations;\nthey never move a band automatically.",
+		References:   "Giaccio et al. (2017); Scarpati et al. (2020); USGS.",
 	}, true
 }
 
@@ -197,6 +390,7 @@ func TobaFieldNote() render.FieldNote {
 		Context:      "Storey et al. (2012) date Toba; Lake\nMalawi shows no catastrophic winter.",
 		GameEffect:   "Toba is a context marker only and has\nno effect on people, climate, or stock.",
 		Hint:         "Lane et al. (2013) and Kappelman et\nal. (2024) argue against a simple collapse.",
+		References:   "Storey et al. (2012); Lane et al. (2013); Kappelman et al. (2024).",
 	}
 }
 
@@ -227,6 +421,7 @@ func ClimateEpochFieldNote(epoch gameapi.ClimateEpoch) (render.FieldNote, bool) 
 		Context:      "MIS framework: Lisiecki & Raymo (2005);\nLGM definition: Clark et al. (2009).",
 		GameEffect:   entry.gameEffect,
 		Hint:         entry.hint,
+		References:   "Lisiecki & Raymo (2005); Clark et al. (2009); Capron et al. (2021).",
 	}, true
 }
 
@@ -235,21 +430,71 @@ func BandContextFieldNote(frame *gameapi.Frame, band *gameapi.Band) render.Field
 		return CampaignOverviewFieldNote()
 	}
 	tile := frame.Tiles[band.TileID]
+	control := "Player controlled"
+	if band.Species == gameapi.ArchaicHominin {
+		control = "Computer controlled · read only"
+	}
 	return render.FieldNote{
 		Topic:        fmt.Sprintf("BAND %d · %s", band.ID, tile.Region),
-		Introduction: fmt.Sprintf("%d people · %.1f%% health · %.1f FU stored", band.Population, band.Health*100, band.StoredFood),
+		Introduction: fmt.Sprintf("%s.\n%d people · %.1f%% health · %.1f FU stored", control, band.Population, band.Health*100, band.StoredFood),
 		Context:      fmt.Sprintf("The band occupies %s in the\n%s region.", tile.Biome, tile.Region),
 		GameEffect:   fmt.Sprintf("Food %.0f/%.0f · water %.0f/%.0f\ncapacity %.0f · shelter %.0f%%", tile.FloraStock+tile.FaunaStock, tile.FloraCap+tile.FaunaCap, tile.WaterStock, tile.WaterCap, tile.EcologicalK, tile.NaturalShelter*100),
 		Hint:         "Compare the cyan target inspector before\ncommitting a migration.",
+		References:   "Game abstraction; regional sources in DESIGN §6.",
 	}
 }
 
 func EventFieldNote(event gameapi.Event) render.FieldNote {
+	if event.Kind == gameapi.EventAcuteIncident {
+		for fragment, kind := range map[string]AcuteContext{
+			"predation": AcutePredationContext, "disease outbreak": AcuteDiseaseOutbreakContext,
+			"flood or storm": AcuteFloodStormContext, "exposure or fall": AcuteExposureFallContext,
+			"crossing mishap": AcuteCrossingMishapContext,
+		} {
+			if strings.Contains(strings.ToLower(event.Summary), fragment) {
+				note, _ := AcuteIncidentFieldNote(kind)
+				note.Introduction = event.Summary
+				return note
+			}
+		}
+	}
 	return render.FieldNote{
 		Topic:        event.Kind.String(),
 		Introduction: event.Summary,
 		Context:      fmt.Sprintf("Recorded on turn %d for band %d.", event.Turn, event.BandID),
 		GameEffect:   "The accepted frame already includes this\nevent's simulation consequences.",
 		Hint:         "Review population, health, and mortality\nchanges in the selected-band panel.",
+		References:   "Game event record; evidence notes vary by event.",
+	}
+}
+
+func technologyReferences(technology gameapi.Tech) string {
+	switch technology {
+	case gameapi.CordageAndNets, gameapi.Trapping, gameapi.CoastalNavigation:
+		return "Yellen et al. (1995); O'Connor et al. (2011); McNiven et al. (2012)."
+	default:
+		return "Game capability bundle; archaeological context in DESIGN §7."
+	}
+}
+
+func traitReferences(trait gameapi.HeritableTrait) string {
+	switch trait {
+	case gameapi.PigmentationLevel:
+		return "Jablonski & Chaplin (2010)."
+	case gameapi.InnateImmuneReactivity:
+		return "Dannemann et al. (2016)."
+	default:
+		return "Game-model synthesis; scientific context in DESIGN §7."
+	}
+}
+
+func regionReferences(region gameapi.Region) string {
+	switch region {
+	case gameapi.Sahul, gameapi.SoutheastAsia:
+		return "O'Connor et al. (2011); Clarkson et al. (2017)."
+	case gameapi.Beringia, gameapi.Siberia:
+		return "Clark et al. (2009); game geography abstraction."
+	default:
+		return "Regional dispersal synthesis; sources in DESIGN §6."
 	}
 }

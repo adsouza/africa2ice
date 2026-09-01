@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"strings"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -17,7 +18,7 @@ const (
 	TerrainGridHeight      = 64
 	mapOriginX             = 20
 	mapOriginY             = 74
-	mapTileSize            = 9
+	mapTileSize            = 8
 	mapPixelWidth          = TerrainGridWidth * mapTileSize
 	mapPixelHeight         = TerrainGridHeight * mapTileSize
 	mapLegendOriginY       = 48
@@ -33,6 +34,8 @@ const (
 	fieldNotesPanelOriginY = 462
 	fieldNotesPanelHeight  = 138
 	workforcePanelOriginY  = 604
+	bottomInspectorOriginY = 590
+	bottomInspectorHeight  = 118
 )
 
 var (
@@ -58,6 +61,8 @@ type MapScene struct {
 	frameCached     bool
 	workforce       WorkforceDraft
 	overlay         MenuOverlay
+	fieldNoteScroll int
+	interbreedFocus gameapi.BandID
 }
 
 type mapFrameKey struct {
@@ -67,6 +72,8 @@ type mapFrameKey struct {
 	notice            string
 	fieldNote         FieldNote
 	fieldNotesVisible bool
+	fieldNoteScroll   int
+	interbreedFocus   gameapi.BandID
 	ending            EndScene
 	workforce         WorkforceDraft
 	resizeRequired    bool
@@ -84,6 +91,7 @@ type MigrationPreview struct {
 type WorkforceDraft struct {
 	Visible      bool
 	BandID       gameapi.BandID
+	Population   uint32
 	AllocationBP [gameapi.AssignmentCount]uint16
 	SelectedRole gameapi.WorkforceRole
 	Dirty        bool
@@ -91,12 +99,17 @@ type WorkforceDraft struct {
 }
 
 type MenuOverlay struct {
-	Visible   bool
-	Heading   string
-	Help      string
-	Lines     [8]string
-	LineCount int
-	Selected  int
+	Visible           bool
+	Heading           string
+	Help              string
+	Lines             [8]string
+	LineCount         int
+	Selected          int
+	Settings          bool
+	SettingsDisabled  bool
+	MasterVolume      float64
+	Muted             bool
+	FieldNotesVisible bool
 }
 
 // FieldNote is UI-local presentation content. It is never simulation or save
@@ -107,6 +120,7 @@ type FieldNote struct {
 	Context      string
 	GameEffect   string
 	Hint         string
+	References   string
 	Celebration  bool
 }
 
@@ -122,6 +136,10 @@ func (scene *MapScene) Update() {}
 
 func (scene *MapScene) SetWorkforceDraft(draft WorkforceDraft) { scene.workforce = draft }
 func (scene *MapScene) SetMenuOverlay(overlay MenuOverlay)     { scene.overlay = overlay }
+func (scene *MapScene) SetFieldNoteScroll(scroll int) {
+	scene.fieldNoteScroll = max(0, scroll)
+}
+func (scene *MapScene) SetInterbreedFocus(target gameapi.BandID) { scene.interbreedFocus = target }
 
 func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, fieldNote FieldNote, fieldNotesVisible bool, ending EndScene, resizeRequired bool) {
 	if frame == nil {
@@ -131,7 +149,9 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 	key := mapFrameKey{
 		frame: frame, selectedBand: selectedBand, preview: preview, notice: notice,
 		fieldNote: fieldNote, fieldNotesVisible: fieldNotesVisible, ending: ending,
-		workforce: scene.workforce, resizeRequired: resizeRequired, overlay: scene.overlay,
+		fieldNoteScroll: scene.fieldNoteScroll,
+		interbreedFocus: scene.interbreedFocus,
+		workforce:       scene.workforce, resizeRequired: resizeRequired, overlay: scene.overlay,
 	}
 	width, height := screen.Bounds().Dx(), screen.Bounds().Dy()
 	if scene.frameCached && scene.frameKey == key && scene.frameWidth == width && scene.frameHeight == height {
@@ -216,8 +236,8 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 	scene.drawEndScene(screen, ending)
 	scene.drawMenuOverlay(screen)
 	if notice != "" {
-		vector.FillRect(screen, 28, 610, 650, 30, color.RGBA{R: 26, G: 38, B: 45, A: 240}, false)
-		scene.drawText(screen, notice, 40, 617, 14, color.RGBA{R: 239, G: 220, B: 178, A: 255})
+		vector.FillRect(screen, 28, 82, 650, 30, color.RGBA{R: 26, G: 38, B: 45, A: 240}, false)
+		scene.drawText(screen, notice, 40, 89, 14, color.RGBA{R: 239, G: 220, B: 178, A: 255})
 	}
 }
 
@@ -280,7 +300,39 @@ func (scene *MapScene) drawMenuOverlay(screen logicalCanvas) {
 		}
 		scene.drawText(screen, prefix+scene.overlay.Lines[index], x+36, lineY, 14, lineColor)
 	}
+	if scene.overlay.Settings {
+		disabledColor := color.RGBA{R: 92, G: 106, B: 109, A: 255}
+		activeColor := color.RGBA{R: 203, G: 172, B: 104, A: 255}
+		chromeColor := color.RGBA{R: 91, G: 110, B: 117, A: 255}
+		if scene.overlay.SettingsDisabled {
+			activeColor, chromeColor = disabledColor, disabledColor
+		}
+		const sliderLeft, sliderRight, sliderY = float32(650), float32(870), float32(239)
+		vector.StrokeLine(screen, sliderLeft, sliderY, sliderRight, sliderY, 4, chromeColor, false)
+		knobX := sliderLeft + float32(clampRender(scene.overlay.MasterVolume))*(sliderRight-sliderLeft)
+		vector.FillCircle(screen, knobX, sliderY, 7, activeColor, true)
+		for row, checked := range []bool{scene.overlay.Muted, scene.overlay.FieldNotesVisible} {
+			boxY := float32(267 + row*36)
+			vector.StrokeRect(screen, 650, boxY, 16, 16, 1.5, chromeColor, false)
+			if checked {
+				vector.StrokeLine(screen, 653, boxY+8, 657, boxY+13, 2, activeColor, false)
+				vector.StrokeLine(screen, 657, boxY+13, 664, boxY+3, 2, activeColor, false)
+			}
+		}
+	}
 	scene.drawText(screen, scene.overlay.Help, x+28, y+height-42, 11, color.RGBA{R: 167, G: 184, B: 181, A: 255})
+}
+
+func MenuOverlayRowAt(x, y, lineCount int) int {
+	const left, top, width = 340, 150, 600
+	if x < left+20 || x >= left+width-20 || y < top+73 {
+		return -1
+	}
+	row := (y - (top + 73)) / 36
+	if row < 0 || row >= lineCount || y >= top+73+(row+1)*36 {
+		return -1
+	}
+	return row
 }
 
 // drawTerrain caches the immutable top-down tile layer until either its coarse
@@ -516,15 +568,21 @@ func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selec
 	const panelX = float32(908)
 	vector.FillRect(screen, panelX, 68, 352, 626, color.RGBA{R: 25, G: 35, B: 42, A: 238}, false)
 	scene.drawText(screen, "Africa 2 Ice", panelX+18, 88, 24, color.RGBA{R: 239, G: 220, B: 178, A: 255})
+	vector.FillRect(screen, panelX+273, 78, 65, 24, color.RGBA{R: 35, G: 51, B: 58, A: 255}, false)
+	scene.drawText(screen, "▣ NOTES", panelX+282, 84, 8.5, color.RGBA{R: 203, G: 172, B: 104, A: 255})
 	scene.drawText(screen, fmt.Sprintf("%d BP  ·  Turn %d/400", frame.YearBP, frame.Turn), panelX+18, 124, 16, color.White)
-	scene.drawText(screen, frame.Season.String()+"  ·  "+frame.Climate.Epoch.String(), panelX+18, 150, 14, color.RGBA{R: 183, G: 199, B: 194, A: 255})
+	scene.drawText(screen, campaignEraLabel(frame.Era), panelX+18, 147, 11.5, color.RGBA{R: 183, G: 199, B: 194, A: 255})
+	scene.drawText(screen, frame.Season.String()+"  ·  "+frame.Climate.Epoch.String(), panelX+18, 164, 11.5, color.RGBA{R: 183, G: 199, B: 194, A: 255})
+	if warning := macroWarningLabel(frame.MacroEpisodes); warning != "" {
+		scene.drawText(screen, warning, panelX+18, 180, 9.5, color.RGBA{R: 239, G: 151, B: 104, A: 255})
+	}
 	var totalPopulation uint64
 	for _, band := range frame.Bands {
 		if band.Species == gameapi.HomoSapiens {
 			totalPopulation += uint64(band.Population)
 		}
 	}
-	scene.drawText(screen, fmt.Sprintf("Homo sapiens: %d", totalPopulation), panelX+18, 188, 17, color.RGBA{R: 245, G: 202, B: 92, A: 255})
+	scene.drawText(screen, fmt.Sprintf("Homo sapiens: %d", totalPopulation), panelX+18, 195, 15, color.RGBA{R: 245, G: 202, B: 92, A: 255})
 	bandWindow := visibleSapiensBandWindow(frame.Bands, selectedBand)
 	scene.drawText(screen, fmt.Sprintf("%s  ·  Regions %d", bandWindow.label(), len(frame.SapiensEstablishedRegions)), panelX+18, 215, 11.5, color.White)
 	scene.drawText(screen, "! DANGER  !! SUFFERING", panelX+178, 217, 7.5, color.RGBA{R: 224, G: 173, B: 112, A: 255})
@@ -605,17 +663,26 @@ func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selec
 			headingSuffix = "  [F]"
 		}
 		scene.drawText(screen, heading+headingSuffix, panelX+28, fieldNotesPanelOriginY+9, 10, headingColor)
-		body := fieldNote.Introduction
+		body := "SUMMARY · " + fieldNote.Introduction
 		if fieldNote.Context != "" {
-			body += "\nCONTEXT · " + fieldNote.Context
+			body += "\nHISTORICAL CONTEXT · " + fieldNote.Context
 		}
 		if fieldNote.GameEffect != "" {
-			body += "\nGAME · " + fieldNote.GameEffect
+			body += "\nGAME ABSTRACTION · " + fieldNote.GameEffect
 		}
 		if fieldNote.Hint != "" {
 			body += "\nHINT · " + fieldNote.Hint
 		}
-		scene.drawText(screen, body, panelX+28, fieldNotesPanelOriginY+29, 9, color.RGBA{R: 202, G: 210, B: 206, A: 255})
+		if fieldNote.References != "" {
+			body += "\nREFERENCES · " + fieldNote.References
+		}
+		lines := wrapTextLines(body, 49)
+		scroll := min(scene.fieldNoteScroll, max(0, len(lines)-7))
+		visibleEnd := min(len(lines), scroll+7)
+		scene.drawText(screen, strings.Join(lines[scroll:visibleEnd], "\n"), panelX+28, fieldNotesPanelOriginY+29, 8.2, color.RGBA{R: 202, G: 210, B: 206, A: 255})
+		if len(lines) > 7 {
+			scene.drawText(screen, fmt.Sprintf("SCROLL %d/%d · wheel or PgUp/PgDn", scroll+1, len(lines)-6), panelX+147, fieldNotesPanelOriginY+119, 7, color.RGBA{R: 145, G: 163, B: 161, A: 255})
+		}
 	} else {
 		label := "F: show Field Notes"
 		labelColor := color.RGBA{R: 203, G: 172, B: 104, A: 255}
@@ -635,21 +702,55 @@ func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selec
 	scene.drawText(screen, "Quick-save Ctrl/Cmd+S · Manual F1–F3 · Shift+F1–F3 load", panelX+18, 684, 8.2, color.White)
 }
 
+func wrapTextLines(value string, limit int) []string {
+	if limit <= 0 {
+		return strings.Split(value, "\n")
+	}
+	lines := make([]string, 0)
+	for _, paragraph := range strings.Split(value, "\n") {
+		words := strings.Fields(paragraph)
+		if len(words) == 0 {
+			lines = append(lines, "")
+			continue
+		}
+		line := words[0]
+		for _, word := range words[1:] {
+			if len([]rune(line))+1+len([]rune(word)) <= limit {
+				line += " " + word
+				continue
+			}
+			lines = append(lines, line)
+			line = word
+		}
+		lines = append(lines, line)
+	}
+	return lines
+}
+
+func FieldNotesToggleContains(x, y int) bool {
+	return x >= 1181 && x < 1246 && y >= 78 && y < 102
+}
+
+func FieldNotesPanelContains(x, y int) bool {
+	return x >= 922 && x < 1246 && y >= int(fieldNotesPanelOriginY) && y < int(fieldNotesPanelOriginY+fieldNotesPanelHeight)
+}
+
 func (scene *MapScene) drawWorkforceDraft(screen logicalCanvas) {
 	if !scene.workforce.Visible {
 		return
 	}
 	const panelX = float32(922)
 	var total uint32
-	labels := [...]string{"F", "H", "T", "M", "S"}
-	parts := ""
+	labels := [...]string{"Foraging", "Hunt/fish", "Toolcraft", "Megafauna", "Shelter/care"}
+	parts := [gameapi.AssignmentCount]string{}
 	for role, points := range scene.workforce.AllocationBP {
 		total += uint32(points)
 		marker := " "
 		if gameapi.WorkforceRole(role) == scene.workforce.SelectedRole {
 			marker = "›"
 		}
-		parts += fmt.Sprintf("%s%s %.0f  ", marker, labels[role], float64(points)/100)
+		workers := float64(scene.workforce.Population) * float64(points) / 10_000
+		parts[role] = fmt.Sprintf("%s%s %.0f%% · %.1fp", marker, labels[role], float64(points)/100, workers)
 	}
 	status := "accepted"
 	statusColor := color.RGBA{R: 121, G: 195, B: 137, A: 255}
@@ -661,9 +762,15 @@ func (scene *MapScene) drawWorkforceDraft(screen logicalCanvas) {
 		status = fmt.Sprintf("%+.0f%%", (float64(total)-10_000)/100)
 		statusColor = color.RGBA{R: 232, G: 112, B: 92, A: 255}
 	}
-	scene.drawText(screen, "WORKFORCE · W role · [/] edit · A apply · D discard", panelX+8, workforcePanelOriginY, 7.2, color.RGBA{R: 167, G: 184, B: 181, A: 255})
-	scene.drawText(screen, parts, panelX+8, workforcePanelOriginY+13, 7.8, color.White)
-	scene.drawText(screen, status, panelX+276, workforcePanelOriginY+13, 7.8, statusColor)
+	scene.drawText(screen, "WORKFORCE · W role/context · [/] edit · A apply · D discard", panelX+8, workforcePanelOriginY-2, 6.7, color.RGBA{R: 167, G: 184, B: 181, A: 255})
+	for role := range parts {
+		column := role % 2
+		row := role / 2
+		x := panelX + 8 + float32(column)*158
+		y := workforcePanelOriginY + 9 + float32(row)*10
+		scene.drawText(screen, parts[role], x, y, 6.8, color.White)
+	}
+	scene.drawText(screen, status, panelX+276, workforcePanelOriginY+29, 6.8, statusColor)
 }
 
 func fieldNotePanelColors(celebration bool) (color.RGBA, color.RGBA) {
@@ -740,33 +847,187 @@ func formatHealthDelta(points float64) string {
 }
 
 func (scene *MapScene) drawResearchKeys(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID) {
-	const top = float32(656)
-	vector.FillRect(screen, 20, top, 864, 52, color.RGBA{R: 25, G: 35, B: 42, A: 245}, false)
-	scene.drawText(screen, "RESEARCH KEYS  ·  gold current  ·  green learned  ·  grey locked", 30, top+4, 10, color.RGBA{R: 203, G: 172, B: 104, A: 255})
+	const left, top, width = float32(20), float32(bottomInspectorOriginY), float32(864)
+	vector.FillRect(screen, left, top, width, bottomInspectorHeight, color.RGBA{R: 20, G: 30, B: 36, A: 250}, false)
+	vector.StrokeRect(screen, left, top, width, bottomInspectorHeight, 1, color.RGBA{R: 70, G: 91, B: 97, A: 255}, false)
 	band := selectedBandInFrame(frame, selectedBand)
-	rowOneX := [...]float32{30, 196, 362, 528, 694}
-	rowTwoX := [...]float32{30, 238, 446, 654}
-	for technology := gameapi.Tech(0); technology < gameapi.TechCount; technology++ {
-		x, y := float32(0), top+21
-		if technology < 5 {
-			x = rowOneX[technology]
-		} else {
-			x, y = rowTwoX[technology-5], top+37
-		}
-		labelColor := color.RGBA{R: 116, G: 128, B: 131, A: 255}
-		if band != nil {
-			option := band.ResearchOptions[technology]
-			switch {
-			case option.Current:
-				labelColor = color.RGBA{R: 245, G: 202, B: 92, A: 255}
-			case option.Acquired:
-				labelColor = color.RGBA{R: 121, G: 195, B: 137, A: 255}
-			case option.Available:
-				labelColor = color.RGBA{R: 231, G: 235, B: 229, A: 255}
+	scene.drawResearchDAG(screen, band)
+	scene.drawSelectedBandInspector(screen, frame, band)
+}
+
+type researchNodePoint struct{ x, y float32 }
+
+var researchNodePoints = [gameapi.TechCount]researchNodePoint{
+	gameapi.Firecraft:          {x: 30, y: 610},
+	gameapi.HaftedTools:        {x: 196, y: 610},
+	gameapi.PlantKnowledge:     {x: 362, y: 610},
+	gameapi.TailoredClothing:   {x: 196, y: 635},
+	gameapi.CordageAndNets:     {x: 362, y: 635},
+	gameapi.Campcraft:          {x: 30, y: 660},
+	gameapi.MedicinalKnowledge: {x: 196, y: 660},
+	gameapi.Trapping:           {x: 362, y: 660},
+	gameapi.CoastalNavigation:  {x: 362, y: 685},
+}
+
+func (scene *MapScene) drawResearchDAG(screen logicalCanvas, band *gameapi.Band) {
+	scene.drawText(screen, "RESEARCH DAG · keys 1–9 · basic survival remains available", 30, bottomInspectorOriginY+3, 8.5, color.RGBA{R: 203, G: 172, B: 104, A: 255})
+	if band != nil {
+		for technology := gameapi.Tech(0); technology < gameapi.TechCount; technology++ {
+			to := researchNodePoints[technology]
+			for prerequisite := gameapi.Tech(0); prerequisite < gameapi.TechCount; prerequisite++ {
+				if band.ResearchOptions[technology].PrerequisiteMask&(1<<prerequisite) == 0 {
+					continue
+				}
+				from := researchNodePoints[prerequisite]
+				vector.StrokeLine(screen, from.x+76, from.y+14, to.x+76, to.y, 0.8, color.RGBA{R: 83, G: 102, B: 106, A: 210}, false)
 			}
 		}
-		scene.drawText(screen, fmt.Sprintf("%d %s", technology+1, technology.String()), x, y, 10, labelColor)
 	}
+	for technology := gameapi.Tech(0); technology < gameapi.TechCount; technology++ {
+		point := researchNodePoints[technology]
+		option := gameapi.ResearchOption{}
+		progress := 0.0
+		if band != nil {
+			option = band.ResearchOptions[technology]
+			progress = band.ResearchProgress[technology]
+		}
+		border, fill, textColor := researchNodeColors(option)
+		vector.FillRect(screen, point.x, point.y, 152, 20, fill, false)
+		vector.StrokeRect(screen, point.x, point.y, 152, 20, 0.9, border, false)
+		scene.drawText(screen, fmt.Sprintf("%d %s", technology+1, technology), point.x+4, point.y+1, 7.2, textColor)
+		status := fmt.Sprintf("%.0f/%.0f", progress, option.Cost)
+		switch {
+		case option.Acquired:
+			status += " · learned"
+		case option.Current:
+			status += " · current"
+		case !option.Available && band != nil:
+			status += " · needs " + missingPrerequisiteLabel(option, band.AcquiredTech)
+		case band != nil && band.Species == gameapi.ArchaicHominin:
+			status += " · computer"
+		}
+		scene.drawText(screen, status, point.x+4, point.y+10, 6.2, textColor)
+	}
+}
+
+func researchNodeColors(option gameapi.ResearchOption) (color.RGBA, color.RGBA, color.RGBA) {
+	border := color.RGBA{R: 82, G: 95, B: 98, A: 255}
+	fill := color.RGBA{R: 28, G: 39, B: 45, A: 255}
+	textColor := color.RGBA{R: 122, G: 135, B: 137, A: 255}
+	switch {
+	case option.Current:
+		border, textColor = color.RGBA{R: 245, G: 202, B: 92, A: 255}, color.RGBA{R: 255, G: 225, B: 148, A: 255}
+	case option.Acquired:
+		border, textColor = color.RGBA{R: 121, G: 195, B: 137, A: 255}, color.RGBA{R: 168, G: 223, B: 178, A: 255}
+	case option.Available:
+		border, textColor = color.RGBA{R: 190, G: 204, B: 199, A: 255}, color.RGBA{R: 231, G: 235, B: 229, A: 255}
+	}
+	return border, fill, textColor
+}
+
+func missingPrerequisiteLabel(option gameapi.ResearchOption, acquired uint16) string {
+	missing := option.PrerequisiteMask &^ acquired
+	label := ""
+	for technology := gameapi.Tech(0); technology < gameapi.TechCount; technology++ {
+		if missing&(1<<technology) == 0 {
+			continue
+		}
+		if label != "" {
+			label += "+"
+		}
+		label += researchShortName(technology)
+	}
+	return label
+}
+
+func researchShortName(technology gameapi.Tech) string {
+	return [...]string{"Fire", "Haft", "Plants", "Clothes", "Cordage", "Camp", "Medicine", "Traps", "Navigation"}[technology]
+}
+
+func (scene *MapScene) drawSelectedBandInspector(screen logicalCanvas, frame *gameapi.Frame, band *gameapi.Band) {
+	const x = float32(536)
+	vector.StrokeLine(screen, x, bottomInspectorOriginY, x, bottomInspectorOriginY+bottomInspectorHeight, 1, color.RGBA{R: 70, G: 91, B: 97, A: 255}, false)
+	if band == nil {
+		scene.drawText(screen, "SELECTED BAND · none", x+10, bottomInspectorOriginY+8, 9, color.White)
+		return
+	}
+	control := "PLAYER CONTROLLED"
+	headingColor := color.RGBA{R: 245, G: 202, B: 92, A: 255}
+	if band.Species == gameapi.ArchaicHominin {
+		control = "COMPUTER CONTROLLED · READ ONLY"
+		headingColor = archaicBandMarkerColor
+	}
+	scene.drawText(screen, fmt.Sprintf("BAND %d · %s", band.ID, control), x+10, bottomInspectorOriginY+5, 8.5, headingColor)
+	scene.drawText(screen, fmt.Sprintf("%s · pop %d · health %.1f%% · stored %.1f FU", band.Species, band.Population, band.Health*100, band.StoredFood), x+10, bottomInspectorOriginY+19, 7.7, color.White)
+	foodLine := "Last turn food: unavailable"
+	if band.LastFoodReport.Turn > 0 {
+		foodLine = fmt.Sprintf("Turn %d food: need %.1f · ate %.1f · short %.1f (%.1f%%)", band.LastFoodReport.Turn, band.LastFoodReport.RequiredFU, band.LastFoodReport.ConsumedFU(), band.LastFoodReport.DeficitFU, band.LastFoodReport.DeficitFraction()*100)
+	}
+	scene.drawText(screen, foodLine, x+10, bottomInspectorOriginY+33, 7.2, color.RGBA{R: 202, G: 210, B: 206, A: 255})
+	m := band.LastMortality
+	mortalityLine := "Last turn mortality: unavailable"
+	if band.LastOutcomeReport.Turn > 0 {
+		mortalityLine = fmt.Sprintf("Deaths: starv %.2f · season %.2f · chronic %.2f · macro %.2f · acute %.2f", m.Starvation, m.Seasonal, m.Chronic, m.Macro, m.Acute)
+	}
+	scene.drawText(screen, mortalityLine, x+10, bottomInspectorOriginY+47, 6.9, color.RGBA{R: 202, G: 210, B: 206, A: 255})
+	researchLine := "Research: no target"
+	if band.HasResearchTarget {
+		option := band.ResearchOptions[band.ResearchTarget]
+		researchLine = fmt.Sprintf("Research: %s %.1f/%.0f · own gain +%.1f/turn", band.ResearchTarget, band.ResearchProgress[band.ResearchTarget], option.Cost, band.OriginalResearchGainPreview)
+	}
+	scene.drawText(screen, researchLine, x+10, bottomInspectorOriginY+61, 7.2, color.RGBA{R: 203, G: 172, B: 104, A: 255})
+	traits := band.HeritableState
+	temperature, elevation, latitude, biome := 0.0, 0.0, 0.0, "unknown"
+	fauna := "none"
+	if frame != nil && int(band.TileID) < len(frame.Tiles) {
+		tile := frame.Tiles[band.TileID]
+		temperature, elevation, latitude, biome = tile.LocalTemperatureC, tile.ElevationKm, tile.Latitude, tile.Biome.String()
+		fauna = dominantFaunaOpportunity(tile.Fauna)
+	}
+	traitHeadingY := float32(bottomInspectorOriginY + 76)
+	if len(band.InterbreedCandidateIDs) > 0 || band.HasInterbreedTarget {
+		interbreed := "Interbreed targets: "
+		for index, candidate := range band.InterbreedCandidateIDs {
+			if index > 0 {
+				interbreed += ", "
+			}
+			marker := ""
+			if candidate == scene.interbreedFocus {
+				marker = "›"
+			}
+			interbreed += fmt.Sprintf("%sB%d", marker, candidate)
+		}
+		if band.HasInterbreedTarget {
+			interbreed = fmt.Sprintf("Interbreeding accepted with B%d", band.InterbreedTargetID)
+		} else {
+			interbreed += " · J choose · I accept"
+		}
+		scene.drawText(screen, interbreed, x+10, traitHeadingY, 6.8, interbreedMarkerColor)
+		traitHeadingY += 11
+	}
+	scene.drawText(screen, "HERITABLE VARIANTS · G cycles scientific context", x+10, traitHeadingY, 7, color.RGBA{R: 167, G: 184, B: 181, A: 255})
+	scene.drawText(screen, fmt.Sprintf("Cold %.3f @ %.0f°C · Alt %.3f @ %.1fkm · Immune %.3f @ %s", traits[gameapi.ColdAdaptation], temperature, traits[gameapi.HighAltitudeAdaptation], elevation, traits[gameapi.InnateImmuneReactivity], biome), x+10, traitHeadingY+13, 6.3, color.White)
+	scene.drawText(screen, fmt.Sprintf("Arid %.3f @ %.0f°C · Pigment %.3f @ %.0f° · Fat %.3f @ %s", traits[gameapi.AridClimateAdaptation], temperature, traits[gameapi.PigmentationLevel], latitude, traits[gameapi.FattyAcidMetabolism], fauna), x+10, traitHeadingY+26, 6.3, color.White)
+}
+
+func campaignEraLabel(era gameapi.CampaignEra) string {
+	ranges := [...]string{"80,000–50,000 BP", "50,000–35,000 BP", "35,000–25,000 BP", "25,000–20,000 BP"}
+	if era >= gameapi.CampaignEraCount {
+		return era.String()
+	}
+	return era.String() + " era  ·  " + ranges[era]
+}
+
+func macroWarningLabel(episodes []gameapi.MacroEpisodeSummary) string {
+	for _, episode := range episodes {
+		switch {
+		case episode.Current:
+			return "ACTIVE · " + episode.Episode.String()
+		case episode.Warned:
+			return "WARNING · " + episode.Episode.String()
+		}
+	}
+	return ""
 }
 
 func selectedBandInFrame(frame *gameapi.Frame, selectedBand gameapi.BandID) *gameapi.Band {

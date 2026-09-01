@@ -1,7 +1,7 @@
 # Africa 2 Ice: Paleolithic Dispersal — Design & Architecture
 
-**Status:** Proposed — revised after design review, not yet implemented
-**Date:** 2026-08-29
+**Status:** Implemented release candidate — calibration and publication gates remain authoritative
+**Date:** 2026-08-31
 **Scope:** Playable vertical slice implementing the complete core loop at working depth
 
 ---
@@ -571,7 +571,7 @@ and health endpoints plus causal components, the `SpatialActionUsed` marker, and
 presence flag. The projection exposes that already-persisted intent so presentation can show what
 the player selected; it adds no second queue or simulation authority. **Derived previews:**
 `OriginalResearchGainPreview`, the current tile's seasonal/chronic mortality-rate preview, the fixed nine-entry projected `ResearchOptions`
-availability/acquired/current-target view, the ranked `MigrationCandidates` with destination-specific
+availability/acquired/current-target view plus its authoritative cost and direct-prerequisite mask, the ranked `MigrationCandidates` with destination-specific
 seasonal/chronic mortality-rate previews and an arrival crowding-decline preview, the freshly allocated co-located
 archaic `InterbreedCandidateIDs`, a fixed three-entry `PassageStatuses` array, and `Stress`. Together these let the HUD explain the band's
 capabilities, food outcome, and population change.
@@ -6606,12 +6606,13 @@ and reload.
 ### Top-down terrain: one grid-aligned cached surface
 
 The gameplay map is a fixed top-down **96 × 64** tile grid. Its logical rectangle starts at
-`(20, 74)` in the 1280 × 720 presentation surface; each tile owns a 9 × 9 cell and draws an 8.6 ×
-8.6 colored rectangle at the cell's upper-left corner. The sub-pixel gap keeps adjacent biomes
-legible without creating a second geometric interpretation of the world.
+`(20, 74)` in the 1280 × 720 presentation surface; each tile owns an 8 × 8 cell and draws a 7.6 ×
+7.6 colored rectangle at the cell's upper-left corner. The resulting 768 × 512 terrain layer leaves
+a persistent lower strip for research and selected-band reports. The sub-pixel gap keeps adjacent
+biomes legible without creating a second geometric interpretation of the world.
 
 `map.go` keeps one physical-resolution Ebitengine image for the terrain layer, sized
-`ceil(864 × PresentationScale) × ceil(576 × PresentationScale)`. Whenever the accepted frame's
+`ceil(768 × PresentationScale) × ceil(512 × PresentationScale)`. Whenever the accepted frame's
 `(TerrainRevision, AridityIndex, PresentationScale)` key changes, it fills the image with the
 unexplored color and draws all 6,144 tiles in stable tile order. Explored water uses the continuous
 epoch water grade, explored land uses its current biome color, and unexplored tiles retain the
@@ -6626,7 +6627,7 @@ unexplored or impassable tile, and the visual route between two cells must match
 rather than perspective geometry.
 
 Terrain, exploration, escarpment and passage overlays, reachable highlights, migration arrows, and band markers
-all use the same cell formula. A tile's marker point is the center of its 9 × 9 cell. Rendering and
+all use the same cell formula. A tile's marker point is the center of its 8 × 8 cell. Rendering and
 picking therefore cannot disagree because of elevation or view angle.
 
 ### High-DPI viewport and coordinate spaces
@@ -6971,7 +6972,8 @@ placement/sizing and responsive details remain presentation work except for the 
 below; the top bar, band header, band details, and tile-inspector grouping above are required.
 The selected-band details include all six heritable values with plain-language current-effect and
 local-pressure summaries. A co-located sapiens selection lists eligible archaic interbreeding
-partners and makes clear that ordinary co-location exchanges no genes. Preserve passage status,
+partners, highlights one deterministic target, uses plain `J` to cycle that highlight and `I` to
+accept it, and makes clear that ordinary co-location exchanges no genes. Preserve passage status,
 migration ranking, established-region display, event feed, and save feedback alongside these stats.
 
 ### Campaign timeline rail
@@ -7142,8 +7144,8 @@ After the viewport's exact inverse presentation transform, map picking uses the 
 drawing:
 
 ```text
-gridX = floor((PointerLogical.x - 20) / 9)
-gridY = floor((PointerLogical.y - 74) / 9)
+gridX = floor((PointerLogical.x - 20) / 8)
+gridY = floor((PointerLogical.y - 74) / 8)
 TileID = gridY * 96 + gridX
 ```
 
@@ -7174,12 +7176,12 @@ The valid slot IDs are closed constants, not arbitrary integers:
 - `Auto1`–`Auto3`: IDs `101`, `102`, `103`. The application chooses the target; the player may load
   or explicitly delete these rows but cannot save to them manually.
 
-On desktop startup, `pkg/app` first lists slots asynchronously and loads the record with the highest
+On startup on either target, `pkg/app` first lists slots asynchronously and loads the record with the highest
 `CommitSequence` among Quick and Auto 1–3 before accepting gameplay input. Manual slots are
 explicit checkpoints and never selected by auto-resume. When no Quick or Auto record exists, startup
 keeps the new campaign; a list/load failure likewise leaves it playable and reports the storage
-error. Browser startup does not auto-load because an origin can host multiple independent sessions
-and retains the explicit load flow. The desktop host handles the OS close request: if a player has
+error. Browser storage is already scoped to the page origin, and the grouped Load scene remains
+available for explicit manual checkpoints. The desktop host handles the OS close request: if a player has
 begun a quick-save whose completion has not yet been polled, it keeps updating storage with gameplay
 input disabled and returns `ebiten.Termination` only after that operation succeeds or fails. Thus
 Ctrl/Cmd+S followed immediately by Cmd+Q/window close cannot truncate the requested write.
@@ -9138,7 +9140,9 @@ these exclusions prevent those archives from being mistaken for signed installer
 
 ## Appendix B — Initial resource-balance configuration
 
-**Status: selected initial playtest values, pending balance calibration.** The
+**Status: calibrated initial release values.** The checked-in
+[`MOISTURE_BALANCE.json`](MOISTURE_BALANCE.json) records the reviewed moisture-driven biome/resource
+trajectory, desert-residency budget, dwell derivation, and oscillating-recovery comparison. The
 mechanics in §7 and versioning in §9 remain authoritative; this appendix is their compact balance
 view, not a second runtime source. The values are gameplay parameters, not historical measurements.
 They add no runtime field, resource pool, algorithm version, or regional capacity multiplier.
@@ -9309,7 +9313,8 @@ they do not add time-varying species extinction, separately depleted prey, or a 
    usable food per worker rather than stock indices, and include the selected low-forage/cold hunting
    case without guaranteeing survival or removing hunting danger. Run the §12 destination-policy
    and seed-corpus checks before calling the values calibrated.
-   **Moisture gate.** These tables cannot be called calibrated until they are revalidated against the
+   **Moisture gate.** These tables are calibrated only while `tools/check_moisture_balance.sh`
+   reproduces the checked-in report from the authoritative domain functions. The gate revalidates the
    moisture-driven biome trajectory rather than the temperature-only one. This gate requires build
    step 4's `ClassifyBiome` thresholds and rasterized base moisture and cannot run before them.
    Report the tile-turn-weighted biome mix at turns 0, 100, 200, 300, and 400 and the aggregate
@@ -9318,7 +9323,7 @@ they do not add time-varying species extinction, separately depleted prey, or a 
    a band resident in desert through a full precession half-cycle must have a survivable but
    pressured food and water budget at the selected indices, without that outcome being guaranteed.
    Recompute the derived `MinBiomeDwellTurns` from any accepted fauna-regeneration change, confirm it
-   still exceeds the fauna 90%-gap-closure time, and verify that no oscillating tile ends a half-cycle further from its cap than a
+	   still covers the fauna 90%-gap-closure time, and verify that no oscillating tile ends a half-cycle further from its cap than a
    steady tile of the same biome. Because §13's three reference-run margins are Policy
    (tighten-only), any failure here must be answered in the moisture model — amplitude, weights,
    dwell floor, or churn cap — or in these indices, never by relaxing a margin.
@@ -9665,7 +9670,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | GitHub Pages source                        | GitHub Actions repository-project site; no custom domain       | Locked                                          | §10   |
 | GitHub Pages publish trigger               | With step-13 publication wiring present: successful push to `main` after `native` + `web-release` + `cross-target-determinism` + `release-readiness`; no PR | Locked | §10/§12 |
 | Native release trigger and payload         | Annotated SemVer tag; four unsigned portable OS/architecture archives + `SHA256SUMS` | Locked                 | §12   |
-| Top-down map rectangle                     | origin `(20, 74)`; `96 × 64` cells of `9 × 9` logical pixels  | Locked                                          | §8    |
+| Top-down map rectangle                     | origin `(20, 74)`; `96 × 64` cells of `8 × 8` logical pixels  | Locked                                          | §8    |
 | Top-down drawn tile extent                 | `8.6 × 8.6` logical pixels within each cell                    | Locked                                          | §8    |
 | `MaxRenderScale`                           | `2.0`                                                          | Policy                                          | §8    |
 | Minimum gameplay viewport                  | `1,280 × 720 DIPs`                                             | Policy                                          | §8    |

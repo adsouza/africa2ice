@@ -5,12 +5,13 @@ import (
 	"testing"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
+	"github.com/adsouza/africa2ice/pkg/render"
 )
 
 func TestTechnologyFieldNotesCoverTheClosedCatalog(t *testing.T) {
 	for technology := gameapi.Tech(0); technology < gameapi.TechCount; technology++ {
 		note, ok := TechnologyFieldNote(technology, 7, 1)
-		if !ok || note.Topic == "" || note.Introduction == "" || note.Context == "" || note.GameEffect == "" || note.Hint == "" {
+		if !ok || note.Topic == "" || note.Introduction == "" || note.Context == "" || note.GameEffect == "" || note.Hint == "" || note.References == "" {
 			t.Fatalf("technology %d has incomplete Field Notes: %#v", technology, note)
 		}
 		for _, block := range []string{note.Introduction, note.Context, note.GameEffect, note.Hint} {
@@ -31,6 +32,42 @@ func TestTechnologyFieldNotesCoverTheClosedCatalog(t *testing.T) {
 			t.Fatalf("fishing chronology omits %q: %#v", required, fishing)
 		}
 	}
+}
+
+func TestFieldNotesCoverClosedContextCatalogs(t *testing.T) {
+	assertComplete := func(name string, note render.FieldNote, ok bool) {
+		t.Helper()
+		if !ok || note.Topic == "" || note.Introduction == "" || note.Context == "" || note.GameEffect == "" || note.Hint == "" || note.References == "" {
+			t.Fatalf("%s has incomplete Field Notes: %#v", name, note)
+		}
+	}
+	for biome := gameapi.Biome(0); biome < gameapi.BiomeCount; biome++ {
+		note, ok := BiomeFieldNote(biome)
+		assertComplete(biome.String(), note, ok)
+	}
+	for passage := gameapi.PassageID(0); passage < gameapi.PassageCount; passage++ {
+		note, ok := PassageFieldNote(passage, gameapi.PassageLocked)
+		assertComplete(passage.String(), note, ok)
+	}
+	for species := gameapi.Species(0); species < gameapi.SpeciesCount; species++ {
+		note, ok := SpeciesFieldNote(species)
+		assertComplete(species.String(), note, ok)
+	}
+	for kind := gameapi.EventKind(0); kind < gameapi.EventKindCount; kind++ {
+		note, ok := EventKindFieldNote(kind)
+		assertComplete(kind.String(), note, ok)
+	}
+	for kind := AcuteContext(0); kind < AcuteContextCount; kind++ {
+		note, ok := AcuteIncidentFieldNote(kind)
+		assertComplete(note.Topic, note, ok)
+	}
+	for role := gameapi.WorkforceRole(0); role < gameapi.AssignmentCount; role++ {
+		note, ok := WorkforceRoleFieldNote(role)
+		assertComplete(role.String(), note, ok)
+	}
+	note, ok := AbruptClimateFieldNote(gameapi.EastAfrica, 0.1)
+	assertComplete("abrupt climate", note, ok)
+	assertComplete("interbreeding", InterbreedingFieldNote(2), true)
 }
 
 func TestCampaignOverviewIdentifiesTheDenisovanBand(t *testing.T) {

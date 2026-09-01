@@ -143,9 +143,11 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 			publicBand.ResearchProgress[publicTechnology] = band.Technology.Progress[technology]
 			acquired := band.Technology.Has(technology)
 			publicBand.ResearchOptions[publicTechnology] = gameapi.ResearchOption{
-				Available: !acquired && band.Technology.PrerequisitesMet(technology),
-				Acquired:  acquired,
-				Current:   band.Technology.HasTarget && band.Technology.Target == technology,
+				Available:        !acquired && band.Technology.PrerequisitesMet(technology),
+				Acquired:         acquired,
+				Current:          band.Technology.HasTarget && band.Technology.Target == technology,
+				Cost:             domain.ResearchCost[technology],
+				PrerequisiteMask: domain.TechnologyPrerequisiteMask(technology),
 			}
 		}
 		if band.Technology.HasTarget {

@@ -55,6 +55,7 @@ try {
     }, profileSave);
     await page.goto(`${origin}/?e2e=1&profile=1`, { waitUntil: "load" });
     await page.waitForFunction(() => document.documentElement.dataset.africa2iceReady === "true", null, { timeout: 10_000 });
+    await page.keyboard.press("Enter");
     await page.waitForTimeout(5_000);
 
     const gapsPromise = page.evaluate(async () => {

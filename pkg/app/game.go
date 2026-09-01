@@ -32,6 +32,7 @@ type Game struct {
 	noticeFrames           int
 	fieldNotesVisible      bool
 	fieldNote              render.FieldNote
+	fieldNoteScroll        int
 	breakthroughFrames     int
 	migrationPreviewBand   gameapi.BandID
 	migrationPreviewTile   gameapi.TileID
@@ -67,6 +68,7 @@ type Game struct {
 	storageOperationID     gameapi.StorageOpID
 	toasts                 ui.ToastManager
 	traitFocus             gameapi.HeritableTrait
+	interbreedFocus        gameapi.BandID
 	logSession             *logging.Session
 }
 
@@ -142,6 +144,7 @@ func NewGame(seed uint64, session *logging.Session) (*Game, error) {
 	settingsStore = logging.DecorateUISettingsStore(session, settingsStore)
 	game := newGameWithPresentation(logging.DecorateGame(session, service), sound, settingsStore)
 	game.logSession = session
+	game.scenes.Push(ui.SceneTitle)
 	if settingsErr != nil {
 		sound.SetMaster(ui.DefaultUISettings().MasterVolume, ui.DefaultUISettings().Muted)
 		game.showNotice("Preferences are unavailable; using defaults")
@@ -201,6 +204,10 @@ func (g *Game) Update() error {
 	if g.pendingManualLoadID != 0 {
 		return nil
 	}
+	if g.scenes.Current() != ui.SceneGameplay {
+		g.handleSceneInput()
+		return nil
+	}
 	if g.frame.CampaignResult != gameapi.Ongoing {
 		mouseStartsCampaign := false
 		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
@@ -244,6 +251,23 @@ func (g *Game) Update() error {
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyW) && g.hasAssignmentDraft {
 		g.assignmentRole = (g.assignmentRole + 1) % gameapi.AssignmentCount
+		if note, ok := ui.WorkforceRoleFieldNote(g.assignmentRole); ok {
+			g.setFieldNote(note)
+		}
+	}
+	if g.fieldNotesVisible {
+		switch {
+		case inpututil.IsKeyJustPressed(ebiten.KeyPageUp):
+			g.fieldNoteScroll = max(0, g.fieldNoteScroll-3)
+		case inpututil.IsKeyJustPressed(ebiten.KeyPageDown):
+			g.fieldNoteScroll += 3
+		}
+		if _, wheelY := ebiten.Wheel(); wheelY != 0 {
+			x, y, inside := g.logicalCursorPosition()
+			if inside && render.FieldNotesPanelContains(x, y) {
+				g.fieldNoteScroll = max(0, g.fieldNoteScroll-int(wheelY))
+			}
+		}
 	}
 	for _, edit := range [...]struct {
 		key   ebiten.Key
@@ -261,6 +285,11 @@ func (g *Game) Update() error {
 		g.discardAssignmentDraft()
 	}
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		x, y, inside := g.logicalCursorPosition()
+		if inside && render.FieldNotesToggleContains(x, y) {
+			g.toggleFieldNotes()
+			return nil
+		}
 		g.handleMapClick()
 	}
 	for _, directionalKey := range [...]struct {
@@ -286,12 +315,24 @@ func (g *Game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyI) {
 		g.requestInterbreed()
 	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyJ) {
+		g.selectNextInterbreedTarget()
+	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyG) {
 		g.focusNextTraitNote()
 	}
 	for index, key := range [...]ebiten.Key{ebiten.Key1, ebiten.Key2, ebiten.Key3, ebiten.Key4, ebiten.Key5, ebiten.Key6, ebiten.Key7, ebiten.Key8, ebiten.Key9} {
 		if inpututil.IsKeyJustPressed(key) {
-			g.apply(gameapi.ResearchTech{BandID: g.selectedBand, Tech: gameapi.Tech(index)})
+			band := g.selected()
+			technology := gameapi.Tech(index)
+			if note, ok := ui.TechnologyContextFieldNote(technology, band); ok {
+				g.setFieldNote(note)
+			}
+			if band == nil || band.Species != gameapi.HomoSapiens {
+				g.showNotice("Archaic research is computer controlled; its DAG is read only.")
+				continue
+			}
+			g.apply(gameapi.ResearchTech{BandID: g.selectedBand, Tech: technology})
 		}
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) && g.frame.CampaignResult == gameapi.Ongoing {
@@ -374,6 +415,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	fieldNote.Celebration = g.breakthroughFrames > 0
 	g.scene.SetWorkforceDraft(g.workforceDraftForRender())
 	g.scene.SetMenuOverlay(g.menuOverlayForRender())
+	g.scene.SetFieldNoteScroll(g.fieldNoteScroll)
+	g.scene.SetInterbreedFocus(g.interbreedFocus)
 	displayFrame := g.displayFrame()
 	g.scene.Draw(screen, displayFrame, g.selectedBand, render.MigrationPreview{
 		BandID: g.migrationPreviewBand, TileID: g.migrationPreviewTile, Visible: g.hasMigrationPreview,
@@ -410,19 +453,22 @@ func (g *Game) acceptCompletedTurn(frame *gameapi.Frame) {
 		switch {
 		case hasNewRegion:
 			if note, ok := ui.RegionEstablishedFieldNote(newRegion); ok {
-				g.fieldNote = note
+				g.setFieldNote(note)
 			}
 		case hasCurrentMacroContext(frame):
 			note, _ := currentMacroFieldNote(frame)
-			g.fieldNote = note
+			g.setFieldNote(note)
+		case hasCurrentRegionalPulse(frame, g.selectedBand):
+			note, _ := currentRegionalPulseFieldNote(frame, g.selectedBand)
+			g.setFieldNote(note)
 		case crossedTobaMarker(previous, frame):
-			g.fieldNote = ui.TobaFieldNote()
+			g.setFieldNote(ui.TobaFieldNote())
 		case previous != nil && previous.Climate.Epoch != frame.Climate.Epoch:
 			if note, ok := ui.ClimateEpochFieldNote(frame.Climate.Epoch); ok {
-				g.fieldNote = note
+				g.setFieldNote(note)
 			}
 		case hasNewEvent:
-			g.fieldNote = ui.EventFieldNote(newestEvent)
+			g.setFieldNote(ui.EventFieldNote(newestEvent))
 		}
 		return
 	}
@@ -431,7 +477,7 @@ func (g *Game) acceptCompletedTurn(frame *gameapi.Frame) {
 	if !ok {
 		return
 	}
-	g.fieldNote = fieldNote
+	g.setFieldNote(fieldNote)
 	g.breakthroughFrames = breakthroughCelebrationFrames
 	message := fmt.Sprintf("Breakthrough! Band %d learned %s", first.bandID, first.technology)
 	if len(discoveries) > 1 {
@@ -445,6 +491,31 @@ func hasCurrentMacroContext(frame *gameapi.Frame) bool {
 	return ok
 }
 
+func hasCurrentRegionalPulse(frame *gameapi.Frame, selectedBand gameapi.BandID) bool {
+	_, ok := currentRegionalPulseFieldNote(frame, selectedBand)
+	return ok
+}
+
+func currentRegionalPulseFieldNote(frame *gameapi.Frame, selectedBand gameapi.BandID) (render.FieldNote, bool) {
+	var band *gameapi.Band
+	if frame != nil {
+		for index := range frame.Bands {
+			if frame.Bands[index].ID == selectedBand {
+				band = &frame.Bands[index]
+				break
+			}
+		}
+	}
+	if band == nil || int(band.TileID) >= len(frame.Tiles) {
+		return render.FieldNote{}, false
+	}
+	region := frame.Tiles[band.TileID].Region
+	if region >= gameapi.RegionCount || frame.Climate.RegionalAbrupt[region] == 0 {
+		return render.FieldNote{}, false
+	}
+	return ui.AbruptClimateFieldNote(region, frame.Climate.RegionalAbrupt[region])
+}
+
 func crossedTobaMarker(before, after *gameapi.Frame) bool {
 	return before != nil && after != nil && before.YearBP > 73_880 && after.YearBP <= 73_880
 }
@@ -456,7 +527,7 @@ func (g *Game) focusNextTraitNote() {
 	}
 	trait := g.traitFocus % gameapi.HeritableTraitCount
 	if note, ok := ui.TraitFieldNote(trait, band.HeritableState[trait]); ok {
-		g.fieldNote = note
+		g.setFieldNote(note)
 		g.showNotice("Genetics: " + trait.String())
 	}
 	g.traitFocus = (trait + 1) % gameapi.HeritableTraitCount
@@ -603,6 +674,9 @@ func (g *Game) requestInterbreed() {
 	if band == nil {
 		return
 	}
+	if len(band.InterbreedCandidateIDs) > 0 {
+		g.setFieldNote(ui.InterbreedingFieldNote(len(band.InterbreedCandidateIDs)))
+	}
 	switch {
 	case band.Species != gameapi.HomoSapiens:
 		g.showNotice("Only a Homo sapiens band can initiate interbreeding.")
@@ -613,12 +687,33 @@ func (g *Game) requestInterbreed() {
 	case len(band.InterbreedCandidateIDs) == 0:
 		g.showNotice("No archaic band shares this tile — move onto one first to interbreed.")
 	default:
-		target := band.InterbreedCandidateIDs[0]
+		target := g.interbreedFocus
+		if target == 0 {
+			target = band.InterbreedCandidateIDs[0]
+		}
 		if g.apply(gameapi.Interbreed{BandID: band.ID, TargetBandID: target}) {
 			g.clearMigrationPreview()
 			g.showNotice(fmt.Sprintf("Interbreeding with archaic band %d — gene flow resolves when the turn ends.", target))
 		}
 	}
+}
+
+func (g *Game) selectNextInterbreedTarget() {
+	band := g.selected()
+	if band == nil || len(band.InterbreedCandidateIDs) == 0 {
+		g.showNotice("No eligible archaic interbreeding target shares this tile.")
+		return
+	}
+	index := -1
+	for candidateIndex, candidate := range band.InterbreedCandidateIDs {
+		if candidate == g.interbreedFocus {
+			index = candidateIndex
+			break
+		}
+	}
+	g.interbreedFocus = band.InterbreedCandidateIDs[(index+1)%len(band.InterbreedCandidateIDs)]
+	g.setFieldNote(ui.InterbreedingFieldNote(len(band.InterbreedCandidateIDs)))
+	g.showNotice(fmt.Sprintf("Interbreeding target: archaic band %d", g.interbreedFocus))
 }
 
 func (g *Game) selected() *gameapi.Band {
@@ -635,6 +730,7 @@ func (g *Game) selected() *gameapi.Band {
 
 func (g *Game) syncAssignmentDraft(force bool) {
 	band := g.selected()
+	g.syncInterbreedFocus(band)
 	if band == nil || band.Species != gameapi.HomoSapiens {
 		g.hasAssignmentDraft = false
 		return
@@ -649,6 +745,19 @@ func (g *Game) syncAssignmentDraft(force bool) {
 	if g.assignmentRole >= gameapi.AssignmentCount {
 		g.assignmentRole = gameapi.Foraging
 	}
+}
+
+func (g *Game) syncInterbreedFocus(band *gameapi.Band) {
+	if band == nil || len(band.InterbreedCandidateIDs) == 0 {
+		g.interbreedFocus = 0
+		return
+	}
+	for _, candidate := range band.InterbreedCandidateIDs {
+		if candidate == g.interbreedFocus {
+			return
+		}
+	}
+	g.interbreedFocus = band.InterbreedCandidateIDs[0]
 }
 
 func (g *Game) assignmentDraftDirty() bool {
@@ -702,14 +811,18 @@ func (g *Game) discardAssignmentDraft() {
 }
 
 func (g *Game) workforceDraftForRender() render.WorkforceDraft {
+	var population uint32
+	if band := g.selected(); band != nil {
+		population = band.Population
+	}
 	return render.WorkforceDraft{
-		Visible: g.hasAssignmentDraft, BandID: g.assignmentDraftBand, AllocationBP: g.assignmentDraft,
+		Visible: g.hasAssignmentDraft, BandID: g.assignmentDraftBand, Population: population, AllocationBP: g.assignmentDraft,
 		SelectedRole: g.assignmentRole, Dirty: g.assignmentDraftDirty(), Valid: g.assignmentDraftValid(),
 	}
 }
 
 func (g *Game) ensureSelection() {
-	if selected := g.selected(); selected != nil && selected.Species == gameapi.HomoSapiens {
+	if selected := g.selected(); selected != nil && selected.Population > 0 {
 		return
 	}
 	g.selectedBand = 0
@@ -769,7 +882,7 @@ func (g *Game) selectSapiens(offset int) {
 
 func (g *Game) refreshBandFieldNote() {
 	if band := g.selected(); band != nil {
-		g.fieldNote = ui.BandContextFieldNote(g.frame, band)
+		g.setFieldNote(ui.BandContextFieldNote(g.frame, band))
 	}
 }
 
@@ -794,22 +907,39 @@ func (g *Game) handleMapClick() {
 }
 
 func (g *Game) selectBandAtTile(tileID gameapi.TileID) bool {
-	for _, band := range g.frame.Bands {
-		if band.Species == gameapi.HomoSapiens && band.TileID == tileID {
-			if band.ID == g.selectedBand {
-				return true
-			}
-			if g.assignmentDraftDirty() {
-				g.showNotice("Apply or discard workforce changes")
-				return true
-			}
-			g.selectedBand = band.ID
-			g.syncAssignmentDraft(true)
-			g.refreshBandFieldNote()
-			return true
-		}
+	if g.frame == nil || int(tileID) >= len(g.frame.Tiles) {
+		return false
 	}
-	return false
+	bandIDs := make([]gameapi.BandID, 0, 2)
+	selectedIndex := -1
+	for _, band := range g.frame.Bands {
+		if band.TileID != tileID {
+			continue
+		}
+		if band.Species == gameapi.ArchaicHominin && !g.frame.Tiles[tileID].Explored {
+			continue
+		}
+		if band.ID == g.selectedBand {
+			selectedIndex = len(bandIDs)
+		}
+		bandIDs = append(bandIDs, band.ID)
+	}
+	if len(bandIDs) == 0 {
+		return false
+	}
+	if g.assignmentDraftDirty() {
+		g.showNotice("Apply or discard workforce changes")
+		return true
+	}
+	next := 0
+	if selectedIndex >= 0 {
+		next = (selectedIndex + 1) % len(bandIDs)
+	}
+	g.selectedBand = bandIDs[next]
+	g.clearMigrationPreview()
+	g.syncAssignmentDraft(true)
+	g.refreshBandFieldNote()
+	return true
 }
 
 func (g *Game) handleDirectionalMigration(dx, dy int) {
@@ -840,10 +970,26 @@ func (g *Game) handleDirectionalMigration(dx, dy int) {
 	g.hasMigrationPreview = true
 	diagnostic := ui.DiagnoseMigration(g.frame, band, tileID)
 	if diagnostic.Reason == ui.MigrationAllowed {
+		g.focusPassageForCandidate(band, tileID)
 		g.showNotice("Destination selected — press Enter to queue migration.")
 		return
 	}
 	g.showNotice(ui.MigrationDiagnosticMessage(diagnostic, band) + " Keep using arrows, or press Esc to clear.")
+}
+
+func (g *Game) focusPassageForCandidate(band *gameapi.Band, tileID gameapi.TileID) {
+	if band == nil {
+		return
+	}
+	for _, candidate := range band.MigrationCandidates {
+		if candidate.TileID != tileID || !candidate.RequiresPassage {
+			continue
+		}
+		if note, ok := ui.PassageFieldNote(candidate.Passage, band.PassageStatuses[candidate.Passage]); ok {
+			g.setFieldNote(note)
+		}
+		return
+	}
 }
 
 func (g *Game) confirmMigrationPreview() {
@@ -961,7 +1107,7 @@ func (g *Game) startNewCampaign() {
 	g.ensureSelection()
 	g.hasAssignmentDraft = false
 	g.syncAssignmentDraft(true)
-	g.fieldNote = ui.CampaignOverviewFieldNote()
+	g.setFieldNote(ui.CampaignOverviewFieldNote())
 	g.breakthroughFrames = 0
 	g.clearMigrationPreview()
 	g.sound.Play(gameaudio.SFXChoiceClick)
@@ -1011,6 +1157,35 @@ func (g *Game) handleSceneInput() bool {
 			return true
 		}
 		return false
+	case ui.SceneTitle:
+		if inpututil.IsKeyJustPressed(ebiten.KeyEnter) || inpututil.IsKeyJustPressed(ebiten.KeyC) {
+			g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
+			return true
+		}
+		if inpututil.IsKeyJustPressed(ebiten.KeyN) {
+			g.startNewCampaign()
+			g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
+			return true
+		}
+		if inpututil.IsKeyJustPressed(ebiten.KeyL) {
+			g.openStorageBrowser(storageBrowserLoad)
+			return true
+		}
+		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+			x, y, inside := g.logicalCursorPosition()
+			if inside {
+				switch render.MenuOverlayRowAt(x, y, 3) {
+				case 0:
+					g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
+				case 1:
+					g.startNewCampaign()
+					g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
+				case 2:
+					g.openStorageBrowser(storageBrowserLoad)
+				}
+			}
+		}
+		return true
 	case ui.SceneMenu:
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 			g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
@@ -1027,6 +1202,15 @@ func (g *Game) handleSceneInput() bool {
 		}
 		if inpututil.IsKeyJustPressed(ebiten.KeyO) {
 			g.dispatchBatch([]ui.Action{ui.PushSceneAction(ui.SceneSettings)})
+			return true
+		}
+		if inpututil.IsKeyJustPressed(ebiten.KeyT) {
+			if g.assignmentDraftDirty() {
+				g.showNotice("Apply or discard workforce changes before returning to title")
+				return true
+			}
+			g.scenes.Reset()
+			g.scenes.Push(ui.SceneTitle)
 			return true
 		}
 		if inpututil.IsKeyJustPressed(fieldNotesHotkey) {
@@ -1061,6 +1245,27 @@ func (g *Game) handleSceneInput() bool {
 		}
 		return true
 	case ui.SceneSettings:
+		if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+			x, y, inside := g.logicalCursorPosition()
+			if inside && !g.settingsLoading {
+				switch render.MenuOverlayRowAt(x, y, 3) {
+				case 0:
+					settings := g.settings
+					settings.MasterVolume = min(1, max(0, float64(x-650)/220))
+					if settings.MasterVolume != g.settings.MasterVolume {
+						g.updateUISettings(settings)
+					}
+				case 1:
+					if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+						g.toggleMute()
+					}
+				case 2:
+					if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+						g.toggleFieldNotes()
+					}
+				}
+			}
+		}
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) || inpututil.IsKeyJustPressed(ebiten.KeyO) {
 			g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
 			return true
@@ -1091,6 +1296,11 @@ func (g *Game) toggleFieldNotes() {
 	settings := g.settings
 	settings.FieldNotesVisible = !settings.FieldNotesVisible
 	g.updateUISettings(settings)
+}
+
+func (g *Game) setFieldNote(note render.FieldNote) {
+	g.fieldNote = note
+	g.fieldNoteScroll = 0
 }
 
 func (g *Game) handleGameplayHotkey(key ebiten.Key) bool {
@@ -1293,13 +1503,16 @@ func (g *Game) pollStorage() {
 		if result.ReplacementFrame != nil {
 			g.frame = result.ReplacementFrame
 			g.publishFrame()
-			g.fieldNote = ui.CampaignOverviewFieldNote()
+			g.setFieldNote(ui.CampaignOverviewFieldNote())
 			g.breakthroughFrames = 0
 			g.clearMigrationPreview()
 			g.ensureSelection()
 			g.hasAssignmentDraft = false
 			g.syncAssignmentDraft(true)
 			g.scenes.Reset()
+			if isStartupLoad {
+				g.scenes.Push(ui.SceneTitle)
+			}
 		}
 		if isStartupLoad {
 			g.startupRestorePending = false
@@ -1434,10 +1647,16 @@ func (g *Game) advanceToasts() {
 
 func (g *Game) menuOverlayForRender() render.MenuOverlay {
 	switch g.scenes.Current() {
+	case ui.SceneTitle:
+		return render.MenuOverlay{
+			Visible: true, Heading: "Africa 2 Ice: Paleolithic Dispersal", Selected: -1, LineCount: 3,
+			Lines: [8]string{"Enter / C  Continue", "N  New Campaign", "L  Load a checkpoint"},
+			Help:  "Guide Homo sapiens from East Africa, 80,000–20,000 BP.",
+		}
 	case ui.SceneMenu:
 		return render.MenuOverlay{
-			Visible: true, Heading: "Game Menu", Selected: -1, LineCount: 5,
-			Lines: [8]string{"Esc  Back to game", "S  Save slots", "L  Load or delete slots", "O  Settings", "F  Toggle Field Notes"},
+			Visible: true, Heading: "Game Menu", Selected: -1, LineCount: 6,
+			Lines: [8]string{"Esc  Back to game", "S  Save slots", "L  Load or delete slots", "O  Settings", "F  Toggle Field Notes", "T  Return to title"},
 			Help:  "Turns advance only when you explicitly end them.",
 		}
 	case ui.SceneStorage:
@@ -1476,14 +1695,19 @@ func (g *Game) menuOverlayForRender() render.MenuOverlay {
 		if g.fieldNotesVisible {
 			visible = "Visible"
 		}
+		help := "Click/drag controls · keyboard -/+ · M · F · O/Esc back"
+		if g.settingsLoading {
+			help = "Loading preferences… controls disabled · O/Esc back"
+		}
 		return render.MenuOverlay{
-			Visible: true, Heading: "Settings", Selected: -1, LineCount: 3,
+			Visible: true, Heading: "Settings", Selected: -1, LineCount: 3, Settings: true,
+			SettingsDisabled: g.settingsLoading, MasterVolume: g.settings.MasterVolume, Muted: g.settings.Muted, FieldNotesVisible: g.fieldNotesVisible,
 			Lines: [8]string{
-				fmt.Sprintf("-/+  Master volume  %.0f%%", g.settings.MasterVolume*100),
-				"M  Muted  " + mute,
-				"F  Field Notes  " + visible,
+				fmt.Sprintf("Master volume  %.0f%%", g.settings.MasterVolume*100),
+				"Muted  " + mute,
+				"Field Notes  " + visible,
 			},
-			Help: "O / Esc back",
+			Help: help,
 		}
 	default:
 		return render.MenuOverlay{}

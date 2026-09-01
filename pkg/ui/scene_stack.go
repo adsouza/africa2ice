@@ -7,6 +7,7 @@ const (
 	SceneMenu
 	SceneStorage
 	SceneSettings
+	SceneTitle
 )
 
 // SceneStack is bounded presentation state. It never contains a frame or

@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "seed": 0,
+  "samples": [
+    {
+      "turn": 0,
+      "year_bp": 80000,
+      "land_tiles": 2862,
+      "biome_tiles": [
+        298,
+        396,
+        528,
+        340,
+        1047,
+        253
+      ],
+      "biome_fraction": [
+        0.10412299091544375,
+        0.13836477987421383,
+        0.18448637316561844,
+        0.1187980433263452,
+        0.3658280922431866,
+        0.08839972047519218
+      ],
+      "flora_capacity": 504045,
+      "fauna_capacity": 640965,
+      "water_capacity": 576300
+    },
+    {
+      "turn": 100,
+      "year_bp": 50000,
+      "land_tiles": 2862,
+      "biome_tiles": [
+        129,
+        268,
+        528,
+        340,
+        1197,
+        400
+      ],
+      "biome_fraction": [
+        0.04507337526205451,
+        0.0936408106219427,
+        0.18448637316561844,
+        0.1187980433263452,
+        0.41823899371069184,
+        0.13976240391334732
+      ],
+      "flora_capacity": 266070,
+      "fauna_capacity": 356250,
+      "water_capacity": 308600
+    },
+    {
+      "turn": 200,
+      "year_bp": 35000,
+      "land_tiles": 2862,
+      "biome_tiles": [
+        87,
+        251,
+        528,
+        340,
+        1124,
+        532
+      ],
+      "biome_fraction": [
+        0.03039832285115304,
+        0.08770090845562543,
+        0.18448637316561844,
+        0.1187980433263452,
+        0.39273235499650594,
+        0.18588399720475193
+      ],
+      "flora_capacity": 173670,
+      "fauna_capacity": 283830,
+      "water_capacity": 221287.5
+    },
+    {
+      "turn": 300,
+      "year_bp": 25000,
+      "land_tiles": 2862,
+      "biome_tiles": [
+        31,
+        270,
+        528,
+        340,
+        1105,
+        588
+      ],
+      "biome_fraction": [
+        0.010831586303284416,
+        0.09433962264150944,
+        0.18448637316561844,
+        0.1187980433263452,
+        0.3860936408106219,
+        0.20545073375262055
+      ],
+      "flora_capacity": 252420,
+      "fauna_capacity": 381660,
+      "water_capacity": 296850
+    },
+    {
+      "turn": 400,
+      "year_bp": 20000,
+      "land_tiles": 2862,
+      "biome_tiles": [
+        31,
+        270,
+        528,
+        340,
+        1105,
+        588
+      ],
+      "biome_fraction": [
+        0.010831586303284416,
+        0.09433962264150944,
+        0.18448637316561844,
+        0.1187980433263452,
+        0.3860936408106219,
+        0.20545073375262055
+      ],
+      "flora_capacity": 197190,
+      "fauna_capacity": 290040,
+      "water_capacity": 230962.5
+    }
+  ],
+  "derived_dwell_turns": 15,
+  "configured_dwell_turns": 15,
+  "fauna_ninety_percent_turns": 15,
+  "desert_residency": {
+    "found": true,
+    "tile_id": 776,
+    "region": "Frangistan",
+    "start_turn": 0,
+    "end_turn": 35,
+    "calendar_years": 10500,
+    "population": 40,
+    "ending_population": 11.571534611330247,
+    "ending_health": 1,
+    "survived": true,
+    "minimum_food_coverage": 0.7127311955288601,
+    "mean_food_coverage": 0.9334708466439383,
+    "minimum_water_coverage": 0.8333333333333334,
+    "mean_water_coverage": 0.9837670735561969
+  },
+  "recovery": {
+    "half_cycle_end_turn": 35,
+    "steady_fauna_gap": 0.11165909090909099,
+    "maximum_oscillating_gap": 0.11165909090909099,
+    "oscillating_within_steady": true
+  }
+}

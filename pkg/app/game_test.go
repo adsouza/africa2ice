@@ -2,14 +2,39 @@ package app
 
 import (
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/adsouza/africa2ice/internal/application"
 	gameaudio "github.com/adsouza/africa2ice/pkg/audio"
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/adsouza/africa2ice/pkg/ui"
 	"github.com/hajimehoshi/ebiten/v2"
 )
+
+func TestMaximumProfileFrameRendersWithCompleteHUD(t *testing.T) {
+	payload, err := os.ReadFile("../../testdata/performance_profile_save.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := application.DecodeSaveState(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := application.ProjectSaveState(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	game := New(&gameStub{frame: migrationPreviewFrame()})
+	game.SetRenderProfileFrame(profile)
+	screen := ebiten.NewImage(1280, 720)
+	defer screen.Deallocate()
+	game.Draw(screen)
+	if len(profile.Bands) != 256 {
+		t.Fatal("maximum profile did not produce a complete presentation frame")
+	}
+}
 
 type gameStub struct {
 	frame           *gameapi.Frame
@@ -584,6 +609,41 @@ func TestClickingSelectedBandPreservesDirtyAssignmentDraft(t *testing.T) {
 	}
 	if !game.assignmentDraftDirty() || game.assignmentDraft != want {
 		t.Fatalf("same-band click changed draft: got %#v want %#v", game.assignmentDraft, want)
+	}
+}
+
+func TestRepeatedTileClicksCycleVisibleSapiensAndArchaicBands(t *testing.T) {
+	frame := migrationPreviewFrame()
+	frame.Bands = append(frame.Bands, gameapi.Band{ID: 12, Species: gameapi.ArchaicHominin, TileID: 0, Population: 90})
+	game := New(&gameStub{frame: frame})
+	if game.selectedBand != 7 {
+		t.Fatalf("initial selection = %d", game.selectedBand)
+	}
+	if !game.selectBandAtTile(0) || game.selectedBand != 12 || game.hasAssignmentDraft {
+		t.Fatalf("first repeated click did not select read-only archaic band: selected %d draft %t", game.selectedBand, game.hasAssignmentDraft)
+	}
+	if !strings.Contains(game.fieldNote.Introduction, "Computer controlled") {
+		t.Fatalf("archaic Field Notes = %#v", game.fieldNote)
+	}
+	if !game.selectBandAtTile(0) || game.selectedBand != 7 || !game.hasAssignmentDraft {
+		t.Fatalf("second repeated click did not wrap to sapiens: selected %d draft %t", game.selectedBand, game.hasAssignmentDraft)
+	}
+}
+
+func TestTitleAndGameMenuExposeCampaignNavigation(t *testing.T) {
+	game := New(&gameStub{frame: migrationPreviewFrame()})
+	if !game.scenes.Push(ui.SceneTitle) {
+		t.Fatal("could not install title scene")
+	}
+	title := game.menuOverlayForRender()
+	if title.Heading != "Africa 2 Ice: Paleolithic Dispersal" || title.LineCount != 3 || !strings.Contains(title.Lines[1], "New Campaign") {
+		t.Fatalf("title overlay = %#v", title)
+	}
+	game.scenes.Reset()
+	game.scenes.Push(ui.SceneMenu)
+	menu := game.menuOverlayForRender()
+	if menu.LineCount != 6 || !strings.Contains(menu.Lines[5], "title") {
+		t.Fatalf("game menu navigation = %#v", menu)
 	}
 }
 

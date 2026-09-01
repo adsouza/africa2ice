@@ -24,6 +24,16 @@ var technologyPrerequisites = [TechCount]uint16{
 	1 << CordageAndNets,
 }
 
+// TechnologyPrerequisiteMask exposes the authoritative direct edges to the
+// application projector. Presentation receives the resulting value on the
+// frame and therefore never needs its own copy of the technology graph.
+func TechnologyPrerequisiteMask(technology Technology) uint16 {
+	if technology >= TechCount {
+		return 0
+	}
+	return technologyPrerequisites[technology]
+}
+
 type TechnologyState struct {
 	Acquired  uint16
 	Target    Technology
