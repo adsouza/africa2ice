@@ -16,7 +16,7 @@ const run = (command, args, options = {}) => {
 };
 const suites = [
   { packagePath: "./internal/adapters/storage", file: "storage.test.wasm", test: "TestIndexedDBRepositoryBrowserContract" },
-  { packagePath: "./pkg/ui", file: "ui.test.wasm", test: "TestIndexedDBUISettingsStoreBrowserContract" },
+  { packagePath: "./pkg/ui", file: "ui.test.wasm", test: "TestIndexedDBUISettingsStore(BrowserContract|RejectsNilReceiver)" },
 ];
 
 let browser;

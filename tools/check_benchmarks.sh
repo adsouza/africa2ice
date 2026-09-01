@@ -1,5 +1,5 @@
-#!/bin/sh
-set -eu
+#!/usr/bin/env bash
+set -euo pipefail
 
 output="$(mktemp)"
 trap 'rm -f "$output"' EXIT HUP INT TERM

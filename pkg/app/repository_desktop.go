@@ -26,5 +26,9 @@ func newUISettingsStore() (ui.UISettingsStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ui.NewFileUISettingsStore(filepath.Join(root, "africa2ice", "ui_settings.json"))
+	store, err := ui.NewFileUISettingsStore(filepath.Join(root, "africa2ice", "ui_settings.json"))
+	if err != nil {
+		return nil, err
+	}
+	return store, nil
 }

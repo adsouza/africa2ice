@@ -63,8 +63,9 @@ fi
 if [ -n "$base_budget" ]; then
 	base_ceiling="$(printf '%s\n' "$base_budget" | sed -n 's/^MaxCompressedWasmBytes=//p')"
 	base_headroom="$(printf '%s\n' "$base_budget" | sed -n 's/^CompressedWasmHeadroom=//p')"
-	case "$base_ceiling:$base_headroom" in
-		*[!0-9:]* | :* | *:) echo "check_wasm_size: $base_ref has an invalid wasm budget" >&2; exit 2 ;;
+	base_quantum="$(printf '%s\n' "$base_budget" | sed -n 's/^RatchetQuantum=//p')"
+	case "$base_ceiling:$base_headroom:$base_quantum" in
+		*[!0-9:]* | :* | *: | *::*) echo "check_wasm_size: $base_ref has an invalid wasm budget" >&2; exit 2 ;;
 	esac
 	if [ "$MaxCompressedWasmBytes" -gt "$base_ceiling" ]; then
 		echo "check_wasm_size: MaxCompressedWasmBytes increased from $base_ceiling at $base_ref to $MaxCompressedWasmBytes." >&2
@@ -74,6 +75,11 @@ if [ -n "$base_budget" ]; then
 	if [ "$CompressedWasmHeadroom" -gt "$base_headroom" ]; then
 		echo "check_wasm_size: CompressedWasmHeadroom increased from $base_headroom at $base_ref to $CompressedWasmHeadroom." >&2
 		echo "  This policy is tighten-only; restore or lower the trusted-base headroom." >&2
+		exit 1
+	fi
+	if [ "$RatchetQuantum" -gt "$base_quantum" ]; then
+		echo "check_wasm_size: RatchetQuantum increased from $base_quantum at $base_ref to $RatchetQuantum." >&2
+		echo "  This policy is tighten-only; restore or lower the trusted-base quantum." >&2
 		exit 1
 	fi
 else

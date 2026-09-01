@@ -19,18 +19,18 @@ Measured 2026-08-31 from a full `./build_web.sh --release` build — stripped, t
 
 | measurement            |      bytes |
 |------------------------|-----------:|
-| raw                    | 17,615,683 |
-| `brotli -q 11` (gated) |  3,147,440 |
-| `gzip -9`              |  4,380,773 |
+| raw                    | 17,791,203 |
+| `brotli -q 11` (gated) |  3,181,831 |
+| `gzip -9`              |  4,427,891 |
 
 **`wasm-opt` is primarily a decompressed-size optimization.** Measuring the same build with and
 without the optimizer shows a modest compressed improvement rather than a second-order transfer-size lever:
 
 |                         |        raw |     brotli |      gzip |
 |-------------------------|-----------:|-----------:|----------:|
-| stripped, no `wasm-opt` | 18,830,163 |  3,129,279 | 4,401,248 |
-| `wasm-opt -O3`          | 17,615,683 |  3,147,440 | 4,380,773 |
-| change                  |     −6.45% |  **+0.58%** | **−0.47%** |
+| stripped, no `wasm-opt` | 19,018,448 |  3,163,704 | 4,446,208 |
+| `wasm-opt -O3`          | 17,791,203 |  3,181,831 | 4,427,891 |
+| change                  |     −6.45% |  **+0.57%** | **−0.41%** |
 
 The optimizer removes about six percent of the decompressed module. Brotli already finds all of
 that redundancy and compresses this optimized build slightly worse, while gzip retains a small
@@ -99,15 +99,13 @@ interactive reference Mac are:
 
 | benchmark | median ratio to calibration | bytes/op | allocs/op |
 | --- | ---: | ---: | ---: |
-| maximum turn | 1,550 | 7,010,038 | 43,756 |
-| maximum frame projection | 134 | 3,635,899 | 2,254 |
+| maximum turn | 1,469 | 1,882,172 | 3,265 |
+| maximum frame projection | 136 | 3,603,129 | 1,998 |
 
-The migration-candidate batch changed the maximum frame-projection median on this machine from
-approximately `1.470 ms/op`, `3,626,425 B/op`, and `2,253 allocs/op` immediately before the change
-to `0.945 ms/op`, `3,635,899 B/op`, and `2,254 allocs/op`: about 36% less elapsed time for one small
-outer-batch allocation and 0.3% more bytes. The `ratio_to_calibration` ceiling was consequently
-ratcheted from `260` to `165`; the byte and allocation ceilings already remain within 25% of the new
-measurement.
+These medians include the current reusable migration-candidate workspace and seed-independent
+world data. The memory ceilings are `2,350,000 B/op` and `4,500,000 B/op`; the allocation ceilings
+are `4,080` and `2,490`. Each is no more than 25% above its measured median. The approved normalized
+time ceilings remain `1,900` and `165`; this refresh does not redefine the timing policy.
 
 The seed-independent canonical-grid cache is measured separately because its cold initialization
 happens only once per process and does not belong inside the maximum-turn workload. Three one-second
@@ -117,8 +115,8 @@ diagnostic benchmarks are not release gates, but they prevent a future edit from
 grid rebuild inside ordinary construction again.
 
 `tools/check_benchmarks.sh` repeats the samples and gates normalized time, bytes, and allocations
-against `testdata/performance_baseline.json`. The checked-in ceilings are no more than 25% above
-these reviewed local medians. The `release-readiness` job repeats the same gate on
+against `testdata/performance_baseline.json`. Its checked-in byte and allocation ceilings are no more
+than 25% above these reviewed local medians. The `release-readiness` job repeats the same gate on
 `NativeBenchmarkReference`; its GitHub runner image and medians become the authoritative release
 record when that job first runs.
 

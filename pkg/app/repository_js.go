@@ -15,5 +15,9 @@ func newCampaignRepository() (application.CampaignRepository, error) {
 func shouldResumeSavedGameOnStartup() bool { return true }
 
 func newUISettingsStore() (ui.UISettingsStore, error) {
-	return ui.NewIndexedDBUISettingsStore()
+	store, err := ui.NewIndexedDBUISettingsStore()
+	if err != nil {
+		return nil, err
+	}
+	return store, nil
 }

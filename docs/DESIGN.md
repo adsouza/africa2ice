@@ -381,7 +381,6 @@ internal/verification/   REFERENCE-CAMPAIGN DRIVER — imports application + gam
   checkpoint.go          CheckpointRecord + canonical sorted-key JSON encoding
   run.go                 ReferenceRun(seed, turns, policy) -> []CheckpointRecord; no I/O, no wall clock
   map.go                 deterministic text map dump
-  run_js_test.go         js-tagged: emits the sentinel-delimited record block on stdout  (//go:build js)
 
 internal/archtest/
   arch_test.go           parses imports in every .go file, including inactive build tags
@@ -8524,8 +8523,8 @@ stock-unit and conversion values are already selected; step 5 implements and ver
     behind them: the five frame-driven route policies, `CheckpointRecord` with its canonical
     sorted-key encoding, and `ReferenceRun`. Assert that it reaches the game only through
     `gameapi.Game`, that it performs no I/O and reads no wall clock, and that repeated runs of the
-    same `(seed, turns, policy)` produce identical bytes. Step 11 adds the js-tagged emission and
-    browser harness on top of this same entrypoint.
+    same `(seed, turns, policy)` produce identical bytes. Step 11 adds the optimized-module
+    checkpoint mode and browser harness on top of this same entrypoint.
     Retain step 2a's injected one-shot ready callback and prove it fires only after the first
     completed `Draw`, never from `LayoutF`, `Update`, before that draw completes, or from a later frame. With a counting fake,
     prove one `EndTurn` produces exactly one computer-planning batch followed by one five-phase step
@@ -8582,12 +8581,13 @@ stock-unit and conversion values are already selected; step 5 implements and ver
     adapter suite with `GOOS=js GOARCH=wasm go test -c`, serves a minimal harness, runs the Go test
     binary in pinned Playwright Chromium against real IndexedDB, and fails on the Go exit/status.
     Run it in `web-release` before the application smoke; desktop `go test ./...` and cross-builds do
-    not prove that this adapter suite executed. Add `tools/run_wasm_checkpoint.mjs` and
-    `internal/verification`'s js-tagged checkpoint test on the same harness: it must emit exactly one
-    sentinel-delimited canonical `CheckpointRecord` block, upload `reference-checkpoints.json`, and
-    produce bytes identical to the native matrix's records for `ReferenceSeed`. This is the artifact
-    the `cross-target-determinism` job compares, so a missing, duplicated, or non-canonical block is a
-    build failure rather than a skipped comparison. Assert the browser entry leaves `DisableHiDPI` false and the host
+    not prove that this adapter suite executed. Add `tools/run_wasm_checkpoint.mjs`: it serves the
+    already optimized `web/main.wasm`, selects its checkpoint-only query mode, captures one canonical
+    `CheckpointRecord` payload through a dedicated JavaScript callback, uploads
+    `reference-checkpoints.json`, and produces bytes identical to the native matrix's records for
+    `ReferenceSeed`. This is the exact deployed module and artifact the `cross-target-determinism`
+    job compares, so a missing or non-canonical payload is a build failure rather than a skipped
+    comparison. Assert the browser entry leaves `DisableHiDPI` false and the host
     page owns only CSS sizing—no JavaScript `devicePixelRatio`, canvas backing-size assignment, or
     input rescaling. Expand step 2a's pinned Playwright smoke into an automated pre-deployment gate.
     It serves the optimized bundle with `?e2e=1`, waits for the stable ready marker, and fails on a
@@ -8790,19 +8790,14 @@ function, and the two targets differ only in how its return value reaches a file
 
 - **Desktop.** `main.go` (`!js`) parses `-headless`/`-turns`/`-seed`/`-policy`/`-checkpoint-json`,
   calls `ReferenceRun`, and writes the encoded records to the named path.
-- **Web.** `tools/run_wasm_checkpoint.mjs` compiles `internal/verification`'s js-tagged checkpoint
-  test with `GOOS=js GOARCH=wasm go test -c`, serves the minimal harness `tools/run_wasm_go_tests.mjs`
-  already uses, runs it in pinned Playwright Chromium, and scrapes the emitted block into
-  `reference-checkpoints.json`. It fails on a Go non-zero exit, a page error, a missing block, or
-  more than one block. The wasm binary carries no `flag` plumbing, which is why this is a test
-  binary rather than a mode of `main_js.go`.
-
-The emission is delimited rather than parsed out of ordinary output. `run_js_test.go` writes the
-single canonical line between the exact sentinel lines `AFRICA2ICE-CHECKPOINT-BEGIN` and
-`AFRICA2ICE-CHECKPOINT-END` on stdout, which the pinned `wasm_exec.js` forwards to `console.log`.
-The checkpoint binary installs no observability session, so nothing else writes to its stdout and the
-block cannot interleave with §3's JSONL records; the sentinels remain because a page-level error or a
-Chromium warning can still reach the same console.
+- **Web.** `tools/run_wasm_checkpoint.mjs` serves the already built and optimized `web/main.wasm`
+  with the pinned `wasm_exec.js`, runs `main_js.go` with `?checkpoint=1` in pinned Playwright
+  Chromium, and captures the canonical payload through the dedicated
+  `africa2iceCheckpointReady(payload, error)` callback. The mode exits before Ebitengine, storage,
+  or observability composition, so it drives only `ReferenceRun`; the normal web entry remains
+  unchanged. The harness fails on a page or console error, a callback error, a missing payload, or
+  invalid JSON. Because it reads the same `web/main.wasm` that the smoke test and Pages deployment
+  consume, cross-target determinism also covers release optimization and composition.
 
 `CheckpointRecord` encoding is canonical at the producer, not repaired at the aggregator: object keys
 sorted, no insignificant whitespace, stable enum strings, and Go's ordinary lossless finite-`float64`

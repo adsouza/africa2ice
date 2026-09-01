@@ -94,7 +94,13 @@ func TestIndexedDBRepositoryBrowserContract(t *testing.T) {
 	}
 
 	indexedStorePut(t, repository, "worlds", "orphan", "recoverable payload")
-	indexedStorePut(t, repository, "metadata", "corrupt", "not json")
+	indexedStorePut(t, repository, "metadata", slotKey(application.Manual1), "not json")
+	if err := repository.BeginList(7); err != nil {
+		t.Fatal(err)
+	}
+	if corruptList := waitForCompletion(t, repository, 7); corruptList.Err == nil {
+		t.Fatal("list accepted malformed metadata")
+	}
 	if err := repository.collectUnreferencedWorlds(); err == nil {
 		t.Fatal("generation collection accepted malformed metadata")
 	}

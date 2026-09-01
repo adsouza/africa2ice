@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-const referenceSeed = uint64(0x9e3779b97f4a7c15)
-
 func TestReferenceRunIsDeterministic(t *testing.T) {
 	first, err := ReferenceRun(42, 10, "reference")
 	if err != nil {
@@ -36,7 +34,7 @@ func TestReferenceRunIsDeterministic(t *testing.T) {
 }
 
 func TestReferenceCampaignClearsReleaseMargins(t *testing.T) {
-	records, err := ReferenceRun(referenceSeed, MaxTurns, "reference")
+	records, err := ReferenceRun(ReferenceSeed, MaxTurns, "reference")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +86,7 @@ func TestCheckpointJSONKeysAreDeclaredInCanonicalOrderAndSeedIsLossless(t *testi
 	if !reflect.DeepEqual(keys, sorted) {
 		t.Fatalf("checkpoint keys are not lexical: %q", keys)
 	}
-	payload, err := CanonicalJSON([]CheckpointRecord{{Seed: referenceSeed}})
+	payload, err := CanonicalJSON([]CheckpointRecord{{Seed: ReferenceSeed}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -463,30 +463,56 @@ func (repository *IndexedDBRepository) list() ([]application.SaveMetadata, error
 	result := make(chan error, 1)
 	slots := []application.SlotID{application.Manual1, application.Manual2, application.Manual3, application.QuickSave, application.Auto1, application.Auto2, application.Auto3}
 	metadata := make([]application.SaveMetadata, len(slots))
-	remaining := len(slots)
-	functions := make([]js.Func, 0, len(slots)+1)
-	failure := js.FuncOf(func(this js.Value, args []js.Value) any {
-		result <- jsError(transaction, "list IndexedDB saves")
+	requests := make([]js.Value, 0, len(slots))
+	functions := make([]js.Func, 0, len(slots)+3)
+	var operationErr error
+	var finishOnce sync.Once
+	finish := func(err error) { finishOnce.Do(func() { result <- err }) }
+	complete := js.FuncOf(func(this js.Value, args []js.Value) any {
+		finish(nil)
 		return nil
 	})
-	functions = append(functions, failure)
+	abort := js.FuncOf(func(this js.Value, args []js.Value) any {
+		if operationErr == nil {
+			operationErr = jsError(transaction, "list IndexedDB saves")
+		}
+		finish(operationErr)
+		return nil
+	})
+	requestFailure := js.FuncOf(func(this js.Value, args []js.Value) any {
+		if operationErr == nil {
+			operationErr = jsError(transaction, "list IndexedDB saves")
+		}
+		return nil
+	})
+	functions = append(functions, complete, abort, requestFailure)
+	transaction.Set("oncomplete", complete)
+	transaction.Set("onabort", abort)
+	transaction.Set("onerror", requestFailure)
 	for index, slot := range slots {
 		request := transaction.Call("objectStore", "metadata").Call("get", slotKey(slot))
 		callback := js.FuncOf(func(this js.Value, args []js.Value) any {
 			if value := request.Get("result"); !value.IsUndefined() {
-				_ = json.Unmarshal([]byte(value.String()), &metadata[index])
-			}
-			remaining--
-			if remaining == 0 {
-				result <- nil
+				if err := json.Unmarshal([]byte(value.String()), &metadata[index]); err != nil {
+					operationErr = fmt.Errorf("decode IndexedDB metadata for slot %d: %w", slot, err)
+					transaction.Call("abort")
+				}
 			}
 			return nil
 		})
 		functions = append(functions, callback)
+		requests = append(requests, request)
 		request.Set("onsuccess", callback)
-		request.Set("onerror", failure)
+		request.Set("onerror", requestFailure)
 	}
 	err := <-result
+	transaction.Set("oncomplete", js.Null())
+	transaction.Set("onabort", js.Null())
+	transaction.Set("onerror", js.Null())
+	for _, request := range requests {
+		request.Set("onsuccess", js.Null())
+		request.Set("onerror", js.Null())
+	}
 	for _, function := range functions {
 		function.Release()
 	}

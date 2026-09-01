@@ -280,9 +280,10 @@ func (scene *MapScene) drawMenuOverlay(screen *ebiten.Image) {
 }
 
 // drawTerrain caches the immutable top-down tile layer until either its coarse
-// terrain revision or its continuously graded water color changes. Planning-
-// only frames can therefore reuse it without risking stale exploration,
-// biome, macro-impact, or climate colors.
+// terrain revision or its continuously graded water color changes. Commands
+// that reveal terrain (including a successful split) advance that revision;
+// other planning-only frames can reuse it without stale exploration, biome,
+// macro-impact, or climate colors.
 func (scene *MapScene) drawTerrain(screen *ebiten.Image, frame *gameapi.Frame) {
 	if !scene.terrainCached || scene.terrainRevision != frame.TerrainRevision || scene.terrainAridity != frame.Climate.AridityIndex {
 		if scene.terrainImage != nil {

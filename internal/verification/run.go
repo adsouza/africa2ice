@@ -8,7 +8,10 @@ import (
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 )
 
-const MaxTurns = 400
+const (
+	MaxTurns      = 400
+	ReferenceSeed = uint64(0x9e3779b97f4a7c15)
+)
 
 var destinationRegions = [...]gameapi.Region{
 	gameapi.Frangistan, gameapi.SouthAsia, gameapi.YellowRiverBasin, gameapi.Sahul, gameapi.Beringia,

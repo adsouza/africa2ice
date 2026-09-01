@@ -59,6 +59,9 @@ func (store *IndexedDBUISettingsStore) Poll() []UISettingsCompletion {
 }
 
 func (store *IndexedDBUISettingsStore) begin() bool {
+	if store == nil {
+		return false
+	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	if store.active {

@@ -229,6 +229,9 @@ func (world *World) validate() error {
 		if band.TileID >= TileCount || band.Species >= SpeciesCount {
 			return fmt.Errorf("%w: band identity", ErrInvalidValue)
 		}
+		if band.Population > 0 && world.habitat[band.TileID].BaselineK <= 0 {
+			return fmt.Errorf("%w: living band on uninhabitable tile", ErrInvalidValue)
+		}
 		if err := ValidateHealth(band.Health); err != nil {
 			return err
 		}
@@ -253,7 +256,7 @@ func (world *World) validate() error {
 			if band.LastFoodReport.RequiredFU != 0 || band.LastFoodReport.DeficitFU != 0 {
 				return fmt.Errorf("%w: unavailable food report has values", ErrInvalidValue)
 			}
-		} else if band.LastFoodReport.Turn != world.turn || band.LastFoodReport.RequiredFU < 0 || band.LastFoodReport.DeficitFU < 0 || band.LastFoodReport.DeficitFU > band.LastFoodReport.RequiredFU || math.IsNaN(band.LastFoodReport.RequiredFU) || math.IsNaN(band.LastFoodReport.DeficitFU) {
+		} else if band.LastFoodReport.Turn != world.turn || band.LastFoodReport.RequiredFU < 0 || band.LastFoodReport.DeficitFU < 0 || band.LastFoodReport.DeficitFU > band.LastFoodReport.RequiredFU || math.IsNaN(band.LastFoodReport.RequiredFU) || math.IsNaN(band.LastFoodReport.DeficitFU) || math.IsInf(band.LastFoodReport.RequiredFU, 0) || math.IsInf(band.LastFoodReport.DeficitFU, 0) {
 			return fmt.Errorf("%w: food report", ErrInvalidValue)
 		}
 		mortality := [...]float64{band.LastMortality.Starvation, band.LastMortality.Seasonal, band.LastMortality.Chronic, band.LastMortality.Macro, band.LastMortality.Acute}

@@ -77,6 +77,7 @@ func (service *GameService) Apply(command gameapi.Command) (*gameapi.Frame, erro
 		return nil, &gameapi.GameError{Code: gameapi.ErrStoragePending, Message: "load operation pending"}
 	}
 	var err error
+	terrainChanged := false
 	switch value := command.(type) {
 	case gameapi.SetAssignment:
 		var allocation [domain.AssignmentCount]domain.AssignmentBP
@@ -88,6 +89,7 @@ func (service *GameService) Apply(command gameapi.Command) (*gameapi.Frame, erro
 		err = service.world.QueueMigration(domain.BandID(value.BandID), domain.TileID(value.TileID), true)
 	case gameapi.SplitBand:
 		err = service.world.Split(domain.BandID(value.BandID), domain.TileID(value.Destination), true)
+		terrainChanged = err == nil
 	case gameapi.ResearchTech:
 		technology, ok := unmapTech(value.Tech)
 		if !ok {
@@ -103,6 +105,9 @@ func (service *GameService) Apply(command gameapi.Command) (*gameapi.Frame, erro
 		return nil, mapDomainError(err)
 	}
 	service.worldRevision++
+	if terrainChanged {
+		service.terrainRevision++
+	}
 	return service.projectFrame()
 }
 

@@ -23,7 +23,23 @@ for policy in reference toward-south-asia toward-yellow-river toward-sahul towar
 	checkpoint="$(mktemp)"
 	trap 'rm -f "$checkpoint"' EXIT HUP INT TERM
 	go run . -headless -turns 400 -seed 0x9e3779b97f4a7c15 -policy "$policy" -checkpoint-json "$checkpoint" >/dev/null
-	if ! tail -c 1600 "$checkpoint" | grep -q '"target_established":true'; then
+	if ! python3 - "$checkpoint" "$policy" <<'PY'
+import json
+import sys
+
+path, policy = sys.argv[1:]
+try:
+    with open(path, encoding="utf-8") as source:
+        records = json.load(source)
+    final = records[-1]
+    valid = isinstance(final, dict) and final.get("turn") == 400 and final.get("target_established") is True
+except (OSError, ValueError, IndexError, TypeError):
+    valid = False
+if not valid:
+    print(f"release readiness: {policy} has no established target in its terminal turn-400 record", file=sys.stderr)
+    raise SystemExit(1)
+PY
+	then
 		echo "release readiness: $policy did not establish its target" >&2
 		exit 1
 	fi

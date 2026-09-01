@@ -29,6 +29,16 @@ func TestIndexedDBUISettingsStoreBrowserContract(t *testing.T) {
 	}
 }
 
+func TestIndexedDBUISettingsStoreRejectsNilReceiver(t *testing.T) {
+	var store *IndexedDBUISettingsStore
+	if err := store.BeginRead(1); err == nil {
+		t.Fatal("nil store accepted read")
+	}
+	if err := store.BeginWrite(2, DefaultUISettings()); err == nil {
+		t.Fatal("nil store accepted write")
+	}
+}
+
 func waitForIndexedDBSettings(t *testing.T, store UISettingsStore) UISettingsCompletion {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)

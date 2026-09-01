@@ -9,11 +9,15 @@ import (
 
 	"github.com/adsouza/africa2ice/internal/adapters/logging"
 	"github.com/adsouza/africa2ice/internal/application"
+	"github.com/adsouza/africa2ice/internal/verification"
 	"github.com/adsouza/africa2ice/pkg/app"
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
 func main() {
+	if runCheckpointMode() {
+		return
+	}
 	session, err := logging.NewDefaultSession(os.Stdout)
 	if err != nil {
 		reportBootError(err)
@@ -45,6 +49,37 @@ func main() {
 		reportBootError(err)
 		_, _ = os.Stderr.WriteString(err.Error() + "\n")
 	}
+}
+
+// runCheckpointMode lets the browser determinism gate drive the exact
+// optimized module that is deployed. It deliberately exits before composing
+// Ebitengine or storage, and is reachable only through the gate's query flag.
+func runCheckpointMode() bool {
+	location := js.Global().Get("location")
+	parameters := js.Global().Get("URLSearchParams").New(location.Get("search"))
+	if parameters.Call("get", "checkpoint").String() != "1" {
+		return false
+	}
+	records, err := verification.ReferenceRun(verification.ReferenceSeed, verification.MaxTurns, "reference")
+	payload := ""
+	if err == nil {
+		var encoded []byte
+		encoded, err = verification.CanonicalJSON(records)
+		payload = string(encoded)
+	}
+	errorText := ""
+	if err != nil {
+		errorText = err.Error()
+	}
+	callback := js.Global().Get("africa2iceCheckpointReady")
+	if callback.Type() == js.TypeFunction {
+		callback.Invoke(payload, errorText)
+	} else if err != nil {
+		js.Global().Get("console").Call("error", errorText)
+	} else {
+		js.Global().Get("console").Call("log", payload)
+	}
+	return true
 }
 
 func reportBootError(err error) {

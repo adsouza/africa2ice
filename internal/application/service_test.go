@@ -76,6 +76,43 @@ func TestGameServiceRevisionsAndPlayerAuthority(t *testing.T) {
 	}
 }
 
+func TestSuccessfulSplitAdvancesTerrainRevision(t *testing.T) {
+	service, err := NewGameService(25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	band := service.world.Bands()[0]
+	// Raise settlement stress enough to make the split gate deterministic.
+	state, err := service.world.ExportState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Bands[0].Population = 10_000
+	service.world, err = domain.RestoreWorld(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var destination domain.TileID
+	found := false
+	for _, edge := range service.world.Grid().OrdinaryEdges(band.TileID) {
+		if service.world.IsExplored(edge.To) && service.world.Habitat()[edge.To].BaselineK > 0 {
+			destination, found = edge.To, true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("starting band has no explored habitable split destination")
+	}
+	before, _ := service.Snapshot()
+	after, err := service.Apply(gameapi.SplitBand{BandID: gameapi.BandID(band.ID), Destination: gameapi.TileID(destination)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.WorldRevision != before.WorldRevision+1 || after.TerrainRevision != before.TerrainRevision+1 {
+		t.Fatalf("split revisions = %d/%d, want %d/%d", after.WorldRevision, after.TerrainRevision, before.WorldRevision+1, before.TerrainRevision+1)
+	}
+}
+
 func TestFrameIsolationAcrossProjections(t *testing.T) {
 	service, _ := NewGameService(2)
 	old, _ := service.Snapshot()

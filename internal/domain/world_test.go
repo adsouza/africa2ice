@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"testing"
 )
@@ -205,5 +206,39 @@ func TestRestoreRejectsContradictoryTerminalState(t *testing.T) {
 	state.Result = CampaignOngoing
 	if _, err := RestoreWorld(state); err == nil {
 		t.Fatal("ongoing extinct state restored")
+	}
+}
+
+func TestRestoreRejectsLivingBandOnUninhabitableTile(t *testing.T) {
+	world, _ := NewWorld(23)
+	state, _ := world.ExportState()
+	for id, habitat := range world.habitat {
+		if habitat.BaselineK <= 0 {
+			state.Bands[0].TileID = TileID(id)
+			if _, err := RestoreWorld(state); err == nil {
+				t.Fatal("living band on uninhabitable tile restored")
+			}
+			return
+		}
+	}
+	t.Fatal("fixture has no uninhabitable tile")
+}
+
+func TestRestoreRejectsInfiniteFoodReport(t *testing.T) {
+	world, _ := NewWorld(24)
+	if err := world.AdvanceTurn(); err != nil {
+		t.Fatal(err)
+	}
+	positiveInfinity := math.MaxFloat64
+	positiveInfinity += math.MaxFloat64
+	state, _ := world.ExportState()
+	state.Bands[0].LastFoodReport.RequiredFU = positiveInfinity
+	if _, err := RestoreWorld(state); err == nil {
+		t.Fatal("infinite required food restored")
+	}
+	state, _ = world.ExportState()
+	state.Bands[0].LastFoodReport.DeficitFU = positiveInfinity
+	if _, err := RestoreWorld(state); err == nil {
+		t.Fatal("infinite food deficit restored")
 	}
 }

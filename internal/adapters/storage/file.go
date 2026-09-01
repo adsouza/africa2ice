@@ -32,6 +32,7 @@ type FileRepository struct {
 	completions chan application.RepositoryCompletion
 	done        chan struct{}
 	closeOnce   sync.Once
+	workerWG    sync.WaitGroup
 	// sequence is the last commit sequence this process issued. It is scanned
 	// from disk once and then advanced in memory, so a long campaign's
 	// per-turn autosaves do not re-read every metadata record on every write.
@@ -49,6 +50,7 @@ func NewFileRepository(directory string) (*FileRepository, error) {
 		return nil, err
 	}
 	repository := &FileRepository{directory: directory, lease: lease, writable: writable, requests: make(chan fileRequest, 2), completions: make(chan application.RepositoryCompletion, 8), done: make(chan struct{})}
+	repository.workerWG.Add(1)
 	go repository.worker()
 	return repository, nil
 }
@@ -107,6 +109,7 @@ func (repository *FileRepository) Close() error {
 	var closeErr error
 	repository.closeOnce.Do(func() {
 		close(repository.done)
+		repository.workerWG.Wait()
 		if repository.lease != nil {
 			closeErr = repository.lease.Close()
 		}
@@ -115,6 +118,7 @@ func (repository *FileRepository) Close() error {
 }
 
 func (repository *FileRepository) worker() {
+	defer repository.workerWG.Done()
 	for {
 		select {
 		case request := <-repository.requests:
@@ -129,7 +133,11 @@ func (repository *FileRepository) worker() {
 			case application.RepositoryList:
 				completion.Slots, completion.Err = repository.list()
 			}
-			repository.completions <- completion
+			select {
+			case repository.completions <- completion:
+			case <-repository.done:
+				return
+			}
 		case <-repository.done:
 			return
 		}
