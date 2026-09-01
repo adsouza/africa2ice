@@ -63,12 +63,14 @@ type MapScene struct {
 	overlay         MenuOverlay
 	fieldNoteScroll int
 	interbreedFocus gameapi.BandID
+	hover           TileHover
 }
 
 type mapFrameKey struct {
 	frame             *gameapi.Frame
 	selectedBand      gameapi.BandID
 	preview           MigrationPreview
+	hover             TileHover
 	notice            string
 	fieldNote         FieldNote
 	fieldNotesVisible bool
@@ -82,6 +84,13 @@ type mapFrameKey struct {
 
 type MigrationPreview struct {
 	BandID  gameapi.BandID
+	TileID  gameapi.TileID
+	Visible bool
+}
+
+// TileHover is UI-local pointer focus. It never changes selection or campaign
+// state, and the inspector gives explicit migration choices precedence over it.
+type TileHover struct {
 	TileID  gameapi.TileID
 	Visible bool
 }
@@ -140,6 +149,7 @@ func (scene *MapScene) SetFieldNoteScroll(scroll int) {
 	scene.fieldNoteScroll = max(0, scroll)
 }
 func (scene *MapScene) SetInterbreedFocus(target gameapi.BandID) { scene.interbreedFocus = target }
+func (scene *MapScene) SetTileHover(hover TileHover)             { scene.hover = hover }
 
 func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, fieldNote FieldNote, fieldNotesVisible bool, ending EndScene, resizeRequired bool) {
 	if frame == nil {
@@ -147,7 +157,7 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 		return
 	}
 	key := mapFrameKey{
-		frame: frame, selectedBand: selectedBand, preview: preview, notice: notice,
+		frame: frame, selectedBand: selectedBand, preview: preview, hover: scene.hover, notice: notice,
 		fieldNote: fieldNote, fieldNotesVisible: fieldNotesVisible, ending: ending,
 		fieldNoteScroll: scene.fieldNoteScroll,
 		interbreedFocus: scene.interbreedFocus,
@@ -677,12 +687,15 @@ func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selec
 			body += "\nREFERENCES · " + fieldNote.References
 		}
 		lines := wrapTextLines(body, 49)
-		scroll := min(scene.fieldNoteScroll, max(0, len(lines)-7))
-		visibleEnd := min(len(lines), scroll+7)
+		const visibleFieldNoteLines = 5
+		scroll := min(scene.fieldNoteScroll, max(0, len(lines)-visibleFieldNoteLines))
+		visibleEnd := min(len(lines), scroll+visibleFieldNoteLines)
 		scene.drawText(screen, strings.Join(lines[scroll:visibleEnd], "\n"), panelX+28, fieldNotesPanelOriginY+29, 8.2, color.RGBA{R: 202, G: 210, B: 206, A: 255})
-		if len(lines) > 7 {
-			scene.drawText(screen, fmt.Sprintf("SCROLL %d/%d · wheel or PgUp/PgDn", scroll+1, len(lines)-6), panelX+147, fieldNotesPanelOriginY+119, 7, color.RGBA{R: 145, G: 163, B: 161, A: 255})
+		if len(lines) > visibleFieldNoteLines {
+			scene.drawText(screen, fmt.Sprintf("SCROLL %d/%d · wheel or PgUp/PgDn", scroll+1, len(lines)-visibleFieldNoteLines+1), panelX+147, fieldNotesPanelOriginY+91, 7, color.RGBA{R: 145, G: 163, B: 161, A: 255})
 		}
+		scene.drawText(screen, "RECENT EVENTS", panelX+28, fieldNotesPanelOriginY+104, 7.5, headingColor)
+		scene.drawText(screen, strings.Join(recentEventLines(frame.Events, 2, 52), "\n"), panelX+28, fieldNotesPanelOriginY+116, 7.2, color.RGBA{R: 184, G: 198, B: 194, A: 255})
 	} else {
 		label := "F: show Field Notes"
 		labelColor := color.RGBA{R: 203, G: 172, B: 104, A: 255}
@@ -690,7 +703,9 @@ func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selec
 			label = "BREAKTHROUGH: " + fieldNote.Topic + " · F for details"
 			labelColor = color.RGBA{R: 255, G: 213, B: 92, A: 255}
 		}
-		scene.drawText(screen, label, panelX+18, 574, 12, labelColor)
+		scene.drawText(screen, "RECENT EVENT", panelX+18, 548, 8.5, color.RGBA{R: 167, G: 184, B: 181, A: 255})
+		scene.drawText(screen, recentEventLines(frame.Events, 1, 55)[0], panelX+18, 562, 7.6, color.RGBA{R: 202, G: 210, B: 206, A: 255})
+		scene.drawText(screen, label, panelX+18, 584, 10.5, labelColor)
 	}
 	scene.drawText(screen, "Click: migrate · Arrows: choose · Enter: queue", panelX+18, 636, 10.5, color.White)
 	scene.drawText(screen, "Tab/Shift+Tab: bands · Space: turn", panelX+18, 652, 10.5, color.White)
@@ -700,6 +715,36 @@ func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selec
 	}
 	scene.drawText(screen, spatialHint+" · G: genetics · Esc: menu", panelX+18, 668, 9.6, color.White)
 	scene.drawText(screen, "Quick-save Ctrl/Cmd+S · Manual F1–F3 · Shift+F1–F3 load", panelX+18, 684, 8.2, color.White)
+}
+
+func recentEventLines(events []gameapi.Event, limit, maxRunes int) []string {
+	if limit <= 0 {
+		return nil
+	}
+	lines := make([]string, 0, limit)
+	for index := len(events) - 1; index >= 0 && len(lines) < limit; index-- {
+		event := events[index]
+		summary := strings.TrimSpace(event.Summary)
+		if summary == "" {
+			summary = event.Kind.String()
+		}
+		lines = append(lines, truncateRunes(fmt.Sprintf("T%d · %s · %s", event.Turn, event.Kind, summary), maxRunes))
+	}
+	if len(lines) == 0 {
+		lines = append(lines, "No campaign events yet.")
+	}
+	return lines
+}
+
+func truncateRunes(value string, limit int) string {
+	runes := []rune(value)
+	if limit <= 0 || len(runes) <= limit {
+		return value
+	}
+	if limit == 1 {
+		return "…"
+	}
+	return string(runes[:limit-1]) + "…"
 }
 
 func wrapTextLines(value string, limit int) []string {
@@ -791,7 +836,7 @@ func (scene *MapScene) drawTileInspector(screen logicalCanvas, frame *gameapi.Fr
 
 	band := selectedBandInFrame(frame, selectedBand)
 	current := currentTileSummary(frame, band)
-	target := targetTileSummary(frame, band, preview)
+	target := targetTileSummary(frame, band, preview, scene.hover)
 	currentHeading, targetHeading := current.heading, target.heading
 	if current.showDetails {
 		currentHeading += " · " + current.status

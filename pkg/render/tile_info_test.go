@@ -53,7 +53,7 @@ func TestTileLiveabilityComparesCurrentAndArrowTarget(t *testing.T) {
 	frame := tileInfoFixture()
 	band := &frame.Bands[0]
 	current := currentTileSummary(frame, band)
-	target := targetTileSummary(frame, band, MigrationPreview{BandID: band.ID, TileID: 1, Visible: true})
+	target := targetTileSummary(frame, band, MigrationPreview{BandID: band.ID, TileID: 1, Visible: true}, TileHover{})
 
 	if !current.showDetails || current.foodStock != 100 || current.foodCap != 200 || current.seasonalRisk != 0.001 || current.chronicRisk != 0.002 {
 		t.Fatalf("current summary = %#v", current)
@@ -75,7 +75,7 @@ func TestTileLiveabilityComparesCurrentAndArrowTarget(t *testing.T) {
 func TestTileLiveabilityDoesNotRevealUnexploredTerrain(t *testing.T) {
 	frame := tileInfoFixture()
 	band := &frame.Bands[0]
-	summary := targetTileSummary(frame, band, MigrationPreview{BandID: band.ID, TileID: 2, Visible: true})
+	summary := targetTileSummary(frame, band, MigrationPreview{BandID: band.ID, TileID: 2, Visible: true}, TileHover{})
 	if summary.showDetails || summary.biome != "" || summary.foodStock != 0 || summary.waterStock != 0 {
 		t.Fatalf("unexplored summary leaked tile details: %#v", summary)
 	}
@@ -87,15 +87,38 @@ func TestTileLiveabilityDoesNotRevealUnexploredTerrain(t *testing.T) {
 func TestTileLiveabilityExplainsWaterAndFallsBackToQueuedTarget(t *testing.T) {
 	frame := tileInfoFixture()
 	band := &frame.Bands[0]
-	water := targetTileSummary(frame, band, MigrationPreview{BandID: band.ID, TileID: 3, Visible: true})
+	water := targetTileSummary(frame, band, MigrationPreview{BandID: band.ID, TileID: 3, Visible: true}, TileHover{})
 	if water.showDetails || !strings.Contains(water.status, "cannot occupy") {
 		t.Fatalf("water summary = %#v", water)
 	}
 
 	band.HasQueuedMigration, band.QueuedMigration = true, 1
-	queued := targetTileSummary(frame, band, MigrationPreview{})
+	queued := targetTileSummary(frame, band, MigrationPreview{}, TileHover{})
 	if !queued.showDetails || !strings.Contains(queued.status, "queued") {
 		t.Fatalf("queued summary = %#v", queued)
+	}
+}
+
+func TestTileHoverFillsTheInspectorWithoutReplacingExplicitMigrationIntent(t *testing.T) {
+	frame := tileInfoFixture()
+	band := &frame.Bands[0]
+	hover := TileHover{TileID: 1, Visible: true}
+
+	hovered := targetTileSummary(frame, band, MigrationPreview{}, hover)
+	if !hovered.showDetails || !strings.Contains(hovered.status, "pointer hover · reachable") {
+		t.Fatalf("hover summary = %#v", hovered)
+	}
+
+	band.HasQueuedMigration, band.QueuedMigration = true, 3
+	queued := targetTileSummary(frame, band, MigrationPreview{}, hover)
+	if !strings.Contains(queued.status, "cannot occupy") || strings.Contains(queued.status, "pointer hover") {
+		t.Fatalf("queued migration did not override hover: %#v", queued)
+	}
+
+	preview := MigrationPreview{BandID: band.ID, TileID: 1, Visible: true}
+	arrow := targetTileSummary(frame, band, preview, hover)
+	if !strings.Contains(arrow.status, "arrow cursor") {
+		t.Fatalf("arrow cursor did not override queued migration and hover: %#v", arrow)
 	}
 }
 
@@ -118,7 +141,7 @@ func TestTileLiveabilityCallsOutArchaicBandsWithoutLeakingThroughFog(t *testing.
 		t.Fatalf("current archaic line = %q", line)
 	}
 
-	target := targetTileSummary(frame, band, MigrationPreview{BandID: band.ID, TileID: 1, Visible: true})
+	target := targetTileSummary(frame, band, MigrationPreview{BandID: band.ID, TileID: 1, Visible: true}, TileHover{})
 	if target.archaicBandCount != 2 || target.archaicPopulation != 165 {
 		t.Fatalf("target archaic presence = %d bands/%d population", target.archaicBandCount, target.archaicPopulation)
 	}
@@ -136,7 +159,7 @@ func TestTileLiveabilityCallsOutArchaicBandsWithoutLeakingThroughFog(t *testing.
 		}
 	}
 
-	hidden := targetTileSummary(frame, band, MigrationPreview{BandID: band.ID, TileID: 2, Visible: true})
+	hidden := targetTileSummary(frame, band, MigrationPreview{BandID: band.ID, TileID: 2, Visible: true}, TileHover{})
 	if hidden.archaicBandCount != 0 || hidden.archaicPopulation != 0 {
 		t.Fatalf("unexplored tile leaked archaic presence: %#v", hidden)
 	}

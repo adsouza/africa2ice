@@ -109,6 +109,134 @@ func TestIndexedDBRepositoryBrowserContract(t *testing.T) {
 	}
 }
 
+func TestOldestSupportedSaveAdvancesAndResavesThroughIndexedDB(t *testing.T) {
+	repository := waitForWritableIndexedDBRepository(t)
+	defer func() { _ = repository.Close() }()
+	clearIndexedStores(t, repository)
+	defer clearIndexedStores(t, repository)
+	fixture := oldestSupportedSave(t)
+	if err := repository.BeginWrite(100, application.Manual2, fixture); err != nil {
+		t.Fatal(err)
+	}
+	if completion := waitForCompletion(t, repository, 100); completion.Err != nil {
+		t.Fatal(completion.Err)
+	}
+
+	service, err := application.NewGameServiceWithRepository(1, repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loadID, err := service.BeginLoad(int(application.Manual2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn := waitForServiceOperation(t, service, uint64(loadID)); turn != fixture.Turn {
+		t.Fatalf("loaded fixture turn = %d, want %d", turn, fixture.Turn)
+	}
+	advanced, err := service.EndTurn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if advanced.Turn != fixture.Turn+1 {
+		t.Fatalf("advanced turn = %d, want %d", advanced.Turn, fixture.Turn+1)
+	}
+	wantHash, err := service.StateHash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saveID, err := service.BeginSave(int(application.Manual2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForServiceOperation(t, service, uint64(saveID))
+
+	reloaded, err := application.NewGameServiceWithRepository(2, repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloadID, err := reloaded.BeginLoad(int(application.Manual2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn := waitForServiceOperation(t, reloaded, uint64(reloadID)); turn != fixture.Turn+1 {
+		t.Fatalf("reloaded turn = %d, want %d", turn, fixture.Turn+1)
+	}
+	gotHash, err := reloaded.StateHash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotHash != wantHash {
+		t.Fatalf("resaved fixture hash = %s, want %s", gotHash, wantHash)
+	}
+	if err := repository.BeginDelete(101, application.Manual2); err != nil {
+		t.Fatal(err)
+	}
+	if completion := waitForCompletion(t, repository, 101); completion.Err != nil {
+		t.Fatal(completion.Err)
+	}
+}
+
+func waitForWritableIndexedDBRepository(t *testing.T) *IndexedDBRepository {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		repository := NewIndexedDBRepository()
+		<-repository.ready
+		if repository.Writable() {
+			return repository
+		}
+		_ = repository.Close()
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("browser repository did not reacquire the writer lease")
+	return nil
+}
+
+func clearIndexedStores(t *testing.T, repository *IndexedDBRepository) {
+	t.Helper()
+	transaction := repository.db.Call("transaction", js.ValueOf([]any{"worlds", "metadata", "control"}), "readwrite")
+	for _, store := range []string{"worlds", "metadata", "control"} {
+		transaction.Call("objectStore", store).Call("clear")
+	}
+	result := make(chan bool, 1)
+	complete := js.FuncOf(func(this js.Value, args []js.Value) any { result <- true; return nil })
+	failure := js.FuncOf(func(this js.Value, args []js.Value) any { result <- false; return nil })
+	transaction.Set("oncomplete", complete)
+	transaction.Set("onabort", failure)
+	defer complete.Release()
+	defer failure.Release()
+	select {
+	case ok := <-result:
+		if !ok {
+			t.Fatal("clearing IndexedDB stores failed")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("clearing IndexedDB stores timed out")
+	}
+}
+
+func waitForServiceOperation(t *testing.T, service *application.GameService, operationID uint64) int {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, result := range service.PollStorage() {
+			if uint64(result.OperationID) != operationID {
+				continue
+			}
+			if result.Err != nil {
+				t.Fatal(result.Err)
+			}
+			if result.ReplacementFrame != nil {
+				return result.ReplacementFrame.Turn
+			}
+			return -1
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("service operation %d timed out", operationID)
+	return -1
+}
+
 func indexedStorePut(t *testing.T, repository *IndexedDBRepository, store, key, value string) {
 	t.Helper()
 	transaction := repository.db.Call("transaction", store, "readwrite")

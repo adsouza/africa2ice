@@ -335,6 +335,7 @@ internal/adapters/storage/ OUTER STORAGE ADAPTERS — implement application.Camp
   lease_unix.go          process-lifetime advisory save-directory lease                         (//go:build !js && !windows)
   lease_windows.go       process-lifetime LockFileEx wrapper                                    (//go:build windows)
   indexeddb_js.go        generation-addressed IndexedDB, Web Lock writer lease, and retention   (//go:build js)
+  testdata/              frozen compressed oldest-supported save used by both adapter lifecycles
 
 internal/adapters/logging/ OUTER OBSERVABILITY ADAPTER — stdlib + application/gameapi/ui only
   session.go             session identity, stable event/attribute names, lifecycle, panic reporting
@@ -384,6 +385,9 @@ internal/verification/   REFERENCE-CAMPAIGN DRIVER — imports application + gam
 
 internal/archtest/
   arch_test.go           parses imports in every .go file, including inactive build tags
+
+tools/generate_compatibility_fixture/
+  main.go                intentional regeneration command for the frozen schema-v1 save fixture
 ```
 
 **Package-organization decision.** `pkg/ui` owns typed scene-stack and action values, `pkg/app` owns
@@ -6970,11 +6974,18 @@ leave accepted stats unchanged; refreshing a frame follows the existing Apply/Di
 guards. Completed-turn outcomes appear only after the full turn, not during phase 3. Panel
 placement/sizing and responsive details remain presentation work except for the Field Notes contract
 below; the top bar, band header, band details, and tile-inspector grouping above are required.
+While the pointer is over an explored map tile, that tile fills the target side of the inspector.
+An active arrow-key migration cursor takes precedence, followed by an already queued migration, then
+pointer hover; merely moving the pointer therefore cannot conceal or alter explicit planning intent.
+Moving over fog or outside the map clears hover details and never reveals an unexplored tile.
 The selected-band details include all six heritable values with plain-language current-effect and
 local-pressure summaries. A co-located sapiens selection lists eligible archaic interbreeding
 partners, highlights one deterministic target, uses plain `J` to cycle that highlight and `I` to
 accept it, and makes clear that ordinary co-location exchanges no genes. Preserve passage status,
 migration ranking, established-region display, event feed, and save feedback alongside these stats.
+The Field Notes panel gives the event feed a persistent two-row newest-first view, including turn,
+typed event kind, and bounded summary. When Field Notes is hidden, its tab area retains the newest
+event so contextual history does not disappear with the explanatory prose.
 
 ### Campaign timeline rail
 

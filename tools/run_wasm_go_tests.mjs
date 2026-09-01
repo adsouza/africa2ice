@@ -15,7 +15,7 @@ const run = (command, args, options = {}) => {
   return (result.stdout ?? "").trim();
 };
 const suites = [
-  { packagePath: "./internal/adapters/storage", file: "storage.test.wasm", test: "TestIndexedDBRepositoryBrowserContract" },
+  { packagePath: "./internal/adapters/storage", file: "storage.test.wasm", test: "Test(IndexedDBRepositoryBrowserContract|OldestSupportedSaveAdvancesAndResavesThroughIndexedDB)" },
   { packagePath: "./pkg/ui", file: "ui.test.wasm", test: "TestIndexedDBUISettingsStore(BrowserContract|RejectsNilReceiver)" },
 ];
 

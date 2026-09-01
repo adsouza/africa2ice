@@ -24,6 +24,28 @@ func waitCompletion(t *testing.T, repository *FileRepository) application.Reposi
 	return application.RepositoryCompletion{}
 }
 
+func waitServiceOperation(t *testing.T, service *application.GameService, operationID uint64) int {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, result := range service.PollStorage() {
+			if uint64(result.OperationID) != operationID {
+				continue
+			}
+			if result.Err != nil {
+				t.Fatal(result.Err)
+			}
+			if result.ReplacementFrame != nil {
+				return result.ReplacementFrame.Turn
+			}
+			return -1
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("service operation %d timed out", operationID)
+	return -1
+}
+
 func TestFileRepositoryWriteReadListDelete(t *testing.T) {
 	directory := t.TempDir()
 	repository, err := NewFileRepository(directory)
@@ -66,6 +88,68 @@ func TestFileRepositoryWriteReadListDelete(t *testing.T) {
 	}
 	if readDeleted := waitCompletion(t, repository); !os.IsNotExist(readDeleted.Err) {
 		t.Fatalf("deleted read = %#v", readDeleted)
+	}
+}
+
+func TestOldestSupportedSaveAdvancesAndResavesThroughFileRepository(t *testing.T) {
+	repository, err := NewFileRepository(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = repository.Close() }()
+	fixture := oldestSupportedSave(t)
+	if err := repository.BeginWrite(1, application.Manual1, fixture); err != nil {
+		t.Fatal(err)
+	}
+	if completion := waitCompletion(t, repository); completion.Err != nil {
+		t.Fatal(completion.Err)
+	}
+
+	service, err := application.NewGameServiceWithRepository(1, repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loadID, err := service.BeginLoad(int(application.Manual1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn := waitServiceOperation(t, service, uint64(loadID)); turn != fixture.Turn {
+		t.Fatalf("loaded fixture turn = %d, want %d", turn, fixture.Turn)
+	}
+	advanced, err := service.EndTurn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if advanced.Turn != fixture.Turn+1 {
+		t.Fatalf("advanced turn = %d, want %d", advanced.Turn, fixture.Turn+1)
+	}
+	wantHash, err := service.StateHash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saveID, err := service.BeginSave(int(application.Manual1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitServiceOperation(t, service, uint64(saveID))
+
+	reloaded, err := application.NewGameServiceWithRepository(2, repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloadID, err := reloaded.BeginLoad(int(application.Manual1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn := waitServiceOperation(t, reloaded, uint64(reloadID)); turn != fixture.Turn+1 {
+		t.Fatalf("reloaded turn = %d, want %d", turn, fixture.Turn+1)
+	}
+	gotHash, err := reloaded.StateHash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotHash != wantHash {
+		t.Fatalf("resaved fixture hash = %s, want %s", gotHash, wantHash)
 	}
 }
 

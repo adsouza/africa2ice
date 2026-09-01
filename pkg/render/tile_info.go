@@ -72,15 +72,18 @@ func currentTileSummary(frame *gameapi.Frame, band *gameapi.Band) tileLiveabilit
 	return summary
 }
 
-func targetTileSummary(frame *gameapi.Frame, band *gameapi.Band, preview MigrationPreview) tileLiveabilitySummary {
+func targetTileSummary(frame *gameapi.Frame, band *gameapi.Band, preview MigrationPreview, hover TileHover) tileLiveabilitySummary {
 	if band == nil {
 		return tileLiveabilitySummary{heading: "TARGET", status: "No active band"}
 	}
 	tileID, status, available := gameapi.TileID(0), "Use arrow keys", false
-	if preview.Visible && preview.BandID == band.ID {
+	switch {
+	case preview.Visible && preview.BandID == band.ID:
 		tileID, status, available = preview.TileID, "arrow cursor", true
-	} else if band.HasQueuedMigration {
+	case band.HasQueuedMigration:
 		tileID, status, available = band.QueuedMigration, "queued", true
+	case hover.Visible:
+		tileID, status, available = hover.TileID, "pointer hover", true
 	}
 	if !available {
 		return tileLiveabilitySummary{heading: "TARGET", status: status}

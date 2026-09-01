@@ -822,6 +822,25 @@ func TestStartingNewCampaignReplacesTerminalPresentationState(t *testing.T) {
 	}
 }
 
+func TestExploredHoverTileRejectsFogAndCoordinatesOutsideTheMap(t *testing.T) {
+	frame := &gameapi.Frame{Tiles: make([]gameapi.Tile, 2)}
+	frame.Tiles[0] = gameapi.Tile{ID: 0, Explored: true}
+	frame.Tiles[1] = gameapi.Tile{ID: 1, Explored: false}
+
+	if tileID, ok := exploredHoverTile(frame, 24, 78, true); !ok || tileID != 0 {
+		t.Fatalf("explored hover = (%d, %t), want tile 0", tileID, ok)
+	}
+	if _, ok := exploredHoverTile(frame, 32, 78, true); ok {
+		t.Fatal("pointer hover exposed a fogged tile")
+	}
+	if _, ok := exploredHoverTile(frame, 19, 78, true); ok {
+		t.Fatal("pointer hover accepted a coordinate outside the map")
+	}
+	if _, ok := exploredHoverTile(frame, 24, 78, false); ok {
+		t.Fatal("pointer hover ignored the viewport boundary")
+	}
+}
+
 func migrationPreviewFrame() *gameapi.Frame {
 	return &gameapi.Frame{
 		CampaignResult: gameapi.Ongoing,

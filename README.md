@@ -31,7 +31,10 @@ Current controls:
   I otherwise explains why it is unavailable; when several are eligible, J cycles the highlighted target;
 - completing a technology triggers a breakthrough toast and updates Field Notes with context, its game effect, and a hint;
 - F or the top-bar Notes button toggles the Field Notes panel; the mouse wheel and Page Up/Page Down
-  scroll longer entries, whose historical context includes compact references;
+  scroll longer entries, whose historical context includes compact references; the two newest
+  campaign events remain visible in the panel (and the newest remains visible when it is hidden);
+- hovering an explored map tile shows its liveability in the target inspector; an arrow-key target
+  or queued migration takes precedence so pointer motion cannot conceal an explicit plan;
 - G cycles contextual Field Notes for the selected band's six heritable traits;
 - M toggles mute, while - and + adjust the synthesized-effect master volume in 10% steps;
 - Ctrl+S (Cmd+S on macOS) quick-saves to the desktop filesystem or browser IndexedDB.

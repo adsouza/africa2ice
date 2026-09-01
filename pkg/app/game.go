@@ -37,6 +37,8 @@ type Game struct {
 	migrationPreviewBand   gameapi.BandID
 	migrationPreviewTile   gameapi.TileID
 	hasMigrationPreview    bool
+	hoveredTile            gameapi.TileID
+	hasHoveredTile         bool
 	startupRestorePending  bool
 	startupRestoreListID   gameapi.StorageOpID
 	startupRestoreLoadID   gameapi.StorageOpID
@@ -205,9 +207,11 @@ func (g *Game) Update() error {
 		return nil
 	}
 	if g.scenes.Current() != ui.SceneGameplay {
+		g.hasHoveredTile = false
 		g.handleSceneInput()
 		return nil
 	}
+	g.syncTileHover()
 	if g.frame.CampaignResult != gameapi.Ongoing {
 		mouseStartsCampaign := false
 		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
@@ -417,6 +421,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.scene.SetMenuOverlay(g.menuOverlayForRender())
 	g.scene.SetFieldNoteScroll(g.fieldNoteScroll)
 	g.scene.SetInterbreedFocus(g.interbreedFocus)
+	g.scene.SetTileHover(render.TileHover{TileID: g.hoveredTile, Visible: g.hasHoveredTile})
 	displayFrame := g.displayFrame()
 	g.scene.Draw(screen, displayFrame, g.selectedBand, render.MigrationPreview{
 		BandID: g.migrationPreviewBand, TileID: g.migrationPreviewTile, Visible: g.hasMigrationPreview,
@@ -904,6 +909,28 @@ func (g *Game) handleMapClick() {
 		return
 	}
 	g.tryQueueMigration(band, tileID)
+}
+
+func (g *Game) syncTileHover() {
+	g.hasHoveredTile = false
+	x, y, inside := g.logicalCursorPosition()
+	tileID, ok := exploredHoverTile(g.frame, x, y, inside)
+	if !ok {
+		return
+	}
+	g.hoveredTile = tileID
+	g.hasHoveredTile = true
+}
+
+func exploredHoverTile(frame *gameapi.Frame, x, y int, inside bool) (gameapi.TileID, bool) {
+	if frame == nil || !inside {
+		return 0, false
+	}
+	tileID, ok := render.MapTileAt(x, y)
+	if !ok || int(tileID) >= len(frame.Tiles) || !frame.Tiles[tileID].Explored {
+		return 0, false
+	}
+	return tileID, true
 }
 
 func (g *Game) selectBandAtTile(tileID gameapi.TileID) bool {

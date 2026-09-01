@@ -139,6 +139,26 @@ func TestFieldNoteWrappingPreservesWordsAndBoundsLines(t *testing.T) {
 	}
 }
 
+func TestRecentEventLinesShowNewestFirstAndStayBounded(t *testing.T) {
+	events := []gameapi.Event{
+		{Turn: 4, Kind: gameapi.EventMigration, Summary: "The first event"},
+		{Turn: 7, Kind: gameapi.EventTechnology, Summary: "A deliberately long technology event summary"},
+		{Turn: 8, Kind: gameapi.EventAchievement, Summary: "The latest event"},
+	}
+	lines := recentEventLines(events, 2, 32)
+	if len(lines) != 2 || !strings.HasPrefix(lines[0], "T8 · Achievement") || !strings.HasPrefix(lines[1], "T7 · Technology") {
+		t.Fatalf("recent event lines = %#v", lines)
+	}
+	for _, line := range lines {
+		if len([]rune(line)) > 32 {
+			t.Fatalf("overlong recent event line %q", line)
+		}
+	}
+	if empty := recentEventLines(nil, 2, 52); !reflect.DeepEqual(empty, []string{"No campaign events yet."}) {
+		t.Fatalf("empty event feed = %#v", empty)
+	}
+}
+
 func TestMapSceneDrawsTerrainVisibilityBandsAndPassagesOffscreen(t *testing.T) {
 	frame := representativeRenderFrame()
 	wantFrame := cloneRenderFrame(frame)
@@ -320,7 +340,7 @@ func TestMapSceneDrawsQueuedAndPreviewMigrationsOffscreen(t *testing.T) {
 	queuedFrame.Bands[0].QueuedMigration = 3
 	queued := renderMapOffscreen(t, queuedFrame, 7, MigrationPreview{}, FieldNote{}, false, EndScene{}, "")
 	defer queued.Deallocate()
-	if summary := targetTileSummary(queuedFrame, &queuedFrame.Bands[0], MigrationPreview{}); !strings.Contains(summary.status, "queued") {
+	if summary := targetTileSummary(queuedFrame, &queuedFrame.Bands[0], MigrationPreview{}, TileHover{}); !strings.Contains(summary.status, "queued") {
 		t.Fatalf("queued target status = %q", summary.status)
 	}
 	if !queuedFrame.Bands[0].HasQueuedMigration || queuedFrame.Bands[0].QueuedMigration != 3 {
@@ -330,7 +350,7 @@ func TestMapSceneDrawsQueuedAndPreviewMigrationsOffscreen(t *testing.T) {
 	preview := MigrationPreview{BandID: 7, TileID: 4, Visible: true}
 	previewed := renderMapOffscreen(t, baseFrame, 7, preview, FieldNote{}, false, EndScene{}, "")
 	defer previewed.Deallocate()
-	if summary := targetTileSummary(baseFrame, &baseFrame.Bands[0], preview); !strings.Contains(summary.status, "arrow cursor") || !strings.Contains(summary.status, "reachable") {
+	if summary := targetTileSummary(baseFrame, &baseFrame.Bands[0], preview, TileHover{}); !strings.Contains(summary.status, "arrow cursor") || !strings.Contains(summary.status, "reachable") {
 		t.Fatalf("preview target status = %q", summary.status)
 	}
 	if baseFrame.Bands[0].HasQueuedMigration {
