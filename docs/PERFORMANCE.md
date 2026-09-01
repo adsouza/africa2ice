@@ -14,18 +14,20 @@ ceiling that has gone stale enough to stop constraining the build. The budget li
 increase from CI's trusted base revision. The original `5_500_000` ceiling remains only the bootstrap
 upper bound for a history with no prior budget.
 
-Measured 2026-09-01 from a full `./build_web.sh --release` build — stripped, trimmed, and
-`wasm-opt -O3` optimized:
+Measured 2026-09-01 by the `web-release` job on `NativeBenchmarkReference` from a full
+`./build_web.sh --release` build — stripped, trimmed, and `wasm-opt -O3` optimized:
 
 | measurement            |      bytes |
 |------------------------|-----------:|
-| raw                    | 17,877,252 |
-| `brotli -q 11` (gated) |  3,209,520 |
-| `gzip -9`              |  4,450,862 |
+| raw                    | 16,889,516 |
+| `brotli -q 11` (gated) |  3,059,373 |
+| `gzip -9`              |  4,226,859 |
+
+The recorded GitHub-hosted runner image was `20260823.283.1`.
 
 **`wasm-opt` is primarily a decompressed-size optimization.** Measuring the same build with and
-without the optimizer shows a mixed, roughly one-percent compressed effect rather than a
-second-order transfer-size lever:
+without the optimizer on the local cross-check machine shows a mixed, roughly one-percent
+compressed effect rather than a second-order transfer-size lever:
 
 |                         |        raw |     brotli |      gzip |
 |-------------------------|-----------:|-----------:|----------:|
@@ -50,7 +52,7 @@ with the runner's reported image version. If the ceiling below is wrong for the 
 that job fails and names the exact replacement value.
 
 `MaxCompressedWasmBytes` was ratcheted from Appendix C's pre-implementation `5_500_000` to
-`3_650_000` (measured Brotli plus the `500_000` headroom, rounded up to the next `50_000`). The
+`3_600_000` (measured Brotli plus the `500_000` headroom, rounded up to the next `50_000`). The
 original ceiling was set from a dependency skeleton rather than from this game and, as §10 puts it,
 was "generous enough that it would pass without ever constraining anything."
 

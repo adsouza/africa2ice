@@ -9689,8 +9689,8 @@ the run, not the test. Recording these as retunable balance defaults would invit
 the rule forbids, and it is the knife-edge outcome §13 exists to prevent.
 
 `MaxCompressedWasmBytes` carries the same direction rule for a different reason. It is the one
-Policy row that began from a *dependency-skeleton* measurement rather than this game. The first full
-build has now ratcheted it to `3_650_000` bytes, including the selected headroom and quantum. CI
+Policy row that began from a *dependency-skeleton* measurement rather than this game. The reviewed
+reference build has now ratcheted it to `3_600_000` bytes, including the selected headroom and quantum. CI
 compares the live ceiling and headroom with the trusted base revision, so the direction rule is
 mechanical rather than an appeal to reviewers. A ceiling that can only fall is a growth detector;
 one that may rise on demand is a number that records whatever the build happens to weigh.
@@ -9709,7 +9709,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | Go toolchain                              | `1.26.4`                                                       | Locked                                          | §10/§13 |
 | Binaryen toolchain                        | `version_132`; Linux x86-64 SHA-256 `195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572` | Locked | §10 |
 | Compressed-wasm measurement                | `brotli -q 11`; raw and `gzip -9` recorded alongside, not gated | Locked                                         | §10   |
-| `MaxCompressedWasmBytes`                   | `3_650_000` bytes                                              | Policy (tighten only: smaller ceiling)          | §10   |
+| `MaxCompressedWasmBytes`                   | `3_600_000` bytes                                              | Policy (tighten only: smaller ceiling)          | §10   |
 | `CompressedWasmHeadroom`                   | `500_000` bytes above the step-11 measured release build       | Policy (tighten only: smaller headroom)         | §10   |
 | Automated browser ready timeout            | `10` seconds on the optimized loopback-served bundle           | Policy                                          | §8/§10 |
 | Automated browser scripted checkpoint timeout | `5` seconds each                                             | Policy                                          | §8/§10 |
