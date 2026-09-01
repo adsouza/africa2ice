@@ -76,7 +76,7 @@ expects an HTTP origin.
 Web saves and preferences stay in that site's browser storage. Operational JSONL records appear in
 the browser developer console and are never uploaded by the game.
 
-Release builds require Binaryen's `wasm-opt` (CI pins `version_131`; any Binaryen recent enough to
+Release builds require Binaryen's `wasm-opt` (CI pins `version_132`; any Binaryen recent enough to
 support `--enable-bulk-memory-opt` works locally, and the build script says so by name if yours is
 not):
 

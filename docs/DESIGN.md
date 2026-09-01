@@ -7627,8 +7627,8 @@ state, operation FIFO ordering, and deletion interrupted between tombstone publi
 - `build_web.sh --dev` performs a fast `GOOS=js GOARCH=wasm go build` for local iteration.
   `build_web.sh --release` builds with `-trimpath -ldflags="-s -w"`, runs a pinned Binaryen
   `wasm-opt -O3` over the result, and fails if `wasm-opt` is missing. CI uses Binaryen
-  **`version_131`**; the Linux x86-64 archive must match SHA-256
-  **`b5bf1f0eaf17c63ee588ff7a5954dc8f6ce2c26989051c66f24dfe9ece3e46db`** before extraction.
+  **`version_132`**; the Linux x86-64 archive must match SHA-256
+  **`195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572`** before extraction.
   Both modes copy
   `$(go env GOROOT)/lib/wasm/wasm_exec.js` into `web/`; Go moved this file out of `misc/wasm`.
 - **The size gate measures Brotli, because that is what a browser negotiating with Pages receives.**
@@ -9636,7 +9636,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | `UISettings` `MasterVolume` range          | `[0, 1]`                                                       | Locked                                          | §8    |
 | `UISettings` `Muted` default               | `false`                                                        | Policy                                          | §8    |
 | Go toolchain                              | `1.26.4`                                                       | Locked                                          | §10/§13 |
-| Binaryen toolchain                        | `version_131`; Linux x86-64 SHA-256 `b5bf1f0eaf17c63ee588ff7a5954dc8f6ce2c26989051c66f24dfe9ece3e46db` | Locked | §10 |
+| Binaryen toolchain                        | `version_132`; Linux x86-64 SHA-256 `195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572` | Locked | §10 |
 | Compressed-wasm measurement                | `brotli -q 11`; raw and `gzip -9` recorded alongside, not gated | Locked                                         | §10   |
 | `MaxCompressedWasmBytes`                   | `3_650_000` bytes                                              | Policy (tighten only: smaller ceiling)          | §10   |
 | `CompressedWasmHeadroom`                   | `500_000` bytes above the step-11 measured release build       | Policy (tighten only: smaller headroom)         | §10   |

@@ -38,13 +38,13 @@ that redundancy and compresses this optimized build slightly worse, while gzip r
 benefit. Keep `wasm-opt` for decompressed size and startup; application/dependency reachability
 remains the route for transfer-size reductions.
 
-**Provenance.** Built with Homebrew Binaryen **132** on darwin/arm64. Appendix C Locks the toolchain
-at `version_131` and records a SHA-256 for the Linux x86-64 tarball only, so this is a close
-cross-check rather than the release artifact. The release measurement is the one the `web-release`
-job takes.
+**Provenance.** Built with Homebrew Binaryen **132** on darwin/arm64. Appendix C locks the toolchain
+at `version_132` and records a SHA-256 for the Linux x86-64 tarball. This local measurement uses the
+same release but remains a cross-check rather than the release artifact. The release measurement is
+the one the `web-release` job takes.
 
 The `web-release` job re-measures the real optimized build on `NativeBenchmarkReference`
-(GitHub-hosted `ubuntu-24.04`, `linux/amd64`) with pinned Binaryen `version_131`, uploads the result
+(GitHub-hosted `ubuntu-24.04`, `linux/amd64`) with pinned Binaryen `version_132`, uploads the result
 as a `wasm-size` artifact — on failure as well as success — and writes it to the job summary along
 with the runner's reported image version. If the ceiling below is wrong for the true release build,
 that job fails and names the exact replacement value.

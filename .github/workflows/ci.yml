@@ -73,10 +73,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y brotli
-          curl -L --fail --output binaryen.tar.gz https://github.com/WebAssembly/binaryen/releases/download/version_131/binaryen-version_131-x86_64-linux.tar.gz
-          echo "b5bf1f0eaf17c63ee588ff7a5954dc8f6ce2c26989051c66f24dfe9ece3e46db  binaryen.tar.gz" | sha256sum --check
+          curl -L --fail --output binaryen.tar.gz https://github.com/WebAssembly/binaryen/releases/download/version_132/binaryen-version_132-x86_64-linux.tar.gz
+          echo "195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572  binaryen.tar.gz" | sha256sum --check
           tar -xzf binaryen.tar.gz
-          echo "$PWD/binaryen-version_131/bin" >> "$GITHUB_PATH"
+          echo "$PWD/binaryen-version_132/bin" >> "$GITHUB_PATH"
       - run: ./build_web.sh --release
       - name: Install pinned browser test tooling
         run: npm --prefix tools/web-e2e ci
