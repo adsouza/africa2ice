@@ -439,17 +439,20 @@ func (g *Game) acceptCompletedTurn(frame *gameapi.Frame) {
 	discoveries := newTechnologyDiscoveries(previous, frame, g.selectedBand)
 	newestEvent, hasNewEvent := newestAddedEvent(previous, frame)
 	newRegion, hasNewRegion := newlyEstablishedRegion(previous, frame)
+	if completedTurnAddedAcuteEvent(previous, frame) {
+		g.sound.Play(gameaudio.SFXEventTrigger)
+	}
+	g.frame = frame
+	// A completed turn refreshes the attention order from its new actuals and
+	// projections. Start the next planning period at the band most in need.
+	g.selectedBand = 0
+	g.ensureSelection()
 	pulseNote, hasPulse := currentRegionalPulseFieldNote(frame, g.selectedBand)
 	previousPulseNote, hadPulse := currentRegionalPulseFieldNote(previous, g.selectedBand)
 	if !hasPulse || !hadPulse || pulseNote.Topic != previousPulseNote.Topic {
 		g.regionalPulseFocused = false
 	}
-	if completedTurnAddedAcuteEvent(previous, frame) {
-		g.sound.Play(gameaudio.SFXEventTrigger)
-	}
-	g.frame = frame
 	g.publishFrame()
-	g.ensureSelection()
 	g.syncAssignmentDraft(false)
 	if len(discoveries) == 0 {
 		switch {
@@ -826,11 +829,9 @@ func (g *Game) ensureSelection() {
 	if g.frame == nil {
 		return
 	}
-	for _, band := range g.frame.Bands {
-		if band.Species == gameapi.HomoSapiens && band.Population > 0 {
-			g.selectedBand = band.ID
-			return
-		}
+	bandIDs := render.SapiensBandIDsByAttention(g.frame.Bands)
+	if len(bandIDs) > 0 {
+		g.selectedBand = bandIDs[0]
 	}
 }
 
@@ -850,16 +851,13 @@ func (g *Game) selectSapiens(offset int) {
 		g.showNotice("Apply or discard workforce changes")
 		return
 	}
-	bandIDs := make([]gameapi.BandID, 0, len(g.frame.Bands))
+	bandIDs := render.SapiensBandIDsByAttention(g.frame.Bands)
 	selectedIndex := -1
-	for _, band := range g.frame.Bands {
-		if band.Species != gameapi.HomoSapiens || band.Population == 0 {
-			continue
+	for index, bandID := range bandIDs {
+		if bandID == g.selectedBand {
+			selectedIndex = index
+			break
 		}
-		if band.ID == g.selectedBand {
-			selectedIndex = len(bandIDs)
-		}
-		bandIDs = append(bandIDs, band.ID)
 	}
 	if len(bandIDs) == 0 {
 		g.selectedBand = 0
@@ -1553,6 +1551,7 @@ func (g *Game) pollStorage() {
 			g.breakthroughFrames = 0
 			g.regionalPulseFocused = false
 			g.clearMigrationPreview()
+			g.selectedBand = 0
 			g.ensureSelection()
 			g.hasAssignmentDraft = false
 			g.syncAssignmentDraft(true)

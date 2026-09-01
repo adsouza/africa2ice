@@ -386,6 +386,54 @@ func TestBandSelectionCyclesForwardAndBackwardWithWraparound(t *testing.T) {
 	}
 }
 
+func TestBandSelectionUsesAttentionOrder(t *testing.T) {
+	frame := migrationPreviewFrame()
+	frame.Bands[0].Health = 1
+	frame.Bands = append(frame.Bands,
+		gameapi.Band{ID: 9, Species: gameapi.HomoSapiens, Population: 90, Health: 0.7},
+		gameapi.Band{ID: 11, Species: gameapi.HomoSapiens, Population: 90, Health: 0.9, LastFoodReport: gameapi.FoodTurnReport{Turn: 2, RequiredFU: 90, DeficitFU: 1}},
+	)
+	game := New(&gameStub{frame: frame})
+
+	if game.selectedBand != 11 {
+		t.Fatalf("initial priority selection = %d, want suffering band 11", game.selectedBand)
+	}
+	game.selectNextSapiens()
+	if game.selectedBand != 9 {
+		t.Fatalf("next priority selection = %d, want danger band 9", game.selectedBand)
+	}
+	game.selectNextSapiens()
+	if game.selectedBand != 7 {
+		t.Fatalf("final priority selection = %d, want stable band 7", game.selectedBand)
+	}
+	game.selectNextSapiens()
+	if game.selectedBand != 11 {
+		t.Fatalf("wrapped priority selection = %d, want band 11", game.selectedBand)
+	}
+}
+
+func TestCompletedTurnSelectsHighestAttentionBand(t *testing.T) {
+	before := migrationPreviewFrame()
+	before.Bands[0].Health = 1
+	before.Bands = append(before.Bands, gameapi.Band{ID: 9, Species: gameapi.HomoSapiens, Population: 90, Health: 1})
+	game := New(&gameStub{frame: before})
+	if game.selectedBand != 7 {
+		t.Fatalf("initial selection = %d, want band 7", game.selectedBand)
+	}
+
+	after := cloneAppFrame(before)
+	after.Turn = 1
+	after.Bands[1].Health = 0.95
+	after.Bands[1].LastOutcomeReport = gameapi.OutcomeReport{
+		Turn: 1, StartingPopulation: 90, EndingPopulation: 90, StartingHealth: 1, EndingHealth: 0.95,
+	}
+	game.acceptCompletedTurn(after)
+
+	if game.selectedBand != 9 || game.assignmentDraftBand != 9 {
+		t.Fatalf("completed-turn priority selection/draft = %d/%d, want band 9", game.selectedBand, game.assignmentDraftBand)
+	}
+}
+
 func TestInitialSelectionSkipsArchaicAndExtinctBands(t *testing.T) {
 	frame := migrationPreviewFrame()
 	frame.Bands = []gameapi.Band{
@@ -610,6 +658,8 @@ func TestStartupResumeLoadsNewestQuickOrAutosave(t *testing.T) {
 	restored := migrationPreviewFrame()
 	restored.Turn = 3
 	restored.Bands[0].TileID = 2
+	restored.Bands[0].Health = 1
+	restored.Bands = append(restored.Bands, gameapi.Band{ID: 9, Species: gameapi.HomoSapiens, Population: 90, Health: 0.7})
 	stub := &gameStub{frame: initial}
 	game := New(stub)
 	game.fieldNote, _ = ui.TechnologyFieldNote(gameapi.Firecraft, 7, 1)
@@ -648,6 +698,9 @@ func TestStartupResumeLoadsNewestQuickOrAutosave(t *testing.T) {
 	}
 	if game.fieldNote.Topic != "WELCOME" || game.breakthroughFrames != 0 || game.regionalPulseFocused {
 		t.Fatalf("loaded game retained stale presentation: note %#v, breakthrough %d, pulse focus %t", game.fieldNote, game.breakthroughFrames, game.regionalPulseFocused)
+	}
+	if game.selectedBand != 9 || game.assignmentDraftBand != 9 {
+		t.Fatalf("loaded priority selection/draft = %d/%d, want band 9", game.selectedBand, game.assignmentDraftBand)
 	}
 }
 

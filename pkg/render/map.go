@@ -739,7 +739,7 @@ func (scene *MapScene) drawControlsReference(screen logicalCanvas, frame *gameap
 	const panelX = float32(hudPanelX)
 	vector.StrokeLine(screen, panelX+14, controlsDividerY, panelX+338, controlsDividerY, 1, color.RGBA{R: 58, G: 76, B: 82, A: 210}, false)
 	scene.drawText(screen, "Click: migrate · Arrows: choose · Enter: queue", panelX+18, controlsReferenceY, 10.5, color.White)
-	scene.drawText(screen, "Tab/Shift+Tab: bands · Space: turn", panelX+18, controlsReferenceY+controlsReferenceGap, 10.5, color.White)
+	scene.drawText(screen, "Tab/Shift+Tab: priority bands · Space: turn", panelX+18, controlsReferenceY+controlsReferenceGap, 10.5, color.White)
 	spatialHint := "N: split"
 	if actor := selectedBandInFrame(frame, selectedBand); actor != nil {
 		spatialHint = spatialControlHint(interbreedStatus(*actor))

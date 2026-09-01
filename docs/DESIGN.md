@@ -6839,12 +6839,19 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
 - **Selected-band inspector header:** the selected band's population and current health.
   Health is per band, not a global average. Both species are inspectable; archaic bands retain
   the “Computer controlled” label and expose no player commands.
-- **Band-selection keys:** `Tab` and `Shift+Tab` select the next and previous sapiens band,
-  respectively, wrapping at either end. Both clear any UI-local keyboard migration preview before
-  changing selection, and the persistent controls legend names both directions. The compact side
-  panel reserves five band rows and renders the five-row page containing the selected sapiens band;
+- **Band-selection keys and attention order:** living sapiens bands are ordered by the existing
+  presentation-only warning tiers — suffering before danger before stable — then by lower current
+  health, larger last-turn food-deficit fraction, higher projected seasonal-plus-chronic mortality
+  rate, larger proportional last-turn population loss, and finally ascending `BandID`. Accepted
+  planning actions are deliberately absent from this key, so applying an action does not make rows
+  move underneath the player. At the start of a new campaign, after a load, and after every completed
+  turn, the highest-priority living sapiens band becomes selected automatically. `Tab` and
+  `Shift+Tab` select the next and previous band in this attention order, respectively, wrapping at
+  either end. Both clear any UI-local keyboard migration preview before changing selection, and the
+  persistent controls legend names both directions. The compact side panel labels the order as
+  priority order, reserves five band rows, and renders the five-row page containing the selected band;
   selecting the first band on another page replaces the visible page immediately. Its header shows
-  the one-based visible range and total (for example, `Sapiens bands 6–10/17`), so later bands are
+  the one-based visible range and total (for example, `Priority 6–10/17`), so later bands are
   never silently hidden and the selected band is always visible. Archaic bands count in neither the
   range nor the total. This page is derived from the selected ID and accepted frame and adds no
   independent scroll position or saved UI state.
@@ -8460,8 +8467,11 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    targets remain hidden without changing the computer's full ranking; exploration never becomes an
    action or temporary LOS mode.
    Use mixed-species and multiple-band fixtures, no selection,
-   a completed turn, and a loaded frame. New-game bands show 100% health; split and loaded bands
-   show their inherited/restored condition, not a new-game reset. Health shows `100 * Health`
+   a completed turn, and a loaded frame. Assert the complete attention-order key, exclusion of
+   archaic and zero-population bands, stable ordering when an action is accepted, forward/reverse
+   traversal with wraparound, paging to the selected priority row, and automatic top-priority
+   selection after new game, load, and completed turn. New-game bands show 100% health; split and
+   loaded bands show their inherited/restored condition, not a new-game reset. Health shows `100 * Health`
    as a condition percentage,
    with the §7 endpoint/interior examples and no display-rounding writeback or population scaling.
    Current values must agree with that frame, applied mortality must not be replaced by an

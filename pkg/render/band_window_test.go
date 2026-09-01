@@ -15,10 +15,10 @@ func TestVisibleSapiensBandWindowPagesToTheSelection(t *testing.T) {
 		wantLabel   string
 		wantBandIDs []gameapi.BandID
 	}{
-		{name: "first page", selected: 1, wantFirst: 0, wantLabel: "Bands 1–5/12", wantBandIDs: []gameapi.BandID{1, 2, 3, 4, 5}},
-		{name: "second page", selected: 6, wantFirst: 5, wantLabel: "Bands 6–10/12", wantBandIDs: []gameapi.BandID{6, 7, 8, 9, 10}},
-		{name: "partial final page", selected: 12, wantFirst: 10, wantLabel: "Bands 11–12/12", wantBandIDs: []gameapi.BandID{11, 12}},
-		{name: "missing selection uses first page", selected: 999, wantFirst: 0, wantLabel: "Bands 1–5/12", wantBandIDs: []gameapi.BandID{1, 2, 3, 4, 5}},
+		{name: "first page", selected: 1, wantFirst: 0, wantLabel: "Priority 1–5/12", wantBandIDs: []gameapi.BandID{1, 2, 3, 4, 5}},
+		{name: "second page", selected: 6, wantFirst: 5, wantLabel: "Priority 6–10/12", wantBandIDs: []gameapi.BandID{6, 7, 8, 9, 10}},
+		{name: "partial final page", selected: 12, wantFirst: 10, wantLabel: "Priority 11–12/12", wantBandIDs: []gameapi.BandID{11, 12}},
+		{name: "missing selection uses first page", selected: 999, wantFirst: 0, wantLabel: "Priority 1–5/12", wantBandIDs: []gameapi.BandID{1, 2, 3, 4, 5}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -39,8 +39,31 @@ func TestVisibleSapiensBandWindowPagesToTheSelection(t *testing.T) {
 func TestVisibleSapiensBandWindowDoesNotPageSmallLists(t *testing.T) {
 	bands := interleavedBandWindowFixture(4)
 	window := visibleSapiensBandWindow(bands, 4)
-	if window.total != 4 || window.first != 0 || window.count != 4 || window.label() != "Bands: 4" {
+	if window.total != 4 || window.first != 0 || window.count != 4 || window.label() != "Priority bands: 4" {
 		t.Fatalf("window = %+v", window)
+	}
+}
+
+func TestSapiensBandIDsByAttentionSortsNeedierLivingBandsFirst(t *testing.T) {
+	bands := []gameapi.Band{
+		{ID: 10, Species: gameapi.HomoSapiens, Population: 100, Health: 1},
+		{ID: 99, Species: gameapi.ArchaicHominin, Population: 100, Health: 0.1},
+		{ID: 30, Species: gameapi.HomoSapiens, Population: 100, Health: 0.7},
+		{ID: 40, Species: gameapi.HomoSapiens, Population: 99, Health: 1, LastOutcomeReport: gameapi.OutcomeReport{Turn: 3, StartingPopulation: 100, EndingPopulation: 99, StartingHealth: 1, EndingHealth: 1}},
+		{ID: 20, Species: gameapi.HomoSapiens, Population: 100, Health: 0.9, SpatialActionUsed: true, LastFoodReport: gameapi.FoodTurnReport{Turn: 3, RequiredFU: 100, DeficitFU: 5}},
+		{ID: 25, Species: gameapi.HomoSapiens, Population: 100, Health: 1, SeasonalMortalityRate: 0.003, ChronicMortalityRate: 0.002},
+		{ID: 1, Species: gameapi.HomoSapiens, Population: 0, Health: 0},
+	}
+
+	got := SapiensBandIDsByAttention(bands)
+	want := []gameapi.BandID{20, 40, 30, 25, 10}
+	if len(got) != len(want) {
+		t.Fatalf("attention order = %v, want %v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("attention order = %v, want %v", got, want)
+		}
 	}
 }
 
@@ -101,7 +124,7 @@ func interleavedBandWindowFixture(sapiensCount int) []gameapi.Band {
 	for id := 1; id <= sapiensCount; id++ {
 		bands = append(bands,
 			gameapi.Band{ID: gameapi.BandID(10_000 + id), Species: gameapi.ArchaicHominin},
-			gameapi.Band{ID: gameapi.BandID(id), Species: gameapi.HomoSapiens},
+			gameapi.Band{ID: gameapi.BandID(id), Species: gameapi.HomoSapiens, Population: 1},
 		)
 	}
 	return bands
