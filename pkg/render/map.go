@@ -631,7 +631,7 @@ func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selec
 	if actor := selectedBandInFrame(frame, selectedBand); actor != nil {
 		spatialHint = spatialControlHint(interbreedStatus(*actor))
 	}
-	scene.drawText(screen, spatialHint+" · G: genetics · P: pause", panelX+18, 668, 9.6, color.White)
+	scene.drawText(screen, spatialHint+" · G: genetics · Esc: menu", panelX+18, 668, 9.6, color.White)
 	scene.drawText(screen, "Quick-save Ctrl/Cmd+S · Manual F1–F3 · Shift+F1–F3 load", panelX+18, 684, 8.2, color.White)
 }
 

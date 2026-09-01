@@ -1006,13 +1006,13 @@ func (g *Game) handleSceneInput() bool {
 			g.showNotice("Migration choice cleared")
 			return true
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyP) || inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
-			g.dispatchBatch([]ui.Action{ui.PushSceneAction(ui.ScenePause)})
+		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+			g.dispatchBatch([]ui.Action{ui.PushSceneAction(ui.SceneMenu)})
 			return true
 		}
 		return false
-	case ui.ScenePause:
-		if inpututil.IsKeyJustPressed(ebiten.KeyP) || inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+	case ui.SceneMenu:
+		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 			g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
 			return true
 		}
@@ -1434,11 +1434,11 @@ func (g *Game) advanceToasts() {
 
 func (g *Game) menuOverlayForRender() render.MenuOverlay {
 	switch g.scenes.Current() {
-	case ui.ScenePause:
+	case ui.SceneMenu:
 		return render.MenuOverlay{
-			Visible: true, Heading: "Paused", Selected: -1, LineCount: 5,
-			Lines: [8]string{"P / Esc  Resume", "S  Save slots", "L  Load or delete slots", "O  Settings", "F  Toggle Field Notes"},
-			Help:  "The simulation is frozen while this menu is open.",
+			Visible: true, Heading: "Game Menu", Selected: -1, LineCount: 5,
+			Lines: [8]string{"Esc  Back to game", "S  Save slots", "L  Load or delete slots", "O  Settings", "F  Toggle Field Notes"},
+			Help:  "Turns advance only when you explicitly end them.",
 		}
 	case ui.SceneStorage:
 		heading := "Load / Delete"

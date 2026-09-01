@@ -587,10 +587,23 @@ func TestClickingSelectedBandPreservesDirtyAssignmentDraft(t *testing.T) {
 	}
 }
 
+func TestGameMenuDescribesTurnBasedBehavior(t *testing.T) {
+	game := New(&gameStub{frame: migrationPreviewFrame()})
+	game.scenes.Push(ui.SceneMenu)
+
+	overlay := game.menuOverlayForRender()
+	if overlay.Heading != "Game Menu" || overlay.Lines[0] != "Esc  Back to game" {
+		t.Fatalf("game menu identity = %#v", overlay)
+	}
+	if strings.Contains(strings.ToLower(overlay.Help), "pause") || !strings.Contains(overlay.Help, "explicitly end") {
+		t.Fatalf("game menu turn guidance = %q", overlay.Help)
+	}
+}
+
 func TestStorageBrowserListsAllGroupsAndActivatesExplicitOperations(t *testing.T) {
 	stub := &gameStub{frame: migrationPreviewFrame()}
 	game := New(stub)
-	game.scenes.Push(ui.ScenePause)
+	game.scenes.Push(ui.SceneMenu)
 	game.openStorageBrowser(storageBrowserLoad)
 	if game.scenes.Current() != ui.SceneStorage || game.storageListID == 0 {
 		t.Fatalf("opened browser = scene %d list %d", game.scenes.Current(), game.storageListID)
@@ -624,7 +637,7 @@ func TestStorageBrowserListsAllGroupsAndActivatesExplicitOperations(t *testing.T
 func TestStorageBrowserRestrictsWritesButCanDeleteAnyOccupiedGroup(t *testing.T) {
 	stub := &gameStub{frame: migrationPreviewFrame()}
 	game := New(stub)
-	game.scenes.Push(ui.ScenePause)
+	game.scenes.Push(ui.SceneMenu)
 	game.openStorageBrowser(storageBrowserSave)
 	game.storageListID = 0
 	game.storageSlots = []gameapi.SlotMetadata{{SlotID: 99, SlotKind: gameapi.QuickSlot}}
@@ -642,7 +655,7 @@ func TestStorageBrowserRestrictsWritesButCanDeleteAnyOccupiedGroup(t *testing.T)
 
 func TestSettingsSceneReportsLivePreferences(t *testing.T) {
 	game := New(&gameStub{frame: migrationPreviewFrame()})
-	game.scenes.Push(ui.ScenePause)
+	game.scenes.Push(ui.SceneMenu)
 	game.scenes.Push(ui.SceneSettings)
 	game.settings.MasterVolume = 0.7
 	game.settings.Muted = true

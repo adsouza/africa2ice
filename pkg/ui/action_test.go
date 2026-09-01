@@ -20,7 +20,7 @@ func TestValidateActionBatchAcceptsEveryClosedClass(t *testing.T) {
 		{name: "load", actions: []Action{LoadAction(99)}, want: ActionClassStorage},
 		{name: "delete", actions: []Action{DeleteAction(101)}, want: ActionClassStorage},
 		{name: "list", actions: []Action{ListSlotsAction()}, want: ActionClassStorage},
-		{name: "navigation", actions: []Action{PushSceneAction(ScenePause)}, want: ActionClassNavigation},
+		{name: "navigation", actions: []Action{PushSceneAction(SceneMenu)}, want: ActionClassNavigation},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -37,10 +37,10 @@ func TestValidateActionBatchRejectsEveryForbiddenMixtureAndOrdering(t *testing.T
 		"empty":                    nil,
 		"invalid tag":              {{}},
 		"campaign plus storage":    {SimulationAction(gameapi.ResearchTech{BandID: 1}), SaveAction(1)},
-		"campaign plus navigation": {EndTurnAction(), PushSceneAction(ScenePause)},
+		"campaign plus navigation": {EndTurnAction(), PushSceneAction(SceneMenu)},
 		"storage plus navigation":  {LoadAction(1), PopSceneAction()},
 		"two storage":              {SaveAction(1), LoadAction(1)},
-		"two navigation":           {PushSceneAction(ScenePause), PopSceneAction()},
+		"two navigation":           {PushSceneAction(SceneMenu), PopSceneAction()},
 		"end turn not last":        {EndTurnAction(), SimulationAction(gameapi.ResearchTech{BandID: 1})},
 		"two end turns":            {EndTurnAction(), EndTurnAction()},
 		"bad storage slot":         {SaveAction(0)},

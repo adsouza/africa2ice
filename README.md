@@ -33,7 +33,7 @@ Current controls:
 - Ctrl+S (Cmd+S on macOS) quick-saves to the desktop filesystem or browser IndexedDB.
 - F1–F3 save Manual 1–3, and Shift+F1–F3 load them; loading is blocked until any dirty workforce
   draft is applied or discarded.
-- P or Esc opens Pause; S opens grouped Save/Delete slots, L opens grouped Load/Delete slots,
+- Esc opens the Game Menu; S opens grouped Save/Delete slots, L opens grouped Load/Delete slots,
   and O opens settings for sound and Field Notes.
   The browser lists Manual 1–3, Quick Save, and rolling Auto 1–3 together.
 

@@ -4,7 +4,7 @@ type SceneID uint8
 
 const (
 	SceneGameplay SceneID = iota
-	ScenePause
+	SceneMenu
 	SceneStorage
 	SceneSettings
 )
