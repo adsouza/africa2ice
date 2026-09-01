@@ -43,7 +43,16 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 if [ "$format" = zip ]; then
-	unzip -q "$archive" -d "$work_dir"
+	# The Linux publisher has Info-ZIP; the Windows builder that packs the
+	# archive has only 7-Zip, so accept either rather than requiring one.
+	if command -v unzip >/dev/null 2>&1; then
+		unzip -q "$archive" -d "$work_dir"
+	elif sevenzip=$(command -v 7z || command -v 7zz); then
+		"$sevenzip" x -bso0 -bsp0 -o"$work_dir" "$archive"
+	else
+		echo "check_release_archive: no unzip and no 7-Zip to extract $archive" >&2
+		exit 2
+	fi
 else
 	tar -xzf "$archive" -C "$work_dir"
 fi
