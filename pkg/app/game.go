@@ -328,16 +328,7 @@ func (g *Game) Update() error {
 	}
 	for index, key := range [...]ebiten.Key{ebiten.Key1, ebiten.Key2, ebiten.Key3, ebiten.Key4, ebiten.Key5, ebiten.Key6, ebiten.Key7, ebiten.Key8, ebiten.Key9} {
 		if inpututil.IsKeyJustPressed(key) {
-			band := g.selected()
-			technology := gameapi.Tech(index)
-			if note, ok := ui.TechnologyContextFieldNote(technology, band); ok {
-				g.setFieldNote(note)
-			}
-			if band == nil || band.Species != gameapi.HomoSapiens {
-				g.showNotice("Archaic research is computer controlled; its DAG is read only.")
-				continue
-			}
-			g.apply(gameapi.ResearchTech{BandID: g.selectedBand, Tech: technology})
+			g.chooseResearchTechnology(gameapi.Tech(index))
 		}
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) && g.frame.CampaignResult == gameapi.Ongoing {
@@ -955,19 +946,38 @@ func (g *Game) selectBandAtTile(tileID gameapi.TileID) bool {
 	if len(bandIDs) == 0 {
 		return false
 	}
-	if g.assignmentDraftDirty() {
-		g.showNotice("Apply or discard workforce changes")
-		return true
-	}
 	next := 0
 	if selectedIndex >= 0 {
 		next = (selectedIndex + 1) % len(bandIDs)
+	}
+	if bandIDs[next] == g.selectedBand {
+		return true
+	}
+	if g.assignmentDraftDirty() {
+		g.showNotice("Apply or discard workforce changes")
+		return true
 	}
 	g.selectedBand = bandIDs[next]
 	g.clearMigrationPreview()
 	g.syncAssignmentDraft(true)
 	g.refreshBandFieldNote()
 	return true
+}
+
+func (g *Game) chooseResearchTechnology(technology gameapi.Tech) {
+	band := g.selected()
+	if band == nil {
+		g.showNotice("Select a Homo sapiens band to choose research.")
+		return
+	}
+	if note, ok := ui.TechnologyContextFieldNote(technology, band); ok {
+		g.setFieldNote(note)
+	}
+	if band.Species != gameapi.HomoSapiens {
+		g.showNotice("Archaic research is computer controlled; its DAG is read only.")
+		return
+	}
+	g.apply(gameapi.ResearchTech{BandID: band.ID, Tech: technology})
 }
 
 func (g *Game) handleDirectionalMigration(dx, dy int) {
@@ -1280,8 +1290,9 @@ func (g *Game) handleSceneInput() bool {
 				switch render.MenuOverlayRowAt(x, y, 3) {
 				case 0:
 					settings := g.settings
-					settings.MasterVolume = min(1, max(0, float64(x-650)/220))
-					if settings.MasterVolume != g.settings.MasterVolume {
+					volume, hit := render.SettingsVolumeAt(x, y)
+					if hit && volume != g.settings.MasterVolume {
+						settings.MasterVolume = volume
 						g.updateUISettings(settings)
 					}
 				case 1:

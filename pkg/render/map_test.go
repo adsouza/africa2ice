@@ -124,6 +124,43 @@ func TestOverlayAndFieldNotesHitTargets(t *testing.T) {
 	if !FieldNotesPanelContains(1000, 500) || FieldNotesPanelContains(1000, 620) {
 		t.Fatal("Field Notes scroll hit target is inconsistent")
 	}
+	if got, ok := SettingsVolumeAt(settingsSliderLeft, menuOverlayY+menuRowTextOffsetY); !ok || got != 0 {
+		t.Fatalf("settings slider left = (%v, %t), want (0, true)", got, ok)
+	}
+	if got, ok := SettingsVolumeAt(settingsSliderRight, menuOverlayY+menuRowTextOffsetY); !ok || got != 1 {
+		t.Fatalf("settings slider right = (%v, %t), want (1, true)", got, ok)
+	}
+	if _, ok := SettingsVolumeAt(settingsSliderLeft, menuOverlayY+menuRowTextOffsetY+menuRowHeight); ok {
+		t.Fatal("settings volume accepted a point in the mute row")
+	}
+}
+
+func TestCampaignEraLabelsCoverClosedCatalog(t *testing.T) {
+	wantRanges := [gameapi.CampaignEraCount]string{"80,000–50,000 BP", "50,000–35,000 BP", "35,000–25,000 BP", "25,000–20,000 BP"}
+	for era := gameapi.CampaignEra(0); era < gameapi.CampaignEraCount; era++ {
+		label := campaignEraLabel(era)
+		if !strings.Contains(label, era.String()) || !strings.Contains(label, wantRanges[era]) {
+			t.Fatalf("campaign era %d label = %q", era, label)
+		}
+	}
+	if got := campaignEraLabel(gameapi.CampaignEraCount); got != gameapi.CampaignEraCount.String() {
+		t.Fatalf("out-of-range campaign era label = %q", got)
+	}
+}
+
+func TestResearchLegendNamesEveryNodeColorState(t *testing.T) {
+	want := []string{"current", "learned", "available", "locked"}
+	seenColors := make(map[color.RGBA]struct{}, len(researchLegendEntries))
+	for index, entry := range researchLegendEntries {
+		if entry.label != want[index] {
+			t.Fatalf("research legend entry %d = %q, want %q", index, entry.label, want[index])
+		}
+		border, _, _ := researchNodeColors(entry.option)
+		seenColors[border] = struct{}{}
+	}
+	if len(seenColors) != len(researchLegendEntries) {
+		t.Fatalf("research legend has %d distinct colors for %d states", len(seenColors), len(researchLegendEntries))
+	}
 }
 
 func TestFieldNoteWrappingPreservesWordsAndBoundsLines(t *testing.T) {

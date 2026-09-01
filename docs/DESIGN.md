@@ -3413,7 +3413,9 @@ actually loading/replacing the world, leaving gameplay for the title, or ending 
 while the draft is dirty. Every mouse, keyboard, and menu entry point uses the same UI guard before
 changing selection/scenes or emitting a protected action. The selected band, draft, world, and
 storage queue remain unchanged by the blocked attempt. A persistent inline message says “Apply or
-discard workforce changes”; it is not a modal or a two-second toast.
+discard workforce changes”; it is not a modal or a two-second toast. Clicking the sole selected band
+again is a no-op rather than a selection change, so it preserves the dirty draft without showing the
+guard message.
 
 Apply uses the exact-vector validation above and stays disabled for an invalid total. Discard is
 available for any dirty draft when the editor is not awaiting an Apply result or load: it restores
@@ -6700,7 +6702,9 @@ PointerLogical  = FitPresentation(RenderWidthPx, RenderHeightPx)^-1(PointerRende
 
 Widgets, HUD exclusion zones, and `MapTileAt` consume `PointerLogical`. No handler may compare render
 pixels with a logical rectangle. The same logical point must hit the same control and map tile at
-1×, fractional scale, and 2×.
+1×, fractional scale, and 2×. Drawing and hit testing consume one renderer-owned set of geometry
+constants; application code uses renderer projections such as the settings-slider value rather than
+retyping draw coordinates across the package boundary.
 
 A viewport change reallocates the physical presentation target once and, when its final
 presentation scale changes, replaces the scale-specific terrain target. `logicalCanvas` multiplies
@@ -6914,7 +6918,10 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   sapiens band, color available targets normally, the current target gold, acquired technologies
   green, and prerequisite-locked technologies grey. These states come from the frame's projected
   `ResearchOptions`, not a prerequisite table duplicated in presentation code. The legend remains
-  visible even when Field Notes are hidden, so pressing `1`–`9` is never an unexplained action.
+  visible even when Field Notes are hidden, and a compact text key explicitly maps gold/current,
+  green/learned, white/available, and grey/locked. Pressing `1`–`9` with no selected band asks the
+  player to select a sapiens band; only an actually selected archaic band receives the read-only
+  computer-research explanation.
 - **Tile inspector and migration comparison:** one persistent column describes the selected band's
   current tile and a second describes the UI-local arrow-key destination cursor, or the accepted
   queued destination when no cursor is active. Each known, habitable land column shows biome,
@@ -9350,9 +9357,13 @@ they do not add time-varying species extinction, separately depleted prey, or a 
    pipeline; the gate consumes its completed-turn food and health reports rather than restating
    resource, demographic, or hazard formulas. Any invalid or non-finite report denominator/value is
    a gate error, never a comparable `NaN`.
-   Recompute the derived `MinBiomeDwellTurns` from any accepted fauna-regeneration change, confirm it
-   still covers the fauna 90%-gap-closure time, and verify that no oscillating tile ends a half-cycle further from its cap than a
-   steady tile of the same biome. Because §13's three reference-run margins are Policy
+   Recompute the derived `MinBiomeDwellTurns` from any accepted fauna-regeneration change and confirm it
+   still covers the independently measured fauna 90%-gap-closure time. At cumulative 10,500-year
+   checkpoints across the full campaign plus turn 400, compare biome-changing tiles that have had at
+   least that measured recovery interval since their latest published biome change. At every checkpoint,
+   the worst oscillating fauna gap must not exceed the worst matched steady-biome counterfactual gap;
+   the report records both the total and compared biome-changing tile counts, which must be equal by
+   the final checkpoint. Because §13's three reference-run margins are Policy
    (tighten-only), any failure here must be answered in the moisture model — amplitude, weights,
    dwell floor, or churn cap — or in these indices, never by relaxing a margin.
 5. Implement the accepted tables in the owning resource, foraging, hunting, megafauna, and fauna

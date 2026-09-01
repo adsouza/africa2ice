@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "seed": 0,
   "samples": [
     {
@@ -143,9 +143,18 @@
     "mean_water_coverage": 0.9103710897237682
   },
   "recovery": {
-    "half_cycle_end_turn": 35,
-    "steady_fauna_gap": 0.11165909090909099,
-    "maximum_oscillating_gap": 0.11165909090909099,
+    "comparison_turns": [
+      35,
+      70,
+      110,
+      180,
+      275,
+      400
+    ],
+    "biome_changing_tiles": 948,
+    "compared_biome_changing_tiles": 948,
+    "steady_fauna_gap": 0.733125,
+    "maximum_oscillating_gap": 0.733125,
     "oscillating_within_steady": true
   }
 }

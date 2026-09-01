@@ -692,6 +692,7 @@ func TestClickingSelectedBandPreservesDirtyAssignmentDraft(t *testing.T) {
 	stub := &gameStub{frame: migrationPreviewFrame()}
 	game := New(stub)
 	game.editAssignmentDraft(100)
+	game.notice = "existing notice"
 	want := game.assignmentDraft
 	if !game.assignmentDraftDirty() {
 		t.Fatal("test setup did not create a dirty assignment draft")
@@ -701,6 +702,23 @@ func TestClickingSelectedBandPreservesDirtyAssignmentDraft(t *testing.T) {
 	}
 	if !game.assignmentDraftDirty() || game.assignmentDraft != want {
 		t.Fatalf("same-band click changed draft: got %#v want %#v", game.assignmentDraft, want)
+	}
+	if game.notice != "existing notice" {
+		t.Fatalf("same-band click replaced notice with %q", game.notice)
+	}
+}
+
+func TestResearchKeyWithoutSelectionRequestsSapiensBand(t *testing.T) {
+	stub := &gameStub{frame: &gameapi.Frame{CampaignResult: gameapi.Ongoing}}
+	game := New(stub)
+
+	game.chooseResearchTechnology(gameapi.Firecraft)
+
+	if stub.appliedCommand != nil {
+		t.Fatalf("no-selection research applied %T", stub.appliedCommand)
+	}
+	if game.notice != "Select a Homo sapiens band to choose research." {
+		t.Fatalf("no-selection research notice = %q", game.notice)
 	}
 }
 

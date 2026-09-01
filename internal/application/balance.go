@@ -10,7 +10,10 @@ import (
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 )
 
-const moistureBalanceReportVersion = 1
+const (
+	moistureBalanceReportVersion = 2
+	precessionHalfCycleYears     = 10_500
+)
 
 type MoistureBalanceReport struct {
 	Version                 int                     `json:"version"`
@@ -61,7 +64,23 @@ func ValidateMoistureBalanceReport(report MoistureBalanceReport) error {
 		return fmt.Errorf("desert residency is not pressured in both food and water")
 	}
 	if !report.Recovery.OscillatingWithinSteady {
-		return fmt.Errorf("an oscillating tile recovers farther from fauna cap than its steady-biome counterfactual")
+		return fmt.Errorf("an oscillating fauna-gap envelope exceeds its steady-biome counterfactual")
+	}
+	previousComparison := -1
+	for _, turn := range report.Recovery.ComparisonTurns {
+		if turn <= previousComparison || turn < 0 || turn > domain.MaxCampaignTurn {
+			return fmt.Errorf("fauna recovery comparison turns are not strictly increasing and in range")
+		}
+		previousComparison = turn
+	}
+	if !finite(report.Recovery.SteadyFaunaGap) || !finite(report.Recovery.MaximumOscillatingGap) ||
+		report.Recovery.SteadyFaunaGap < 0 || report.Recovery.SteadyFaunaGap > 1 ||
+		report.Recovery.MaximumOscillatingGap < 0 || report.Recovery.MaximumOscillatingGap > 1 {
+		return fmt.Errorf("fauna recovery contains an invalid gap")
+	}
+	if len(report.Recovery.ComparisonTurns) == 0 || report.Recovery.ComparisonTurns[len(report.Recovery.ComparisonTurns)-1] != domain.MaxCampaignTurn ||
+		report.Recovery.BiomeChangingTiles <= 0 || report.Recovery.ComparedBiomeChanging != report.Recovery.BiomeChangingTiles {
+		return fmt.Errorf("fauna recovery does not cover every campaign biome-changing tile")
 	}
 	return nil
 }
@@ -95,7 +114,9 @@ type DesertResidencyReport struct {
 }
 
 type RecoveryReport struct {
-	HalfCycleEndTurn        int     `json:"half_cycle_end_turn"`
+	ComparisonTurns         []int   `json:"comparison_turns"`
+	BiomeChangingTiles      int     `json:"biome_changing_tiles"`
+	ComparedBiomeChanging   int     `json:"compared_biome_changing_tiles"`
 	SteadyFaunaGap          float64 `json:"steady_fauna_gap"`
 	MaximumOscillatingGap   float64 `json:"maximum_oscillating_gap"`
 	OscillatingWithinSteady bool    `json:"oscillating_within_steady"`
@@ -367,51 +388,114 @@ func coverageAfterDeficit(total, deficit float64) (float64, error) {
 }
 
 func recoveryReport(grid *domain.Grid, seed uint64) (RecoveryReport, error) {
-	endTurn := 0
+	history := make([]*domain.Habitat, domain.MaxCampaignTurn+1)
 	for turn := 0; turn <= domain.MaxCampaignTurn; turn++ {
-		date, _ := domain.CampaignDate(turn)
-		if 80_000-date.YearBP >= 10_500 {
-			endTurn = turn
-			break
-		}
-	}
-	history := make([]*domain.Habitat, endTurn+1)
-	for turn := 0; turn <= endTurn; turn++ {
 		habitat, _, err := domain.BuildHabitat(grid, seed, turn)
 		if err != nil {
 			return RecoveryReport{}, err
 		}
 		history[turn] = habitat
 	}
-	actualStocks := [domain.TileCount]float64{}
-	steadyStocks := [domain.TileCount]float64{}
-	maximumActualGap := 0.0
-	maximumSteadyGap := 0.0
-	withinSteady := true
-	for turn := 0; turn <= endTurn; turn++ {
-		season, _ := domain.SeasonForTurn(turn)
-		for id := range domain.TileCount {
-			geography, _ := grid.Tile(domain.TileID(id))
-			if !geography.Land || history[turn][id].BaselineK <= 0 {
-				continue
-			}
-			actualCap := domain.ResourceCaps(history[turn][id].Biome, season, 0, history[turn][id].BaselineK).Fauna
-			steadyBiome := history[endTurn][id].Biome
-			steadyCap := domain.ResourceCaps(steadyBiome, season, 0, history[turn][id].BaselineK).Fauna
-			actualStock := min(actualStocks[id], actualCap)
-			steadyStock := min(steadyStocks[id], steadyCap)
-			actualStocks[id] = actualStock + domain.FaunaRegenerationRate*(actualCap-actualStock)
-			steadyStocks[id] = steadyStock + domain.FaunaRegenerationRate*(steadyCap-steadyStock)
-			if turn == endTurn && actualCap > 0 && steadyCap > 0 {
-				actualGap := (actualCap - actualStocks[id]) / actualCap
-				steadyGap := (steadyCap - steadyStocks[id]) / steadyCap
-				maximumActualGap = max(maximumActualGap, actualGap)
-				maximumSteadyGap = max(maximumSteadyGap, steadyGap)
-				if actualGap > steadyGap+1e-12 {
-					withinSteady = false
-				}
+	comparisonTurns, err := recoveryComparisonTurns()
+	if err != nil {
+		return RecoveryReport{}, err
+	}
+	active := [domain.TileCount]bool{}
+	changingTiles := 0
+	for id := range domain.TileCount {
+		geography, _ := grid.Tile(domain.TileID(id))
+		if !geography.Land || history[0][id].BaselineK <= 0 {
+			continue
+		}
+		active[id] = true
+		for turn := 1; turn <= domain.MaxCampaignTurn; turn++ {
+			if history[turn][id].Biome != history[turn-1][id].Biome {
+				changingTiles++
+				break
 			}
 		}
 	}
-	return RecoveryReport{HalfCycleEndTurn: endTurn, SteadyFaunaGap: maximumSteadyGap, MaximumOscillatingGap: maximumActualGap, OscillatingWithinSteady: withinSteady}, nil
+	compared := [domain.TileCount]bool{}
+	maximumActualGap := 0.0
+	maximumSteadyGap := 0.0
+	withinSteady := true
+	recoveryTurns := faunaNinetyPercentRecoveryTurns(domain.FaunaRegenerationRate)
+	for _, endTurn := range comparisonTurns {
+		actualStocks := [domain.TileCount]float64{}
+		steadyStocks := [domain.TileCount]float64{}
+		checkpointEligible := [domain.TileCount]bool{}
+		for id := range domain.TileCount {
+			if !active[id] {
+				continue
+			}
+			latestChange := -1
+			for turn := 1; turn <= endTurn; turn++ {
+				if history[turn][id].Biome != history[turn-1][id].Biome {
+					latestChange = turn
+				}
+			}
+			checkpointEligible[id] = latestChange >= 0 && endTurn-latestChange >= recoveryTurns
+		}
+		checkpointActualGap := 0.0
+		checkpointSteadyGap := 0.0
+		for turn := 0; turn <= endTurn; turn++ {
+			season, seasonErr := domain.SeasonForTurn(turn)
+			if seasonErr != nil {
+				return RecoveryReport{}, seasonErr
+			}
+			for id := range domain.TileCount {
+				if !active[id] {
+					continue
+				}
+				actualCap := domain.ResourceCaps(history[turn][id].Biome, season, 0, history[turn][id].BaselineK).Fauna
+				steadyBiome := history[endTurn][id].Biome
+				steadyCap := domain.ResourceCaps(steadyBiome, season, 0, history[turn][id].BaselineK).Fauna
+				actualStock := min(actualStocks[id], actualCap)
+				steadyStock := min(steadyStocks[id], steadyCap)
+				actualStocks[id] = actualStock + domain.FaunaRegenerationRate*(actualCap-actualStock)
+				steadyStocks[id] = steadyStock + domain.FaunaRegenerationRate*(steadyCap-steadyStock)
+				if turn == endTurn && checkpointEligible[id] && actualCap > 0 && steadyCap > 0 {
+					compared[id] = true
+					actualGap := (actualCap - actualStocks[id]) / actualCap
+					steadyGap := (steadyCap - steadyStocks[id]) / steadyCap
+					checkpointActualGap = max(checkpointActualGap, actualGap)
+					checkpointSteadyGap = max(checkpointSteadyGap, steadyGap)
+					maximumActualGap = max(maximumActualGap, actualGap)
+					maximumSteadyGap = max(maximumSteadyGap, steadyGap)
+				}
+			}
+		}
+		if checkpointActualGap > checkpointSteadyGap+1e-12 {
+			withinSteady = false
+		}
+	}
+	comparedChanging := 0
+	for id := range domain.TileCount {
+		if compared[id] {
+			comparedChanging++
+		}
+	}
+	return RecoveryReport{
+		ComparisonTurns: comparisonTurns, BiomeChangingTiles: changingTiles, ComparedBiomeChanging: comparedChanging,
+		SteadyFaunaGap: maximumSteadyGap, MaximumOscillatingGap: maximumActualGap, OscillatingWithinSteady: withinSteady,
+	}, nil
+}
+
+func recoveryComparisonTurns() ([]int, error) {
+	turns := make([]int, 0, 6)
+	nextElapsedYears := precessionHalfCycleYears
+	for turn := 0; turn <= domain.MaxCampaignTurn && nextElapsedYears < 60_000; turn++ {
+		date, err := domain.CampaignDate(turn)
+		if err != nil {
+			return nil, err
+		}
+		if 80_000-date.YearBP >= nextElapsedYears {
+			turns = append(turns, turn)
+			nextElapsedYears += precessionHalfCycleYears
+		}
+	}
+	if len(turns) == 0 || turns[len(turns)-1] != domain.MaxCampaignTurn {
+		turns = append(turns, domain.MaxCampaignTurn)
+	}
+	return turns, nil
 }

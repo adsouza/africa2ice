@@ -23,6 +23,18 @@ func TestMoistureBalanceGate(t *testing.T) {
 	if report.DesertResidency.TileID != 700 || report.DesertResidency.StartTurn != 0 || report.DesertResidency.EndTurn != 35 {
 		t.Fatalf("best desert window = tile %d turns %d-%d", report.DesertResidency.TileID, report.DesertResidency.StartTurn, report.DesertResidency.EndTurn)
 	}
+	wantComparisonTurns := []int{35, 70, 110, 180, 275, 400}
+	if len(report.Recovery.ComparisonTurns) != len(wantComparisonTurns) {
+		t.Fatalf("recovery comparison turns = %v", report.Recovery.ComparisonTurns)
+	}
+	for index, want := range wantComparisonTurns {
+		if report.Recovery.ComparisonTurns[index] != want {
+			t.Fatalf("recovery comparison turns = %v, want %v", report.Recovery.ComparisonTurns, wantComparisonTurns)
+		}
+	}
+	if report.Recovery.BiomeChangingTiles != 948 || report.Recovery.ComparedBiomeChanging != 948 {
+		t.Fatalf("recovery coverage = %d/%d biome-changing tiles, want 948/948", report.Recovery.ComparedBiomeChanging, report.Recovery.BiomeChangingTiles)
+	}
 }
 
 func TestDesertResidencyConsidersLaterQualifyingWindows(t *testing.T) {
@@ -98,6 +110,19 @@ func TestFaunaRecoveryMeasurementCanInvalidateDwellGate(t *testing.T) {
 	}
 }
 
+func TestMoistureBalanceRejectsIncompleteRecoveryCoverage(t *testing.T) {
+	report := validMoistureValidationReport()
+	report.Recovery.ComparedBiomeChanging--
+	if err := ValidateMoistureBalanceReport(report); err == nil {
+		t.Fatal("moisture gate accepted incomplete biome-changing tile coverage")
+	}
+	report = validMoistureValidationReport()
+	report.Recovery.ComparisonTurns = []int{35, 35, domain.MaxCampaignTurn}
+	if err := ValidateMoistureBalanceReport(report); err == nil {
+		t.Fatal("moisture gate accepted duplicate recovery comparison turns")
+	}
+}
+
 func validMoistureValidationReport() MoistureBalanceReport {
 	sample := MoistureBalanceSample{LandTiles: 1, FloraCapacity: 1, FaunaCapacity: 1, WaterCapacity: 1}
 	sample.BiomeTiles[0] = 1
@@ -109,6 +134,9 @@ func validMoistureValidationReport() MoistureBalanceReport {
 			Found: true, CalendarYears: 10_500, Survived: true, EndingPopulation: 1, EndingHealth: 0.5,
 			MinimumFoodCoverage: 0.5, MeanFoodCoverage: 0.75, MinimumWaterCoverage: 0.5, MeanWaterCoverage: 0.75,
 		},
-		Recovery: RecoveryReport{OscillatingWithinSteady: true},
+		Recovery: RecoveryReport{
+			ComparisonTurns: []int{domain.MaxCampaignTurn}, BiomeChangingTiles: 1, ComparedBiomeChanging: 1,
+			OscillatingWithinSteady: true,
+		},
 	}
 }

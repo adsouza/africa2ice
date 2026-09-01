@@ -23,6 +23,14 @@ const (
 	mapPixelHeight         = TerrainGridHeight * mapTileSize
 	mapLegendOriginY       = 48
 	mapLegendHeight        = 25
+	hudPanelX              = 908
+	hudPanelWidth          = 352
+	fieldNotesPanelX       = hudPanelX + 14
+	fieldNotesPanelWidth   = 324
+	fieldNotesToggleX      = hudPanelX + 273
+	fieldNotesToggleY      = 78
+	fieldNotesToggleWidth  = 65
+	fieldNotesToggleHeight = 24
 	bandListOriginY        = 230
 	bandRowHeight          = 16
 	bandOutcomeOriginY     = 310
@@ -43,6 +51,16 @@ const (
 	controlsReferenceGap   = 13
 	bottomInspectorOriginY = 590
 	bottomInspectorHeight  = 118
+	menuOverlayX           = 340
+	menuOverlayY           = 150
+	menuOverlayWidth       = 600
+	menuOverlayHeight      = 420
+	menuRowHitOffsetY      = 73
+	menuRowTextOffsetY     = 78
+	menuRowHeight          = 36
+	settingsSliderLeft     = 650
+	settingsSliderRight    = 870
+	settingsSliderY        = 239
 )
 
 var (
@@ -308,12 +326,12 @@ func (scene *MapScene) drawMenuOverlay(screen logicalCanvas) {
 	if !scene.overlay.Visible {
 		return
 	}
-	const x, y, width, height = float32(340), float32(150), float32(600), float32(420)
+	const x, y, width, height = float32(menuOverlayX), float32(menuOverlayY), float32(menuOverlayWidth), float32(menuOverlayHeight)
 	vector.FillRect(screen, x, y, width, height, color.RGBA{R: 10, G: 17, B: 22, A: 248}, false)
 	vector.StrokeRect(screen, x, y, width, height, 2, color.RGBA{R: 203, G: 172, B: 104, A: 255}, false)
 	scene.drawText(screen, scene.overlay.Heading, x+28, y+24, 25, color.RGBA{R: 239, G: 220, B: 178, A: 255})
 	for index := 0; index < scene.overlay.LineCount && index < len(scene.overlay.Lines); index++ {
-		lineY := y + 78 + float32(index)*36
+		lineY := y + menuRowTextOffsetY + float32(index)*menuRowHeight
 		lineColor := color.RGBA{R: 220, G: 225, B: 218, A: 255}
 		prefix := "  "
 		if index == scene.overlay.Selected {
@@ -330,7 +348,7 @@ func (scene *MapScene) drawMenuOverlay(screen logicalCanvas) {
 		if scene.overlay.SettingsDisabled {
 			activeColor, chromeColor = disabledColor, disabledColor
 		}
-		const sliderLeft, sliderRight, sliderY = float32(650), float32(870), float32(239)
+		const sliderLeft, sliderRight, sliderY = float32(settingsSliderLeft), float32(settingsSliderRight), float32(settingsSliderY)
 		vector.StrokeLine(screen, sliderLeft, sliderY, sliderRight, sliderY, 4, chromeColor, false)
 		knobX := sliderLeft + float32(clampRender(scene.overlay.MasterVolume))*(sliderRight-sliderLeft)
 		vector.FillCircle(screen, knobX, sliderY, 7, activeColor, true)
@@ -347,15 +365,23 @@ func (scene *MapScene) drawMenuOverlay(screen logicalCanvas) {
 }
 
 func MenuOverlayRowAt(x, y, lineCount int) int {
-	const left, top, width = 340, 150, 600
-	if x < left+20 || x >= left+width-20 || y < top+73 {
+	if x < menuOverlayX+20 || x >= menuOverlayX+menuOverlayWidth-20 || y < menuOverlayY+menuRowHitOffsetY {
 		return -1
 	}
-	row := (y - (top + 73)) / 36
-	if row < 0 || row >= lineCount || y >= top+73+(row+1)*36 {
+	row := (y - (menuOverlayY + menuRowHitOffsetY)) / menuRowHeight
+	if row < 0 || row >= lineCount || y >= menuOverlayY+menuRowHitOffsetY+(row+1)*menuRowHeight {
 		return -1
 	}
 	return row
+}
+
+// SettingsVolumeAt projects a settings-overlay pointer position onto the
+// volume slider using the same geometry as drawing.
+func SettingsVolumeAt(x, y int) (float64, bool) {
+	if MenuOverlayRowAt(x, y, 3) != 0 {
+		return 0, false
+	}
+	return clampRender(float64(x-settingsSliderLeft) / float64(settingsSliderRight-settingsSliderLeft)), true
 }
 
 // drawTerrain caches the immutable top-down tile layer until either its coarse
@@ -514,7 +540,7 @@ func reachableTileColor(candidateIndex int) color.RGBA {
 func MapTileAt(x, y int) (gameapi.TileID, bool) {
 	gridX := (x - mapOriginX) / mapTileSize
 	gridY := (y - mapOriginY) / mapTileSize
-	if x < mapOriginX || y < mapOriginY || gridX < 0 || gridX >= 96 || gridY < 0 || gridY >= 64 {
+	if x < mapOriginX || y < mapOriginY || gridX < 0 || gridX >= TerrainGridWidth || gridY < 0 || gridY >= TerrainGridHeight {
 		return 0, false
 	}
 	return gameapi.TileID(gridY*96 + gridX), true
@@ -588,11 +614,11 @@ func (scene *MapScene) drawMapLegend(screen logicalCanvas, aridity float64) {
 }
 
 func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, fieldNote FieldNote, fieldNotesVisible bool) {
-	const panelX = float32(908)
-	vector.FillRect(screen, panelX, 68, 352, 626, color.RGBA{R: 25, G: 35, B: 42, A: 238}, false)
+	const panelX = float32(hudPanelX)
+	vector.FillRect(screen, panelX, 68, hudPanelWidth, 626, color.RGBA{R: 25, G: 35, B: 42, A: 238}, false)
 	scene.drawText(screen, "Africa 2 Ice", panelX+18, 88, 24, color.RGBA{R: 239, G: 220, B: 178, A: 255})
-	vector.FillRect(screen, panelX+273, 78, 65, 24, color.RGBA{R: 35, G: 51, B: 58, A: 255}, false)
-	scene.drawText(screen, "▣ NOTES", panelX+282, 84, 8.5, color.RGBA{R: 203, G: 172, B: 104, A: 255})
+	vector.FillRect(screen, fieldNotesToggleX, fieldNotesToggleY, fieldNotesToggleWidth, fieldNotesToggleHeight, color.RGBA{R: 35, G: 51, B: 58, A: 255}, false)
+	scene.drawText(screen, "▣ NOTES", fieldNotesToggleX+9, fieldNotesToggleY+6, 8.5, color.RGBA{R: 203, G: 172, B: 104, A: 255})
 	scene.drawText(screen, fmt.Sprintf("%d BP  ·  Turn %d/400", frame.YearBP, frame.Turn), panelX+18, 124, 16, color.White)
 	scene.drawText(screen, campaignEraLabel(frame.Era), panelX+18, 147, 11.5, color.RGBA{R: 183, G: 199, B: 194, A: 255})
 	scene.drawText(screen, frame.Season.String()+"  ·  "+frame.Climate.Epoch.String(), panelX+18, 164, 11.5, color.RGBA{R: 183, G: 199, B: 194, A: 255})
@@ -677,24 +703,24 @@ func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selec
 		if fieldNote.Celebration {
 			heading = "BREAKTHROUGH · " + fieldNote.Topic
 		}
-		vector.FillRect(screen, panelX+14, fieldNotesPanelOriginY, 324, fieldNotesPanelHeight, panelColor, false)
+		vector.FillRect(screen, fieldNotesPanelX, fieldNotesPanelOriginY, fieldNotesPanelWidth, fieldNotesPanelHeight, panelColor, false)
 		if fieldNote.Celebration {
-			vector.StrokeRect(screen, panelX+14, fieldNotesPanelOriginY, 324, fieldNotesPanelHeight, 2, headingColor, false)
+			vector.StrokeRect(screen, fieldNotesPanelX, fieldNotesPanelOriginY, fieldNotesPanelWidth, fieldNotesPanelHeight, 2, headingColor, false)
 		}
 		headingSuffix := "  [F to hide]"
 		if fieldNote.Celebration {
 			headingSuffix = "  [F]"
 		}
-		scene.drawText(screen, heading+headingSuffix, panelX+28, fieldNotesPanelOriginY+9, 10, headingColor)
+		scene.drawText(screen, heading+headingSuffix, fieldNotesPanelX+14, fieldNotesPanelOriginY+9, 10, headingColor)
 		lines := fieldNoteLines(fieldNote)
 		scroll := min(scene.fieldNoteScroll, FieldNoteMaxScroll(fieldNote))
 		visibleEnd := min(len(lines), scroll+visibleFieldNoteLines)
-		scene.drawText(screen, strings.Join(lines[scroll:visibleEnd], "\n"), panelX+28, fieldNotesPanelOriginY+29, 8.2, color.RGBA{R: 202, G: 210, B: 206, A: 255})
+		scene.drawText(screen, strings.Join(lines[scroll:visibleEnd], "\n"), fieldNotesPanelX+14, fieldNotesPanelOriginY+29, 8.2, color.RGBA{R: 202, G: 210, B: 206, A: 255})
 		if len(lines) > visibleFieldNoteLines {
 			scene.drawText(screen, fmt.Sprintf("SCROLL %d/%d · wheel or PgUp/PgDn", scroll+1, len(lines)-visibleFieldNoteLines+1), panelX+147, fieldNotesPanelOriginY+91, 7, color.RGBA{R: 145, G: 163, B: 161, A: 255})
 		}
-		scene.drawText(screen, "RECENT EVENTS", panelX+28, fieldNotesPanelOriginY+104, 7.5, headingColor)
-		scene.drawText(screen, strings.Join(recentEventLines(frame.Events, 2, 52), "\n"), panelX+28, fieldNotesPanelOriginY+116, 7.2, color.RGBA{R: 184, G: 198, B: 194, A: 255})
+		scene.drawText(screen, "RECENT EVENTS", fieldNotesPanelX+14, fieldNotesPanelOriginY+104, 7.5, headingColor)
+		scene.drawText(screen, strings.Join(recentEventLines(frame.Events, 2, 52), "\n"), fieldNotesPanelX+14, fieldNotesPanelOriginY+116, 7.2, color.RGBA{R: 184, G: 198, B: 194, A: 255})
 	} else {
 		label := "F: show Field Notes"
 		labelColor := color.RGBA{R: 203, G: 172, B: 104, A: 255}
@@ -710,7 +736,7 @@ func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selec
 }
 
 func (scene *MapScene) drawControlsReference(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID) {
-	const panelX = float32(908)
+	const panelX = float32(hudPanelX)
 	vector.StrokeLine(screen, panelX+14, controlsDividerY, panelX+338, controlsDividerY, 1, color.RGBA{R: 58, G: 76, B: 82, A: 210}, false)
 	scene.drawText(screen, "Click: migrate · Arrows: choose · Enter: queue", panelX+18, controlsReferenceY, 10.5, color.White)
 	scene.drawText(screen, "Tab/Shift+Tab: bands · Space: turn", panelX+18, controlsReferenceY+controlsReferenceGap, 10.5, color.White)
@@ -795,18 +821,20 @@ func wrapTextLines(value string, limit int) []string {
 }
 
 func FieldNotesToggleContains(x, y int) bool {
-	return x >= 1181 && x < 1246 && y >= 78 && y < 102
+	return x >= fieldNotesToggleX && x < fieldNotesToggleX+fieldNotesToggleWidth &&
+		y >= fieldNotesToggleY && y < fieldNotesToggleY+fieldNotesToggleHeight
 }
 
 func FieldNotesPanelContains(x, y int) bool {
-	return x >= 922 && x < 1246 && y >= int(fieldNotesPanelOriginY) && y < int(fieldNotesPanelOriginY+fieldNotesPanelHeight)
+	return x >= fieldNotesPanelX && x < fieldNotesPanelX+fieldNotesPanelWidth &&
+		y >= fieldNotesPanelOriginY && y < fieldNotesPanelOriginY+fieldNotesPanelHeight
 }
 
 func (scene *MapScene) drawWorkforceDraft(screen logicalCanvas) {
 	if !scene.workforce.Visible {
 		return
 	}
-	const panelX = float32(922)
+	const panelX = float32(fieldNotesPanelX)
 	labels := [...]string{"Foraging", "Hunt/fish", "Toolcraft", "Megafauna", "Shelter/care"}
 	parts := [gameapi.AssignmentCount]string{}
 	for role, points := range scene.workforce.AllocationBP {
@@ -853,7 +881,7 @@ func fieldNotePanelColors(celebration bool) (color.RGBA, color.RGBA) {
 }
 
 func (scene *MapScene) drawTileInspector(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview) {
-	const panelX = float32(922)
+	const panelX = float32(fieldNotesPanelX)
 	const currentX = panelX + 8
 	const targetX = panelX + 167
 
@@ -929,6 +957,16 @@ func (scene *MapScene) drawResearchKeys(screen logicalCanvas, frame *gameapi.Fra
 
 type researchNodePoint struct{ x, y float32 }
 
+var researchLegendEntries = [...]struct {
+	label  string
+	option gameapi.ResearchOption
+}{
+	{label: "current", option: gameapi.ResearchOption{Current: true}},
+	{label: "learned", option: gameapi.ResearchOption{Acquired: true}},
+	{label: "available", option: gameapi.ResearchOption{Available: true}},
+	{label: "locked", option: gameapi.ResearchOption{}},
+}
+
 var researchNodePoints = [gameapi.TechCount]researchNodePoint{
 	gameapi.Firecraft:          {x: 30, y: 610},
 	gameapi.HaftedTools:        {x: 196, y: 610},
@@ -942,7 +980,15 @@ var researchNodePoints = [gameapi.TechCount]researchNodePoint{
 }
 
 func (scene *MapScene) drawResearchDAG(screen logicalCanvas, band *gameapi.Band) {
-	scene.drawText(screen, "RESEARCH DAG · keys 1–9 · basic survival remains available", 30, bottomInspectorOriginY+3, 8.5, color.RGBA{R: 203, G: 172, B: 104, A: 255})
+	scene.drawText(screen, "RESEARCH DAG · keys 1–9", 30, bottomInspectorOriginY+3, 8.5, color.RGBA{R: 203, G: 172, B: 104, A: 255})
+	legendX := float32(177)
+	for index, entry := range researchLegendEntries {
+		border, fill, textColor := researchNodeColors(entry.option)
+		vector.FillRect(screen, legendX, bottomInspectorOriginY+6, 7, 7, fill, false)
+		vector.StrokeRect(screen, legendX, bottomInspectorOriginY+6, 7, 7, 1, border, false)
+		scene.drawText(screen, entry.label, legendX+10, bottomInspectorOriginY+3, 6.8, textColor)
+		legendX += [...]float32{61, 65, 74, 0}[index]
+	}
 	if band != nil {
 		for technology := gameapi.Tech(0); technology < gameapi.TechCount; technology++ {
 			to := researchNodePoints[technology]
@@ -1083,7 +1129,7 @@ func (scene *MapScene) drawSelectedBandInspector(screen logicalCanvas, frame *ga
 }
 
 func campaignEraLabel(era gameapi.CampaignEra) string {
-	ranges := [...]string{"80,000–50,000 BP", "50,000–35,000 BP", "35,000–25,000 BP", "25,000–20,000 BP"}
+	ranges := [gameapi.CampaignEraCount]string{"80,000–50,000 BP", "50,000–35,000 BP", "35,000–25,000 BP", "25,000–20,000 BP"}
 	if era >= gameapi.CampaignEraCount {
 		return era.String()
 	}
