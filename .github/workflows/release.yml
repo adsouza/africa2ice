@@ -141,7 +141,14 @@ jobs:
           go build -trimpath -o "dist/$archive/${{ matrix.executable }}" .
           cp LICENSE THIRD_PARTY_NOTICES.md RUNNING.md "dist/$archive/"
           if test "${{ matrix.format }}" = zip; then
-            (cd dist && zip -qr "$archive.zip" "$archive")
+            # GitHub's Windows images ship 7-Zip but neither zip nor unzip, so
+            # Info-ZIP is not available to either pack here or extract in
+            # tools/check_release_archive.sh.
+            sevenzip=$(command -v 7z || command -v 7zz) || {
+              echo "no 7-Zip on PATH to package a zip archive" >&2
+              exit 1
+            }
+            (cd dist && "$sevenzip" a -tzip -bso0 -bsp0 "$archive.zip" "$archive")
             artifact="dist/$archive.zip"
           else
             tar -C dist -czf "dist/$archive.tar.gz" "$archive"
