@@ -8770,25 +8770,28 @@ stock-unit and conversion values are already selected; step 5 implements and ver
     11.
 
     Add `.github/workflows/release.yml` for annotated `vMAJOR.MINOR.PATCH` tags. It rejects a commit
-    that is not reachable from `main`, reruns the release-readiness gates on the exact tagged tree,
-    builds Linux/Windows on the named x86-64 runners and macOS on `macos-15` rather than
-    cross-compiling any architecture, asserts `go env GOARCH`, and publishes portable archives named
-    with tag/OS/architecture for Linux amd64, Windows amd64, and macOS arm64, plus one `SHA256SUMS`
-    covering the exact uploaded bytes. The release matrix is deliberately the same three targets as
-    §10's CI matrix, so no release target is first exercised by a tag: macOS amd64 is out of v1
-    scope, and the amd64 half of §7's determinism contract stays covered by the Linux and Windows
-    runners. Extracting an archive yields the executable, `LICENSE`, `THIRD_PARTY_NOTICES.md`, and a
-    short run/readme file—no installer or hidden mutable dependency. Build and verification jobs
-    retain `contents: read`; only the final publisher gets `contents: write`, using the run's
-    `GITHUB_TOKEN` rather than a personal token. A `workflow_dispatch` trigger runs every one of
-    those jobs without publishing, so the packaging, manifest, and checksum paths are exercisable
-    before any tag exists; only the tag-reachability gate and the release-creating step are
-    restricted to a tag push. `tools/release.sh VERSION` applies the same tag preconditions locally
-    and then follows the run, so a rejected release costs no version number; `tools/release_test.sh`
-    holds those preconditions to their messages. V1 archives are unsigned; release notes must say so
-    and document the expected OS warning. Code signing, notarization, installers, package-manager
-    feeds, and automatic updates require a later distribution decision and must not be implied by
-    the presence of an archive.
+    that is not reachable from `main`, reruns the release-readiness gates on the exact tagged tree
+    using the same pinned, digest-checked golangci-lint binary as §10's CI, builds Linux/Windows on
+    the named x86-64 runners and macOS on `macos-15` rather than cross-compiling any architecture,
+    asserts `go env GOARCH`, and publishes portable archives named with tag/OS/architecture for
+    Linux amd64, Windows amd64, and macOS arm64, plus one `SHA256SUMS` covering the exact uploaded
+    bytes. The release matrix is deliberately the same three targets as §10's CI matrix, so no
+    release target is first exercised by a tag: macOS amd64 is out of v1 scope, and the amd64 half
+    of §7's determinism contract stays covered by the Linux and Windows runners. Extracting an
+    archive yields the executable, `LICENSE`, `THIRD_PARTY_NOTICES.md`, and a short run/readme
+    file—no installer or hidden mutable dependency. Build and verification jobs retain `contents:
+    read`; only the final publisher gets `contents: write`, using the run's `GITHUB_TOKEN` rather
+    than a personal token. A `workflow_dispatch` trigger runs those jobs without publishing, so the
+    packaging, manifest, and checksum paths are exercisable before any tag exists; its `skip_verify`
+    input additionally drops the verification job for a packaging-only run. Neither reaches a tag:
+    inputs exist only for `workflow_dispatch`, and both the tag-reachability gate and the
+    release-creating step are restricted to a tag push, so a published release always had
+    verification and the cross-target gate succeed. `tools/release.sh VERSION` applies the same tag
+    preconditions locally and then follows the run, so a rejected release costs no version number;
+    `tools/release_test.sh` holds those preconditions to their messages. V1 archives are unsigned;
+    release notes must say so and document the expected OS warning. Code signing, notarization,
+    installers, package-manager feeds, and automatic updates require a later distribution decision
+    and must not be implied by the presence of an archive.
 
 ---
 

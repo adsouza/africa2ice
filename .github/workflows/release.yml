@@ -12,12 +12,20 @@ on:
   # dispatch from a branch whose name has no slash, since the name becomes part
   # of the archive filename.
   workflow_dispatch:
+    inputs:
+      skip_verify:
+        description: "Packaging-only dry run: skip verification (never affects a tag)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   verify:
+    # A tag push cannot reach the skip: inputs exist only for workflow_dispatch,
+    # and the first clause settles the event before the input is consulted.
+    if: github.event_name != 'workflow_dispatch' || !inputs.skip_verify
     runs-on: ubuntu-24.04
     env:
       DISPLAY: ":99.0"
@@ -50,7 +58,8 @@ jobs:
           echo "195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572  binaryen.tar.gz" | sha256sum --check
           tar -xzf binaryen.tar.gz
           echo "$PWD/binaryen-version_132/bin" >> "$GITHUB_PATH"
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+          ./tools/install_golangci_lint.sh "$RUNNER_TEMP/golangci-lint"
+          echo "$RUNNER_TEMP/golangci-lint" >> "$GITHUB_PATH"
           npm --prefix tools/web-e2e ci
           npm --prefix tools/web-e2e run install-browser
       - name: Start Linux virtual display
@@ -97,6 +106,7 @@ jobs:
 
   build-native:
     needs: verify
+    if: ${{ !cancelled() && (needs.verify.result == 'success' || needs.verify.result == 'skipped') }}
     env:
       DISPLAY: ":99.0"
     strategy:
@@ -195,6 +205,9 @@ jobs:
 
   publish:
     needs: [build-native, cross-target-determinism]
+    if: ${{ !cancelled() && needs.build-native.result == 'success'
+      && (needs.cross-target-determinism.result == 'success'
+      || needs.cross-target-determinism.result == 'skipped') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write

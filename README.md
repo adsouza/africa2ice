@@ -122,7 +122,8 @@ after the push.
 The tag builds and publishes three unsigned portable archives — Linux amd64, Windows amd64, and
 macOS arm64 — plus a `SHA256SUMS` over the exact uploaded bytes. To exercise that pipeline without
 publishing anything, run the `Native release` workflow manually from the Actions tab: every job runs
-except the final release-creating step.
+except the final release-creating step. Tick `skip_verify` there to skip the verification job
+too, which is worth it when the thing being debugged is the packaging itself.
 
 ## Verify
 
