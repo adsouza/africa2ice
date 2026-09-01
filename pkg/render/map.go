@@ -33,6 +33,8 @@ const (
 	interbreedPanelLineY   = 446
 	fieldNotesPanelOriginY = 462
 	fieldNotesPanelHeight  = 138
+	fieldNoteWrapLimit     = 49
+	visibleFieldNoteLines  = 5
 	workforcePanelOriginY  = 604
 	bottomInspectorOriginY = 590
 	bottomInspectorHeight  = 118
@@ -131,6 +133,12 @@ type FieldNote struct {
 	Hint         string
 	References   string
 	Celebration  bool
+}
+
+// FieldNoteMaxScroll returns the greatest meaningful scroll offset for the
+// renderer's current Field Notes layout.
+func FieldNoteMaxScroll(note FieldNote) int {
+	return max(0, len(fieldNoteLines(note))-visibleFieldNoteLines)
 }
 
 func NewMapScene() *MapScene {
@@ -673,22 +681,8 @@ func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selec
 			headingSuffix = "  [F]"
 		}
 		scene.drawText(screen, heading+headingSuffix, panelX+28, fieldNotesPanelOriginY+9, 10, headingColor)
-		body := "SUMMARY · " + fieldNote.Introduction
-		if fieldNote.Context != "" {
-			body += "\nHISTORICAL CONTEXT · " + fieldNote.Context
-		}
-		if fieldNote.GameEffect != "" {
-			body += "\nGAME ABSTRACTION · " + fieldNote.GameEffect
-		}
-		if fieldNote.Hint != "" {
-			body += "\nHINT · " + fieldNote.Hint
-		}
-		if fieldNote.References != "" {
-			body += "\nREFERENCES · " + fieldNote.References
-		}
-		lines := wrapTextLines(body, 49)
-		const visibleFieldNoteLines = 5
-		scroll := min(scene.fieldNoteScroll, max(0, len(lines)-visibleFieldNoteLines))
+		lines := fieldNoteLines(fieldNote)
+		scroll := min(scene.fieldNoteScroll, FieldNoteMaxScroll(fieldNote))
 		visibleEnd := min(len(lines), scroll+visibleFieldNoteLines)
 		scene.drawText(screen, strings.Join(lines[scroll:visibleEnd], "\n"), panelX+28, fieldNotesPanelOriginY+29, 8.2, color.RGBA{R: 202, G: 210, B: 206, A: 255})
 		if len(lines) > visibleFieldNoteLines {
@@ -715,6 +709,23 @@ func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selec
 	}
 	scene.drawText(screen, spatialHint+" · G: genetics · Esc: menu", panelX+18, 668, 9.6, color.White)
 	scene.drawText(screen, "Quick-save Ctrl/Cmd+S · Manual F1–F3 · Shift+F1–F3 load", panelX+18, 684, 8.2, color.White)
+}
+
+func fieldNoteLines(note FieldNote) []string {
+	body := "SUMMARY · " + note.Introduction
+	if note.Context != "" {
+		body += "\nHISTORICAL CONTEXT · " + note.Context
+	}
+	if note.GameEffect != "" {
+		body += "\nGAME ABSTRACTION · " + note.GameEffect
+	}
+	if note.Hint != "" {
+		body += "\nHINT · " + note.Hint
+	}
+	if note.References != "" {
+		body += "\nREFERENCES · " + note.References
+	}
+	return wrapTextLines(body, fieldNoteWrapLimit)
 }
 
 func recentEventLines(events []gameapi.Event, limit, maxRunes int) []string {

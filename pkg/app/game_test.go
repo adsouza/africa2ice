@@ -9,6 +9,7 @@ import (
 	"github.com/adsouza/africa2ice/internal/application"
 	gameaudio "github.com/adsouza/africa2ice/pkg/audio"
 	"github.com/adsouza/africa2ice/pkg/gameapi"
+	"github.com/adsouza/africa2ice/pkg/render"
 	"github.com/adsouza/africa2ice/pkg/ui"
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -361,9 +362,9 @@ func TestBandSelectionCyclesForwardAndBackwardWithWraparound(t *testing.T) {
 	frame := migrationPreviewFrame()
 	frame.Bands = append(frame.Bands,
 		gameapi.Band{ID: 8, Species: gameapi.ArchaicHominin},
-		gameapi.Band{ID: 9, Species: gameapi.HomoSapiens},
+		gameapi.Band{ID: 9, Species: gameapi.HomoSapiens, Population: 90},
 		gameapi.Band{ID: 10, Species: gameapi.ArchaicHominin},
-		gameapi.Band{ID: 11, Species: gameapi.HomoSapiens},
+		gameapi.Band{ID: 11, Species: gameapi.HomoSapiens, Population: 90},
 	)
 	game := New(&gameStub{frame: frame})
 
@@ -382,6 +383,42 @@ func TestBandSelectionCyclesForwardAndBackwardWithWraparound(t *testing.T) {
 	game.selectPreviousSapiens()
 	if game.selectedBand != 7 {
 		t.Fatalf("previous selection = %d, want sapiens band 7", game.selectedBand)
+	}
+}
+
+func TestInitialSelectionSkipsArchaicAndExtinctBands(t *testing.T) {
+	frame := migrationPreviewFrame()
+	frame.Bands = []gameapi.Band{
+		{ID: 0, Species: gameapi.ArchaicHominin, Population: 90},
+		{ID: 6, Species: gameapi.HomoSapiens},
+		{ID: 7, Species: gameapi.HomoSapiens, Population: 120},
+	}
+	game := New(&gameStub{frame: frame})
+
+	if game.selectedBand != 7 || !game.hasAssignmentDraft {
+		t.Fatalf("initial selection = band %d draft %t, want living sapiens band 7", game.selectedBand, game.hasAssignmentDraft)
+	}
+}
+
+func TestFieldNoteScrollNormalizesBeforeApplyingInput(t *testing.T) {
+	game := New(&gameStub{frame: migrationPreviewFrame()})
+	game.fieldNote = render.FieldNote{
+		Introduction: strings.Repeat("A deliberately verbose field note sentence. ", 20),
+		Context:      strings.Repeat("Additional historical context. ", 20),
+	}
+	maximum := render.FieldNoteMaxScroll(game.fieldNote)
+	if maximum <= 3 {
+		t.Fatalf("test Field Note max scroll = %d, want more than 3", maximum)
+	}
+
+	game.fieldNoteScroll = maximum + 12
+	game.scrollFieldNotes(-3)
+	if game.fieldNoteScroll != maximum-3 {
+		t.Fatalf("PageUp-equivalent scroll = %d, want %d", game.fieldNoteScroll, maximum-3)
+	}
+	game.scrollFieldNotes(maximum + 12)
+	if game.fieldNoteScroll != maximum {
+		t.Fatalf("PageDown-equivalent scroll = %d, want capped %d", game.fieldNoteScroll, maximum)
 	}
 }
 
@@ -530,6 +567,44 @@ func TestCompletedTurnPrioritizesEpochTransitionOverRegionalPulse(t *testing.T) 
 	}
 }
 
+func TestRegionalPulseFieldNoteFocusesOnlyOncePerContinuousRun(t *testing.T) {
+	before := migrationPreviewFrame()
+	first := cloneAppFrame(before)
+	first.Turn++
+	region := first.Tiles[first.Bands[0].TileID].Region
+	first.Climate.RegionalAbrupt[region] = 0.2
+	game := New(&gameStub{frame: before})
+
+	game.acceptCompletedTurn(first)
+	if !strings.Contains(game.fieldNote.Topic, "REGIONAL CLIMATE PULSE") || !game.regionalPulseFocused {
+		t.Fatalf("first pulse note = %#v, focused %t", game.fieldNote, game.regionalPulseFocused)
+	}
+	game.fieldNoteScroll = 4
+	second := cloneAppFrame(first)
+	second.Turn++
+	second.Climate.RegionalAbrupt[region] = 0.3
+	game.acceptCompletedTurn(second)
+	if game.fieldNoteScroll != 4 {
+		t.Fatalf("continuous pulse reset Field Notes scroll to %d", game.fieldNoteScroll)
+	}
+
+	between := cloneAppFrame(second)
+	between.Turn++
+	between.Climate.RegionalAbrupt[region] = 0
+	game.acceptCompletedTurn(between)
+	if game.regionalPulseFocused {
+		t.Fatal("ended pulse retained its focus marker")
+	}
+	later := cloneAppFrame(between)
+	later.Turn++
+	later.Climate.RegionalAbrupt[region] = 0.2
+	game.fieldNoteScroll = 3
+	game.acceptCompletedTurn(later)
+	if game.fieldNoteScroll != 0 || !game.regionalPulseFocused {
+		t.Fatalf("later pulse did not refocus: scroll %d focused %t", game.fieldNoteScroll, game.regionalPulseFocused)
+	}
+}
+
 func TestStartupResumeLoadsNewestQuickOrAutosave(t *testing.T) {
 	initial := migrationPreviewFrame()
 	restored := migrationPreviewFrame()
@@ -539,6 +614,7 @@ func TestStartupResumeLoadsNewestQuickOrAutosave(t *testing.T) {
 	game := New(stub)
 	game.fieldNote, _ = ui.TechnologyFieldNote(gameapi.Firecraft, 7, 1)
 	game.breakthroughFrames = breakthroughCelebrationFrames
+	game.regionalPulseFocused = true
 
 	game.beginStartupResume()
 	listID := game.startupRestoreListID
@@ -570,8 +646,8 @@ func TestStartupResumeLoadsNewestQuickOrAutosave(t *testing.T) {
 	if game.notice != "Autosave restored — Auto 1" {
 		t.Fatalf("restore notice = %q", game.notice)
 	}
-	if game.fieldNote.Topic != "WELCOME" || game.breakthroughFrames != 0 {
-		t.Fatalf("loaded game retained a stale breakthrough: %#v for %d frames", game.fieldNote, game.breakthroughFrames)
+	if game.fieldNote.Topic != "WELCOME" || game.breakthroughFrames != 0 || game.regionalPulseFocused {
+		t.Fatalf("loaded game retained stale presentation: note %#v, breakthrough %d, pulse focus %t", game.fieldNote, game.breakthroughFrames, game.regionalPulseFocused)
 	}
 }
 
@@ -806,6 +882,7 @@ func TestStartingNewCampaignReplacesTerminalPresentationState(t *testing.T) {
 	game.fieldNote, _ = ui.TechnologyFieldNote(gameapi.Firecraft, 7, 1)
 	game.breakthroughFrames = breakthroughCelebrationFrames
 	game.hasMigrationPreview = true
+	game.regionalPulseFocused = true
 
 	fresh := migrationPreviewFrame()
 	stub.frame = fresh
@@ -814,8 +891,8 @@ func TestStartingNewCampaignReplacesTerminalPresentationState(t *testing.T) {
 	if stub.newCampaigns != 1 || game.frame != fresh || game.frame.CampaignResult != gameapi.Ongoing {
 		t.Fatalf("new campaign = calls %d, frame %#v", stub.newCampaigns, game.frame)
 	}
-	if game.fieldNote.Topic != "WELCOME" || game.breakthroughFrames != 0 || game.hasMigrationPreview {
-		t.Fatalf("new campaign retained stale presentation: note %#v, breakthrough %d, preview %t", game.fieldNote, game.breakthroughFrames, game.hasMigrationPreview)
+	if game.fieldNote.Topic != "WELCOME" || game.breakthroughFrames != 0 || game.hasMigrationPreview || game.regionalPulseFocused {
+		t.Fatalf("new campaign retained stale presentation: note %#v, breakthrough %d, preview %t, pulse focus %t", game.fieldNote, game.breakthroughFrames, game.hasMigrationPreview, game.regionalPulseFocused)
 	}
 	if game.notice != "New campaign begun" || game.selectedBand != 7 {
 		t.Fatalf("new campaign notice/selection = %q/%d", game.notice, game.selectedBand)
@@ -851,6 +928,7 @@ func migrationPreviewFrame() *gameapi.Frame {
 		},
 		Bands: []gameapi.Band{{
 			ID: 7, Species: gameapi.HomoSapiens, TileID: 0,
+			Population:          120,
 			MigrationCandidates: []gameapi.MigrationCandidate{{TileID: 2}},
 		}},
 	}

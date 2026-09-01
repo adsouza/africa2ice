@@ -71,6 +71,7 @@ type Game struct {
 	toasts                 ui.ToastManager
 	traitFocus             gameapi.HeritableTrait
 	interbreedFocus        gameapi.BandID
+	regionalPulseFocused   bool
 	logSession             *logging.Session
 }
 
@@ -262,14 +263,14 @@ func (g *Game) Update() error {
 	if g.fieldNotesVisible {
 		switch {
 		case inpututil.IsKeyJustPressed(ebiten.KeyPageUp):
-			g.fieldNoteScroll = max(0, g.fieldNoteScroll-3)
+			g.scrollFieldNotes(-3)
 		case inpututil.IsKeyJustPressed(ebiten.KeyPageDown):
-			g.fieldNoteScroll += 3
+			g.scrollFieldNotes(3)
 		}
 		if _, wheelY := ebiten.Wheel(); wheelY != 0 {
 			x, y, inside := g.logicalCursorPosition()
 			if inside && render.FieldNotesPanelContains(x, y) {
-				g.fieldNoteScroll = max(0, g.fieldNoteScroll-int(wheelY))
+				g.scrollFieldNotes(-int(wheelY))
 			}
 		}
 	}
@@ -447,6 +448,11 @@ func (g *Game) acceptCompletedTurn(frame *gameapi.Frame) {
 	discoveries := newTechnologyDiscoveries(previous, frame, g.selectedBand)
 	newestEvent, hasNewEvent := newestAddedEvent(previous, frame)
 	newRegion, hasNewRegion := newlyEstablishedRegion(previous, frame)
+	pulseNote, hasPulse := currentRegionalPulseFieldNote(frame, g.selectedBand)
+	previousPulseNote, hadPulse := currentRegionalPulseFieldNote(previous, g.selectedBand)
+	if !hasPulse || !hadPulse || pulseNote.Topic != previousPulseNote.Topic {
+		g.regionalPulseFocused = false
+	}
 	if completedTurnAddedAcuteEvent(previous, frame) {
 		g.sound.Play(gameaudio.SFXEventTrigger)
 	}
@@ -471,9 +477,9 @@ func (g *Game) acceptCompletedTurn(frame *gameapi.Frame) {
 			}
 		case hasNewEvent:
 			g.setFieldNote(ui.EventFieldNote(newestEvent))
-		case hasCurrentRegionalPulse(frame, g.selectedBand):
-			note, _ := currentRegionalPulseFieldNote(frame, g.selectedBand)
-			g.setFieldNote(note)
+		case hasPulse && !g.regionalPulseFocused:
+			g.setFieldNote(pulseNote)
+			g.regionalPulseFocused = true
 		}
 		return
 	}
@@ -493,11 +499,6 @@ func (g *Game) acceptCompletedTurn(frame *gameapi.Frame) {
 
 func hasCurrentMacroContext(frame *gameapi.Frame) bool {
 	_, ok := currentMacroFieldNote(frame)
-	return ok
-}
-
-func hasCurrentRegionalPulse(frame *gameapi.Frame, selectedBand gameapi.BandID) bool {
-	_, ok := currentRegionalPulseFieldNote(frame, selectedBand)
 	return ok
 }
 
@@ -827,7 +828,7 @@ func (g *Game) workforceDraftForRender() render.WorkforceDraft {
 }
 
 func (g *Game) ensureSelection() {
-	if selected := g.selected(); selected != nil && selected.Population > 0 {
+	if selected := g.selected(); selected != nil && selected.Species == gameapi.HomoSapiens && selected.Population > 0 {
 		return
 	}
 	g.selectedBand = 0
@@ -835,7 +836,7 @@ func (g *Game) ensureSelection() {
 		return
 	}
 	for _, band := range g.frame.Bands {
-		if band.Species == gameapi.HomoSapiens {
+		if band.Species == gameapi.HomoSapiens && band.Population > 0 {
 			g.selectedBand = band.ID
 			return
 		}
@@ -861,7 +862,7 @@ func (g *Game) selectSapiens(offset int) {
 	bandIDs := make([]gameapi.BandID, 0, len(g.frame.Bands))
 	selectedIndex := -1
 	for _, band := range g.frame.Bands {
-		if band.Species != gameapi.HomoSapiens {
+		if band.Species != gameapi.HomoSapiens || band.Population == 0 {
 			continue
 		}
 		if band.ID == g.selectedBand {
@@ -1136,6 +1137,7 @@ func (g *Game) startNewCampaign() {
 	g.syncAssignmentDraft(true)
 	g.setFieldNote(ui.CampaignOverviewFieldNote())
 	g.breakthroughFrames = 0
+	g.regionalPulseFocused = false
 	g.clearMigrationPreview()
 	g.sound.Play(gameaudio.SFXChoiceClick)
 	g.showNotice("New campaign begun")
@@ -1328,6 +1330,12 @@ func (g *Game) toggleFieldNotes() {
 func (g *Game) setFieldNote(note render.FieldNote) {
 	g.fieldNote = note
 	g.fieldNoteScroll = 0
+}
+
+func (g *Game) scrollFieldNotes(delta int) {
+	maximum := render.FieldNoteMaxScroll(g.fieldNote)
+	current := min(maximum, max(0, g.fieldNoteScroll))
+	g.fieldNoteScroll = min(maximum, max(0, current+delta))
 }
 
 func (g *Game) handleGameplayHotkey(key ebiten.Key) bool {
@@ -1532,6 +1540,7 @@ func (g *Game) pollStorage() {
 			g.publishFrame()
 			g.setFieldNote(ui.CampaignOverviewFieldNote())
 			g.breakthroughFrames = 0
+			g.regionalPulseFocused = false
 			g.clearMigrationPreview()
 			g.ensureSelection()
 			g.hasAssignmentDraft = false

@@ -11,8 +11,8 @@ func interbreedFrame(candidates ...gameapi.BandID) *gameapi.Frame {
 		CampaignResult: gameapi.Ongoing,
 		Tiles:          []gameapi.Tile{{ID: 0, X: 0, Y: 0, Land: true, Explored: true, BaselineK: 100}},
 		Bands: []gameapi.Band{
-			{ID: 7, Species: gameapi.HomoSapiens, TileID: 0, InterbreedCandidateIDs: candidates},
-			{ID: 9, Species: gameapi.ArchaicHominin, TileID: 0},
+			{ID: 7, Species: gameapi.HomoSapiens, TileID: 0, Population: 120, InterbreedCandidateIDs: candidates},
+			{ID: 9, Species: gameapi.ArchaicHominin, TileID: 0, Population: 90},
 		},
 	}
 }

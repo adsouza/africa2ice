@@ -132,3 +132,13 @@ func TestBandAndEventContextNotesUseAcceptedFrameValues(t *testing.T) {
 		t.Fatalf("event note = %#v", event)
 	}
 }
+
+func TestAcuteEventClassificationUsesStablePrecedence(t *testing.T) {
+	event := EventFieldNote(gameapi.Event{
+		Kind:    gameapi.EventAcuteIncident,
+		Summary: "A crossing mishap followed a predation incident.",
+	})
+	if event.Topic != "ACUTE EVENT · PREDATION" {
+		t.Fatalf("ambiguous acute event topic = %q, want deterministic predation precedence", event.Topic)
+	}
+}

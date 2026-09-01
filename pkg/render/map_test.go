@@ -139,6 +139,14 @@ func TestFieldNoteWrappingPreservesWordsAndBoundsLines(t *testing.T) {
 	}
 }
 
+func TestFieldNoteMaxScrollUsesRenderedLineLayout(t *testing.T) {
+	note := FieldNote{Introduction: strings.Repeat("bounded words ", 30)}
+	want := max(0, len(fieldNoteLines(note))-visibleFieldNoteLines)
+	if got := FieldNoteMaxScroll(note); got != want || got == 0 {
+		t.Fatalf("FieldNoteMaxScroll = %d, want non-zero %d", got, want)
+	}
+}
+
 func TestRecentEventLinesShowNewestFirstAndStayBounded(t *testing.T) {
 	events := []gameapi.Event{
 		{Turn: 4, Kind: gameapi.EventMigration, Summary: "The first event"},

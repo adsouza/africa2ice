@@ -7054,6 +7054,12 @@ The displayed entry follows a stable context priority:
 7. the newest completed-turn event when there is no selection; otherwise
 8. the campaign overview.
 
+A continuous abrupt-climate pulse may take Field Notes focus at most once for the selected region.
+If a higher-priority transition owns the pulse's first turn, the pulse may focus on the next otherwise
+quiet turn; it never reapplies the same run on each sampled turn or resets the reader's scroll. The
+UI-local focus marker clears when the pulse ends, the selected region changes, a campaign is replaced,
+or a save is loaded, so a later pulse remains independently eligible.
+
 `pkg/app` detects newly acquired sapiens technology bits only across an accepted `EndTurn` frame
 transition, considering the selected band first and then stable band/technology order. A loaded
 frame and technology inherited by a newly introduced split descendant do not replay a discovery.
@@ -9333,8 +9339,13 @@ they do not add time-varying species extinction, separately depleted prey, or a 
    number rather than an emergent surprise. Revalidate the Semi-Arid Desert row as a residency biome:
    a band resident in desert through a full precession half-cycle must have a survivable but
    pressured food and water budget at the selected indices, without that outcome being guaranteed.
+   Enumerate every contiguous qualifying desert run, including later runs on the same tile, and
+   advance each isolated stationary-band witness through the authoritative `World.AdvanceTurn`
+   pipeline; the gate consumes its completed-turn food and health reports rather than restating
+   resource, demographic, or hazard formulas. Any invalid or non-finite report denominator/value is
+   a gate error, never a comparable `NaN`.
    Recompute the derived `MinBiomeDwellTurns` from any accepted fauna-regeneration change, confirm it
-	   still covers the fauna 90%-gap-closure time, and verify that no oscillating tile ends a half-cycle further from its cap than a
+   still covers the fauna 90%-gap-closure time, and verify that no oscillating tile ends a half-cycle further from its cap than a
    steady tile of the same biome. Because §13's three reference-run margins are Policy
    (tighten-only), any failure here must be answered in the moisture model — amplitude, weights,
    dwell floor, or churn cap — or in these indices, never by relaxing a margin.
@@ -9682,7 +9693,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | GitHub Pages publish trigger               | With step-13 publication wiring present: successful push to `main` after `native` + `web-release` + `cross-target-determinism` + `release-readiness`; no PR | Locked | §10/§12 |
 | Native release trigger and payload         | Annotated SemVer tag; four unsigned portable OS/architecture archives + `SHA256SUMS` | Locked                 | §12   |
 | Top-down map rectangle                     | origin `(20, 74)`; `96 × 64` cells of `8 × 8` logical pixels  | Locked                                          | §8    |
-| Top-down drawn tile extent                 | `8.6 × 8.6` logical pixels within each cell                    | Locked                                          | §8    |
+| Top-down drawn tile extent                 | `7.6 × 7.6` logical pixels within each cell                    | Locked                                          | §8    |
 | `MaxRenderScale`                           | `2.0`                                                          | Policy                                          | §8    |
 | Minimum gameplay viewport                  | `1,280 × 720 DIPs`                                             | Policy                                          | §8    |
 | Sapiens band warning thresholds            | suffering: latest decline/food shortfall or `Health < 0.50`; danger: `Health < 0.80` or seasonal + chronic rate `>= 0.004` | Policy | §8 |

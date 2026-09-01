@@ -3,6 +3,8 @@ package application
 import (
 	"fmt"
 	"math"
+	"runtime"
+	"sync"
 
 	"github.com/adsouza/africa2ice/internal/domain"
 	"github.com/adsouza/africa2ice/pkg/gameapi"
@@ -43,6 +45,15 @@ func ValidateMoistureBalanceReport(report MoistureBalanceReport) error {
 		return fmt.Errorf("biome dwell floor no longer covers fauna recovery")
 	}
 	desert := report.DesertResidency
+	for _, value := range []float64{
+		desert.EndingPopulation, desert.EndingHealth,
+		desert.MinimumFoodCoverage, desert.MeanFoodCoverage,
+		desert.MinimumWaterCoverage, desert.MeanWaterCoverage,
+	} {
+		if !finite(value) {
+			return fmt.Errorf("desert residency contains a non-finite or negative value")
+		}
+	}
 	if !desert.Found || desert.CalendarYears < 10_500 || !desert.Survived || desert.EndingPopulation < 1 || desert.EndingHealth <= 0 {
 		return fmt.Errorf("no survivable full half-cycle desert residency was found")
 	}
@@ -91,7 +102,8 @@ type RecoveryReport struct {
 }
 
 // BuildMoistureBalanceReport calculates the step-12 calibration evidence from
-// the same domain APIs used by the game. It does not advance or mutate a world.
+// the same domain APIs and complete World.AdvanceTurn transition used by the
+// game. Its isolated scenarios never touch a player's world.
 func BuildMoistureBalanceReport() (MoistureBalanceReport, error) {
 	grid, err := (domain.WorldGenerator{}).Generate()
 	if err != nil {
@@ -181,14 +193,67 @@ func desertResidencyReport(grid *domain.Grid, seed uint64) (DesertResidencyRepor
 		}
 		history[turn] = habitat
 	}
+	template, err := domain.NewWorld(seed)
+	if err != nil {
+		return DesertResidencyReport{}, err
+	}
+	templateState, err := template.ExportState()
+	if err != nil {
+		return DesertResidencyReport{}, err
+	}
+	windows := qualifyingDesertWindows(grid, history)
+	if len(windows) == 0 {
+		return DesertResidencyReport{}, nil
+	}
+	type simulationResult struct {
+		report DesertResidencyReport
+		err    error
+	}
+	results := make([]simulationResult, len(windows))
+	jobs := make(chan int)
+	workerCount := min(runtime.GOMAXPROCS(0), len(windows))
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for index := range jobs {
+				results[index].report, results[index].err = runDesertWindowThroughWorld(grid, history, seed, templateState.RNGState, windows[index])
+			}
+		}()
+	}
+	for index := range windows {
+		jobs <- index
+	}
+	close(jobs)
+	workers.Wait()
+
 	best := DesertResidencyReport{}
-	for _, window := range qualifyingDesertWindows(grid, history) {
-		candidate := simulateDesertWindow(grid, history, seed, window)
-		if !best.Found || candidate.EndingHealth > best.EndingHealth || candidate.EndingHealth == best.EndingHealth && candidate.EndingPopulation > best.EndingPopulation || candidate.EndingHealth == best.EndingHealth && candidate.EndingPopulation == best.EndingPopulation && candidate.TileID < best.TileID {
-			best = candidate
+	for _, result := range results {
+		if result.err != nil {
+			return DesertResidencyReport{}, result.err
+		}
+		if betterDesertResidency(result.report, best) {
+			best = result.report
 		}
 	}
 	return best, nil
+}
+
+func betterDesertResidency(candidate, best DesertResidencyReport) bool {
+	if !best.Found || candidate.EndingHealth != best.EndingHealth {
+		return !best.Found || candidate.EndingHealth > best.EndingHealth
+	}
+	if candidate.EndingPopulation != best.EndingPopulation {
+		return candidate.EndingPopulation > best.EndingPopulation
+	}
+	if candidate.TileID != best.TileID {
+		return candidate.TileID < best.TileID
+	}
+	if candidate.StartTurn != best.StartTurn {
+		return candidate.StartTurn < best.StartTurn
+	}
+	return candidate.EndTurn < best.EndTurn
 }
 
 func qualifyingDesertWindows(grid *domain.Grid, history []*domain.Habitat) []desertWindow {
@@ -198,12 +263,17 @@ func qualifyingDesertWindows(grid *domain.Grid, history []*domain.Habitat) []des
 		if !geography.Land {
 			continue
 		}
-		for start := 0; start <= domain.MaxCampaignTurn; start++ {
+		for start := 0; start <= domain.MaxCampaignTurn; {
 			if history[start][id].Biome != domain.SemiAridDesert {
+				start++
 				continue
 			}
+			runEnd := start
+			for runEnd+1 <= domain.MaxCampaignTurn && history[runEnd+1][id].Biome == domain.SemiAridDesert {
+				runEnd++
+			}
 			startDate, _ := domain.CampaignDate(start)
-			for end := start; end <= domain.MaxCampaignTurn && history[end][id].Biome == domain.SemiAridDesert; end++ {
+			for end := start; end <= runEnd; end++ {
 				endDate, _ := domain.CampaignDate(end)
 				years := startDate.YearBP - endDate.YearBP
 				if years >= 10_500 {
@@ -211,66 +281,89 @@ func qualifyingDesertWindows(grid *domain.Grid, history []*domain.Habitat) []des
 					break
 				}
 			}
+			start = runEnd + 1
 		}
 	}
 	return windows
 }
 
-func simulateDesertWindow(grid *domain.Grid, history []*domain.Habitat, seed uint64, window desertWindow) DesertResidencyReport {
+func runDesertWindowThroughWorld(grid *domain.Grid, history []*domain.Habitat, seed uint64, rngState []byte, window desertWindow) (DesertResidencyReport, error) {
 	const population = domain.Population(40)
 	allocation := [domain.AssignmentCount]domain.AssignmentBP{3500, 3000, 1500, 500, 1500}
 	traits, ok := domain.StartingHeritableState(domain.HomoSapiens, window.region)
 	if !ok {
 		traits, _ = domain.StartingHeritableState(domain.HomoSapiens, domain.EastAfrica)
 	}
-	band := domain.Band{Population: population, Allocation: allocation, Heritable: traits}
-	simulatedPopulation := float64(population)
-	health := 1.0
-	geography, _ := grid.Tile(window.tileID)
-	startSeason, _ := domain.SeasonForTurn(window.startTurn)
-	state := domain.InitialTileState(seed, geography, history[window.startTurn][window.tileID], startSeason)
 	result := DesertResidencyReport{Found: true, TileID: uint16(window.tileID), Region: gameapi.Region(window.region).String(), StartTurn: window.startTurn, EndTurn: window.endTurn, CalendarYears: window.years, Population: int(population), MinimumFoodCoverage: 1, MinimumWaterCoverage: 1}
+	state := domain.State{
+		Seed: seed, Turn: window.startTurn, Result: domain.CampaignOngoing, NextBandID: 2,
+		Bands: []domain.Band{{
+			ID: 1, Species: domain.HomoSapiens, TileID: window.tileID,
+			Population: population, Health: 1, Allocation: allocation, Heritable: traits,
+		}},
+		RNGState: append([]byte(nil), rngState...),
+	}
+	season, err := domain.SeasonForTurn(window.startTurn)
+	if err != nil {
+		return DesertResidencyReport{}, err
+	}
+	for id := range domain.TileCount {
+		geography, _ := grid.Tile(domain.TileID(id))
+		state.Tiles[id] = domain.InitialTileState(seed, geography, history[window.startTurn][id], season)
+	}
+	world, err := domain.RestoreWorld(state)
+	if err != nil {
+		return DesertResidencyReport{}, fmt.Errorf("restore desert tile %d at turn %d: %w", window.tileID, window.startTurn, err)
+	}
 	count := 0
-	for turn := window.startTurn; turn <= window.endTurn; turn++ {
-		band.Population = domain.Population(max(1, int(math.Round(simulatedPopulation))))
-		habitat := history[turn][window.tileID]
-		season, _ := domain.SeasonForTurn(turn)
-		cap := domain.ResourceCaps(habitat.Biome, season, 0, habitat.BaselineK)
-		regenerated := state.Regenerate(cap, domain.ResourceVector{})
-		profile, _ := domain.FaunaFor(window.region, habitat.Biome, true)
-		hunting := domain.HuntingRates(band, window.region, profile)
-		floraDemand := band.Workers(domain.Foraging) * domain.ForagingRate(band, habitat.Biome)
-		faunaDemand := band.Workers(domain.HuntingAndFishing) * hunting.Total
-		faunaDemand += band.Workers(domain.MegafaunaTracking) * domain.MegafaunaRate(band, profile, hunting.Terrestrial)
-		waterDemand := domain.WaterRequired(band, habitat.LocalTemperatureC)
-		flora := min(floraDemand, regenerated.Stock.Flora)
-		fauna := min(faunaDemand, regenerated.Stock.Fauna)
-		water := min(waterDemand, regenerated.Stock.Water)
-		food := flora * domain.FattyAcidConversion(domain.PlantFood, float64(band.Heritable[domain.FattyAcidMetabolism]))
-		food += fauna * domain.FattyAcidConversion(domain.AnimalFood, float64(band.Heritable[domain.FattyAcidMetabolism]))
-		foodCoverage := min(1, food/simulatedPopulation)
-		waterCoverage := min(1, water/waterDemand)
-		foodDeficit := 1 - foodCoverage
-		waterDeficit := 1 - waterCoverage
-		health = max(0, min(1, health+domain.NutritionHealthDelta(foodDeficit)-domain.WaterHealthLossRate*waterDeficit))
-		growth := domain.LogisticGrowth(simulatedPopulation, simulatedPopulation, habitat.BaselineK, foodDeficit)
-		simulatedPopulation = max(0, simulatedPopulation+growth-domain.StarvationLoss(simulatedPopulation, foodDeficit))
+	for world.Turn() < window.endTurn {
+		if err := world.AdvanceTurn(); err != nil {
+			return DesertResidencyReport{}, fmt.Errorf("advance desert tile %d to turn %d: %w", window.tileID, world.Turn()+1, err)
+		}
+		bands := world.Bands()
+		if len(bands) == 0 {
+			result.MinimumFoodCoverage = 0
+			result.MinimumWaterCoverage = 0
+			count++
+			break
+		}
+		band := bands[0]
+		foodCoverage, coverageErr := coverageAfterDeficit(band.LastFoodReport.RequiredFU, band.LastFoodReport.DeficitFU)
+		if coverageErr != nil {
+			return DesertResidencyReport{}, fmt.Errorf("desert tile %d turn %d food coverage: %w", window.tileID, world.Turn(), coverageErr)
+		}
+		waterCoverage, coverageErr := coverageAfterDeficit(domain.WaterHealthLossRate, band.LastOutcomeReport.WaterHealthLoss)
+		if coverageErr != nil {
+			return DesertResidencyReport{}, fmt.Errorf("desert tile %d turn %d water coverage: %w", window.tileID, world.Turn(), coverageErr)
+		}
 		result.MinimumFoodCoverage = min(result.MinimumFoodCoverage, foodCoverage)
 		result.MinimumWaterCoverage = min(result.MinimumWaterCoverage, waterCoverage)
 		result.MeanFoodCoverage += foodCoverage
 		result.MeanWaterCoverage += waterCoverage
 		count++
-		regenerated.Stock.Flora -= flora
-		regenerated.Stock.Fauna -= fauna
-		regenerated.Stock.Water -= water
-		state = regenerated
+	}
+	if count == 0 {
+		return DesertResidencyReport{}, fmt.Errorf("desert tile %d has an empty residency interval", window.tileID)
 	}
 	result.MeanFoodCoverage /= float64(count)
 	result.MeanWaterCoverage /= float64(count)
-	result.EndingPopulation = simulatedPopulation
-	result.EndingHealth = health
-	result.Survived = simulatedPopulation >= 1
-	return result
+	if bands := world.Bands(); len(bands) != 0 {
+		result.EndingPopulation = float64(bands[0].Population)
+		result.EndingHealth = float64(bands[0].Health)
+		result.Survived = bands[0].Population > 0
+	}
+	return result, nil
+}
+
+func coverageAfterDeficit(total, deficit float64) (float64, error) {
+	if !finite(total) || !finite(deficit) || total <= 0 || deficit > total {
+		return 0, fmt.Errorf("invalid total %.6f or deficit %.6f", total, deficit)
+	}
+	coverage := (total - deficit) / total
+	if !finite(coverage) || coverage > 1 {
+		return 0, fmt.Errorf("invalid derived coverage %.6f", coverage)
+	}
+	return coverage, nil
 }
 
 func recoveryReport(grid *domain.Grid, seed uint64) (RecoveryReport, error) {

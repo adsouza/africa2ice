@@ -19,6 +19,17 @@ const (
 	AcuteContextCount
 )
 
+var acuteEventClassifiers = [...]struct {
+	fragment string
+	context  AcuteContext
+}{
+	{fragment: "predation", context: AcutePredationContext},
+	{fragment: "disease outbreak", context: AcuteDiseaseOutbreakContext},
+	{fragment: "flood or storm", context: AcuteFloodStormContext},
+	{fragment: "exposure or fall", context: AcuteExposureFallContext},
+	{fragment: "crossing mishap", context: AcuteCrossingMishapContext},
+}
+
 func AcuteIncidentFieldNote(kind AcuteContext) (render.FieldNote, bool) {
 	if kind >= AcuteContextCount {
 		return render.FieldNote{}, false
@@ -446,13 +457,10 @@ func BandContextFieldNote(frame *gameapi.Frame, band *gameapi.Band) render.Field
 
 func EventFieldNote(event gameapi.Event) render.FieldNote {
 	if event.Kind == gameapi.EventAcuteIncident {
-		for fragment, kind := range map[string]AcuteContext{
-			"predation": AcutePredationContext, "disease outbreak": AcuteDiseaseOutbreakContext,
-			"flood or storm": AcuteFloodStormContext, "exposure or fall": AcuteExposureFallContext,
-			"crossing mishap": AcuteCrossingMishapContext,
-		} {
-			if strings.Contains(strings.ToLower(event.Summary), fragment) {
-				note, _ := AcuteIncidentFieldNote(kind)
+		summary := strings.ToLower(event.Summary)
+		for _, classifier := range acuteEventClassifiers {
+			if strings.Contains(summary, classifier.fragment) {
+				note, _ := AcuteIncidentFieldNote(classifier.context)
 				note.Introduction = event.Summary
 				return note
 			}
