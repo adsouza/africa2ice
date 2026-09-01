@@ -14,6 +14,8 @@ concurrency:
 
 jobs:
   native:
+    env:
+      DISPLAY: ":99.0"
     strategy:
       matrix:
         include:
@@ -35,7 +37,10 @@ jobs:
         run: test "$(go env GOARCH)" = "${{ matrix.arch }}"
       - name: Install Linux graphics and audio headers
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libgl1-mesa-dev libgl1-mesa-dri libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev xvfb
+      - name: Start Linux virtual display
+        if: runner.os == 'Linux'
+        run: Xvfb :99 -screen 0 1280x720x24 > /tmp/xvfb.log 2>&1 &
       - name: Install pinned golangci-lint
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
       - run: golangci-lint config verify
@@ -167,6 +172,8 @@ jobs:
   release-readiness:
     needs: [native, web-release, cross-target-determinism]
     runs-on: ubuntu-24.04
+    env:
+      DISPLAY: ":99.0"
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -181,7 +188,9 @@ jobs:
           cache: npm
           cache-dependency-path: tools/web-e2e/package-lock.json
       - name: Install graphics, audio, and browser dependencies
-        run: sudo apt-get update && sudo apt-get install -y brotli libasound2-dev libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev
+        run: sudo apt-get update && sudo apt-get install -y brotli libasound2-dev libgl1-mesa-dev libgl1-mesa-dri libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev xvfb
+      - name: Start Linux virtual display
+        run: Xvfb :99 -screen 0 1280x720x24 > /tmp/xvfb.log 2>&1 &
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: web-release-bundle

@@ -61,6 +61,10 @@ On Debian or Ubuntu, install Ebitengine's native audio and graphics development 
 sudo apt-get install libasound2-dev libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev
 ```
 
+On a display-less Linux test host, also install `xvfb` and `libgl1-mesa-dri`, start an Xvfb server,
+and export its `DISPLAY`; Ebitengine initializes GLFW when imported even when a test does not open a
+window. The CI workflows contain the exact setup used by this repository.
+
 ```sh
 go run .
 ```

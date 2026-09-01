@@ -7762,8 +7762,10 @@ state, operation FIFO ordering, and deletion interrupted between tombstone publi
   pushes to `main`. Its native matrix runs `golangci-lint config verify` and `golangci-lint run`
   before `go vet`, `go test`, and the native desktop build on named runner images `ubuntu-24.04`
   (`amd64`), `macos-15` (`arm64`), and `windows-2025` (`amd64`), asserting `go env GOARCH` before
-  tests and using platform-appropriate shell syntax; the Ubuntu job installs Ebitengine's
-  required X11/OpenGL development headers. A separate `ubuntu-24.04` `web-release` job installs the pinned
+  tests and using platform-appropriate shell syntax; the Ubuntu job installs Ebitengine's required
+  X11/OpenGL/ALSA development packages and starts Xvfb on `DISPLAY=:99.0`, because GLFW initializes
+  when native packages are loaded even for non-visual tests and headless verification. A separate
+  `ubuntu-24.04` `web-release` job installs the pinned
   Binaryen release and `brotli` CLI, runs `build_web.sh --release`, applies the compressed-size gate, validates
   the complete `web/` artifact, runs `tools/run_wasm_go_tests.mjs` and
   `tools/run_wasm_checkpoint.mjs` — the latter uploading `reference-checkpoints.json` for the
@@ -7773,8 +7775,8 @@ state, operation FIFO ordering, and deletion interrupted between tombstone publi
   quick-save/reload path, and fail on a page error, panic, unexpected `console.error`, timeout, or
   restored-`E2ESummary` mismatch. Playwright, Node, and Chromium are CI/test tools only and are absent
   from `web/`.
-  Display-required screenshot comparisons remain outside this matrix unless a dedicated Xvfb lane
-  is added.
+  Xvfb satisfies native package initialization only; display-required screenshot comparisons remain
+  outside this matrix unless a dedicated visual-verification step is added.
 - **GitHub Pages is the web release destination.** The repository's Pages source is configured once
   as **GitHub Actions**. Step 13 adds the Pages publication wiring only after step 12 and the
   prepublication release-readiness checks are green. On a push to `main` with that wiring present,
@@ -8999,9 +9001,10 @@ establish all five.
 
 ### Display-required visual smoke test
 
-The screenshot path boots Ebitengine and therefore requires a real graphics context. It
-is a local/manual check by default, or a separate CI lane configured with a virtual display such as
-Xvfb; it is not part of the headless gate above.
+The screenshot path boots Ebitengine and therefore requires a real graphics context. It is a
+local/manual check by default, or a dedicated CI step configured to assert output under a virtual
+display such as Xvfb; merely starting Xvfb for package initialization does not add that visual check
+to the headless gate above.
 
 ```bash
 go run . -screenshot /tmp/a2i.png -turns 20
