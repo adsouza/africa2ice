@@ -458,9 +458,6 @@ func (g *Game) acceptCompletedTurn(frame *gameapi.Frame) {
 		case hasCurrentMacroContext(frame):
 			note, _ := currentMacroFieldNote(frame)
 			g.setFieldNote(note)
-		case hasCurrentRegionalPulse(frame, g.selectedBand):
-			note, _ := currentRegionalPulseFieldNote(frame, g.selectedBand)
-			g.setFieldNote(note)
 		case crossedTobaMarker(previous, frame):
 			g.setFieldNote(ui.TobaFieldNote())
 		case previous != nil && previous.Climate.Epoch != frame.Climate.Epoch:
@@ -469,6 +466,9 @@ func (g *Game) acceptCompletedTurn(frame *gameapi.Frame) {
 			}
 		case hasNewEvent:
 			g.setFieldNote(ui.EventFieldNote(newestEvent))
+		case hasCurrentRegionalPulse(frame, g.selectedBand):
+			note, _ := currentRegionalPulseFieldNote(frame, g.selectedBand)
+			g.setFieldNote(note)
 		}
 		return
 	}

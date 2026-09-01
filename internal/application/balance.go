@@ -106,7 +106,7 @@ func BuildMoistureBalanceReport() (MoistureBalanceReport, error) {
 		report.Samples = append(report.Samples, sample)
 	}
 	report.DerivedDwellTurns = int(math.Ceil(math.Log(0.10) / math.Log(1-domain.FaunaRegenerationRate)))
-	report.FaunaNinetyPercentTurns = report.DerivedDwellTurns
+	report.FaunaNinetyPercentTurns = faunaNinetyPercentRecoveryTurns(domain.FaunaRegenerationRate)
 	report.ConfiguredDwellTurns = domain.MinBiomeDwellTurns
 	report.DesertResidency, err = desertResidencyReport(grid, report.Seed)
 	if err != nil {
@@ -117,6 +117,19 @@ func BuildMoistureBalanceReport() (MoistureBalanceReport, error) {
 		return MoistureBalanceReport{}, err
 	}
 	return report, nil
+}
+
+// faunaNinetyPercentRecoveryTurns measures the discrete toward-cap recurrence
+// independently of the logarithmic dwell-floor derivation. Keeping both paths
+// lets the balance gate catch a changed recurrence or an off-by-one derivation.
+func faunaNinetyPercentRecoveryTurns(rate float64) int {
+	stock := 0.0
+	for turns := 0; ; turns++ {
+		if stock >= 0.90 {
+			return turns
+		}
+		stock += rate * (1 - stock)
+	}
 }
 
 func moistureBalanceSample(grid *domain.Grid, seed uint64, turn int) (MoistureBalanceSample, error) {
@@ -169,6 +182,17 @@ func desertResidencyReport(grid *domain.Grid, seed uint64) (DesertResidencyRepor
 		history[turn] = habitat
 	}
 	best := DesertResidencyReport{}
+	for _, window := range qualifyingDesertWindows(grid, history) {
+		candidate := simulateDesertWindow(grid, history, seed, window)
+		if !best.Found || candidate.EndingHealth > best.EndingHealth || candidate.EndingHealth == best.EndingHealth && candidate.EndingPopulation > best.EndingPopulation || candidate.EndingHealth == best.EndingHealth && candidate.EndingPopulation == best.EndingPopulation && candidate.TileID < best.TileID {
+			best = candidate
+		}
+	}
+	return best, nil
+}
+
+func qualifyingDesertWindows(grid *domain.Grid, history []*domain.Habitat) []desertWindow {
+	windows := make([]desertWindow, 0)
 	for id := range domain.TileCount {
 		geography, _ := grid.Tile(domain.TileID(id))
 		if !geography.Land {
@@ -183,17 +207,13 @@ func desertResidencyReport(grid *domain.Grid, seed uint64) (DesertResidencyRepor
 				endDate, _ := domain.CampaignDate(end)
 				years := startDate.YearBP - endDate.YearBP
 				if years >= 10_500 {
-					candidate := simulateDesertWindow(grid, history, seed, desertWindow{tileID: domain.TileID(id), region: geography.Region, startTurn: start, endTurn: end, years: years})
-					if !best.Found || candidate.EndingHealth > best.EndingHealth || candidate.EndingHealth == best.EndingHealth && candidate.EndingPopulation > best.EndingPopulation || candidate.EndingHealth == best.EndingHealth && candidate.EndingPopulation == best.EndingPopulation && candidate.TileID < best.TileID {
-						best = candidate
-					}
+					windows = append(windows, desertWindow{tileID: domain.TileID(id), region: geography.Region, startTurn: start, endTurn: end, years: years})
 					break
 				}
 			}
-			break
 		}
 	}
-	return best, nil
+	return windows
 }
 
 func simulateDesertWindow(grid *domain.Grid, history []*domain.Habitat, seed uint64, window desertWindow) DesertResidencyReport {

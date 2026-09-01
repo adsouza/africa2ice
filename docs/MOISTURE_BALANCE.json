@@ -128,19 +128,19 @@
   "fauna_ninety_percent_turns": 15,
   "desert_residency": {
     "found": true,
-    "tile_id": 776,
-    "region": "Frangistan",
-    "start_turn": 0,
-    "end_turn": 35,
+    "tile_id": 5302,
+    "region": "Rest of Africa",
+    "start_turn": 26,
+    "end_turn": 61,
     "calendar_years": 10500,
     "population": 40,
-    "ending_population": 11.571534611330247,
+    "ending_population": 20.879789718120072,
     "ending_health": 1,
     "survived": true,
-    "minimum_food_coverage": 0.7127311955288601,
-    "mean_food_coverage": 0.9334708466439383,
-    "minimum_water_coverage": 0.8333333333333334,
-    "mean_water_coverage": 0.9837670735561969
+    "minimum_food_coverage": 0.7009451905771403,
+    "mean_food_coverage": 0.9393647454548937,
+    "minimum_water_coverage": 0.78125,
+    "mean_water_coverage": 0.9803868225415646
   },
   "recovery": {
     "half_cycle_end_turn": 35,

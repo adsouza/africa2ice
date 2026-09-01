@@ -514,6 +514,22 @@ func TestCompletedTurnFocusesTobaAndClimateContextOnlyWhenCrossed(t *testing.T) 
 	}
 }
 
+func TestCompletedTurnPrioritizesEpochTransitionOverRegionalPulse(t *testing.T) {
+	before := migrationPreviewFrame()
+	after := cloneAppFrame(before)
+	after.Turn++
+	after.YearBP -= 300
+	after.Climate.Epoch = gameapi.AridTransition
+	region := after.Tiles[after.Bands[0].TileID].Region
+	after.Climate.RegionalAbrupt[region] = 0.2
+	game := New(&gameStub{frame: before})
+
+	game.acceptCompletedTurn(after)
+	if !strings.Contains(game.fieldNote.Topic, "Arid Transition") {
+		t.Fatalf("regional pulse displaced epoch transition note: %#v", game.fieldNote)
+	}
+}
+
 func TestStartupResumeLoadsNewestQuickOrAutosave(t *testing.T) {
 	initial := migrationPreviewFrame()
 	restored := migrationPreviewFrame()
