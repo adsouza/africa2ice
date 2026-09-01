@@ -51,6 +51,9 @@ jobs:
       - name: Audit citations and third-party licenses
         if: runner.os == 'Linux'
         run: go run ./tools/check_audits
+      - name: Test the release tagging preflight
+        if: runner.os == 'Linux'
+        run: ./tools/release_test.sh
       - name: Produce deterministic reference checkpoints
         shell: bash
         run: go run . -headless -turns 400 -seed 0x9e3779b97f4a7c15 -policy reference -checkpoint-json reference-checkpoints.json > reference-headless.log

@@ -4,6 +4,14 @@ on:
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
+  # Dry run. Exercises verification, the native matrix, packaging, archive
+  # manifests, and checksums against the current branch, stopping short of
+  # publishing: the tag gate below and the release-creating step at the end are
+  # the only two steps restricted to a tag push. Archives are then named after
+  # the branch rather than a tag, which the suffix matching downstream ignores;
+  # dispatch from a branch whose name has no slash, since the name becomes part
+  # of the archive filename.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,6 +26,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Require an annotated tag reachable from main
+        if: github.event_name == 'push'
         shell: bash
         run: |
           test "$(git cat-file -t "$GITHUB_REF_NAME")" = tag
@@ -103,11 +112,6 @@ jobs:
             platform: windows
             executable: africa2ice.exe
             format: zip
-          - os: macos-15-intel
-            goarch: amd64
-            platform: macos
-            executable: africa2ice
-            format: tar
           - os: macos-15
             goarch: arm64
             platform: macos
@@ -176,7 +180,7 @@ jobs:
         run: |
           chromium=checkpoints/chromium/reference-checkpoints.json
           test -s "$chromium"
-          for target in linux-amd64 windows-amd64 macos-amd64 macos-arm64; do
+          for target in linux-amd64 windows-amd64 macos-arm64; do
             native="checkpoints/native/tag-checkpoints-$target/tag-reference-checkpoints.json"
             test -s "$native"
             cmp "$chromium" "$native"
@@ -197,17 +201,18 @@ jobs:
       - name: Verify archive manifests and create checksums
         shell: bash
         run: |
-          test "$(find release -maxdepth 1 -type f | wc -l)" -eq 4
+          test "$(find release -maxdepth 1 -type f | wc -l)" -eq 3
           for archive in release/*; do
             case "$archive" in
               *-windows-amd64.zip) executable=africa2ice.exe ;;
-              *-linux-amd64.tar.gz | *-macos-amd64.tar.gz | *-macos-arm64.tar.gz) executable=africa2ice ;;
+              *-linux-amd64.tar.gz | *-macos-arm64.tar.gz) executable=africa2ice ;;
               *) echo "unexpected release payload: $archive" >&2; exit 1 ;;
             esac
             ./tools/check_release_archive.sh "$archive" "$executable"
           done
           (cd release && sha256sum africa2ice-* > SHA256SUMS && sha256sum --check SHA256SUMS)
       - name: Publish immutable GitHub release
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
