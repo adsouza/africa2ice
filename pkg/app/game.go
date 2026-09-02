@@ -829,7 +829,7 @@ func (g *Game) ensureSelection() {
 	if g.frame == nil {
 		return
 	}
-	bandIDs := render.SapiensBandIDsByAttention(g.frame.Bands)
+	bandIDs := ui.SapiensBandIDsByAttention(g.frame.Bands)
 	if len(bandIDs) > 0 {
 		g.selectedBand = bandIDs[0]
 	}
@@ -851,7 +851,7 @@ func (g *Game) selectSapiens(offset int) {
 		g.showNotice("Apply or discard workforce changes")
 		return
 	}
-	bandIDs := render.SapiensBandIDsByAttention(g.frame.Bands)
+	bandIDs := ui.SapiensBandIDsByAttention(g.frame.Bands)
 	selectedIndex := -1
 	for index, bandID := range bandIDs {
 		if bandID == g.selectedBand {
