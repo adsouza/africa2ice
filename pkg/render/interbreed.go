@@ -2,7 +2,6 @@ package render
 
 import (
 	"image/color"
-	"strconv"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 )
@@ -39,28 +38,6 @@ func interbreedStatus(band gameapi.Band) interbreedSummary {
 		return interbreedSummary{}
 	}
 	return interbreedSummary{state: interbreedAvailable, targetID: band.InterbreedCandidateIDs[0]}
-}
-
-// spatialControlHint lists only the keys that will actually do something. An
-// advertised control that silently does nothing is worse than an absent one.
-func spatialControlHint(status interbreedSummary) string {
-	if status.state == interbreedAvailable {
-		return "N: split  ·  I: interbreed"
-	}
-	return "N: split"
-}
-
-// interbreedPanelLine describes the band's interbreeding state for the band
-// panel, or returns "" when there is nothing worth a line.
-func interbreedPanelLine(status interbreedSummary) string {
-	switch status.state {
-	case interbreedAvailable:
-		return "Archaic band here — press I to interbreed"
-	case interbreedAccepted:
-		return "Interbreeding with archaic band " + strconv.FormatUint(uint64(status.targetID), 10)
-	default:
-		return ""
-	}
 }
 
 // interbreedCandidateTiles returns the tiles holding an archaic band that the

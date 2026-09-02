@@ -7,13 +7,6 @@ import (
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 )
 
-const (
-	newCampaignButtonX      = 490
-	newCampaignButtonY      = 494
-	newCampaignButtonWidth  = 300
-	newCampaignButtonHeight = 46
-)
-
 // EndScene contains UI-authored terminal presentation content for the drawing
 // adapter. It is transient and is never simulation or save state.
 type EndScene struct {
@@ -31,13 +24,6 @@ type EndScene struct {
 	ArchaicBands       int
 	RegionsEstablished int
 	DestinationCount   int
-}
-
-// NewCampaignButtonContains reports whether a logical-screen point activates
-// the terminal scene's new-campaign control.
-func NewCampaignButtonContains(x, y int) bool {
-	return x >= newCampaignButtonX && x < newCampaignButtonX+newCampaignButtonWidth &&
-		y >= newCampaignButtonY && y < newCampaignButtonY+newCampaignButtonHeight
 }
 
 func (scene *MapScene) drawEndScene(screen logicalCanvas, ending EndScene) {
@@ -62,11 +48,6 @@ func (scene *MapScene) drawEndScene(screen logicalCanvas, ending EndScene) {
 	scene.drawText(screen, ending.Destinations, 284, 368, 14, color.White)
 	scene.drawText(screen, "EPILOGUE", 284, 419, 12, accent)
 	scene.drawText(screen, ending.Epilogue, 284, 443, 14, color.RGBA{R: 226, G: 231, B: 227, A: 255})
-
-	vector.FillRect(screen, newCampaignButtonX, newCampaignButtonY, newCampaignButtonWidth, newCampaignButtonHeight, color.RGBA{R: 48, G: 66, B: 70, A: 255}, false)
-	vector.StrokeRect(screen, newCampaignButtonX, newCampaignButtonY, newCampaignButtonWidth, newCampaignButtonHeight, 2, accent, false)
-	scene.drawText(screen, "NEW CAMPAIGN   [N]", 548, 507, 16, color.White)
-	scene.drawText(screen, "Ctrl/Cmd+S saves this final state", 509, 551, 11, color.RGBA{R: 177, G: 190, B: 188, A: 255})
 }
 
 func endSceneAccent(result gameapi.CampaignResult) color.RGBA {

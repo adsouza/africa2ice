@@ -77,3 +77,45 @@ func TestMoveDoneAndBandsNeedingMove(t *testing.T) {
 		t.Fatalf("BandsNeedingMove = %d, want 1", got)
 	}
 }
+
+// The attention order's later tie-breaks only decide between bands that already
+// agree on condition tier and health, so each needs its own fixture. Coverage
+// moved here when pkg/render's band window was deleted.
+func TestSapiensBandAttentionTieBreaksOnDeficitMortalityAndLoss(t *testing.T) {
+	order := SapiensBandIDsByAttention
+	check := func(t *testing.T, got, want []gameapi.BandID) {
+		t.Helper()
+		if len(got) != len(want) {
+			t.Fatalf("order = %v, want %v", got, want)
+		}
+		for index := range want {
+			if got[index] != want[index] {
+				t.Fatalf("order = %v, want %v", got, want)
+			}
+		}
+	}
+
+	t.Run("larger food deficit first", func(t *testing.T) {
+		bands := []gameapi.Band{
+			{ID: 1, Species: gameapi.HomoSapiens, Population: 10, Health: 0.9, LastFoodReport: gameapi.FoodTurnReport{Turn: 3, RequiredFU: 100, DeficitFU: 5}},
+			{ID: 2, Species: gameapi.HomoSapiens, Population: 10, Health: 0.9, LastFoodReport: gameapi.FoodTurnReport{Turn: 3, RequiredFU: 100, DeficitFU: 20}},
+		}
+		check(t, order(bands), []gameapi.BandID{2, 1})
+	})
+
+	t.Run("higher projected mortality first", func(t *testing.T) {
+		bands := []gameapi.Band{
+			{ID: 1, Species: gameapi.HomoSapiens, Population: 10, Health: 0.9, SeasonalMortalityRate: 0.003, ChronicMortalityRate: 0.002},
+			{ID: 2, Species: gameapi.HomoSapiens, Population: 10, Health: 0.9, SeasonalMortalityRate: 0.004, ChronicMortalityRate: 0.002},
+		}
+		check(t, order(bands), []gameapi.BandID{2, 1})
+	})
+
+	t.Run("larger proportional population loss first", func(t *testing.T) {
+		bands := []gameapi.Band{
+			{ID: 1, Species: gameapi.HomoSapiens, Population: 99, Health: 0.9, LastOutcomeReport: gameapi.OutcomeReport{Turn: 3, StartingPopulation: 100, EndingPopulation: 99, StartingHealth: 0.9, EndingHealth: 0.9}},
+			{ID: 2, Species: gameapi.HomoSapiens, Population: 80, Health: 0.9, LastOutcomeReport: gameapi.OutcomeReport{Turn: 3, StartingPopulation: 100, EndingPopulation: 80, StartingHealth: 0.9, EndingHealth: 0.9}},
+		}
+		check(t, order(bands), []gameapi.BandID{2, 1})
+	})
+}

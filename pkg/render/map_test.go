@@ -38,27 +38,6 @@ func TestMapTileAt(t *testing.T) {
 	}
 }
 
-func TestFormatHealthDelta(t *testing.T) {
-	tests := []struct {
-		name   string
-		points float64
-		want   string
-	}{
-		{name: "zero keeps precision", points: 0, want: "+0.00pp"},
-		{name: "small gain", points: 0.054, want: "+0.05pp"},
-		{name: "small loss", points: -0.054, want: "-0.05pp"},
-		{name: "threshold", points: 0.1, want: "+0.1pp"},
-		{name: "large loss", points: -2.36, want: "-2.4pp"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := formatHealthDelta(test.points); got != test.want {
-				t.Fatalf("formatHealthDelta(%v) = %q, want %q", test.points, got, test.want)
-			}
-		})
-	}
-}
-
 func TestSelectedBandInFrame(t *testing.T) {
 	frame := &gameapi.Frame{Bands: []gameapi.Band{{ID: 3, Population: 30}, {ID: 8, Population: 80}}}
 	tests := []struct {
@@ -110,132 +89,10 @@ func TestClampRender(t *testing.T) {
 	}
 }
 
-func TestOverlayAndFieldNotesHitTargets(t *testing.T) {
-	for row, y := range []int{228, 264, 300} {
-		if got := MenuOverlayRowAt(500, y, 3); got != row {
-			t.Fatalf("overlay row at y=%d = %d, want %d", y, got, row)
-		}
-	}
-	if MenuOverlayRowAt(100, 228, 3) != -1 || MenuOverlayRowAt(500, 336, 3) != -1 {
-		t.Fatal("overlay accepted a point outside its rows")
-	}
-	if !FieldNotesToggleContains(1200, 90) || FieldNotesToggleContains(900, 90) {
-		t.Fatal("Field Notes top-bar hit target is inconsistent")
-	}
-	if !FieldNotesPanelContains(1000, 500) || FieldNotesPanelContains(1000, 620) {
-		t.Fatal("Field Notes scroll hit target is inconsistent")
-	}
-	if got, ok := SettingsVolumeAt(settingsSliderLeft, menuOverlayY+menuRowTextOffsetY); !ok || got != 0 {
-		t.Fatalf("settings slider left = (%v, %t), want (0, true)", got, ok)
-	}
-	if got, ok := SettingsVolumeAt(settingsSliderRight, menuOverlayY+menuRowTextOffsetY); !ok || got != 1 {
-		t.Fatalf("settings slider right = (%v, %t), want (1, true)", got, ok)
-	}
-	if _, ok := SettingsVolumeAt(settingsSliderLeft, menuOverlayY+menuRowTextOffsetY+menuRowHeight); ok {
-		t.Fatal("settings volume accepted a point in the mute row")
-	}
-}
-
-func TestCampaignEraLabelsCoverClosedCatalog(t *testing.T) {
-	wantRanges := [gameapi.CampaignEraCount]string{"80,000–50,000 BP", "50,000–35,000 BP", "35,000–25,000 BP", "25,000–20,000 BP"}
-	for era := gameapi.CampaignEra(0); era < gameapi.CampaignEraCount; era++ {
-		label := campaignEraLabel(era)
-		if !strings.Contains(label, era.String()) || !strings.Contains(label, wantRanges[era]) {
-			t.Fatalf("campaign era %d label = %q", era, label)
-		}
-	}
-	if got := campaignEraLabel(gameapi.CampaignEraCount); got != gameapi.CampaignEraCount.String() {
-		t.Fatalf("out-of-range campaign era label = %q", got)
-	}
-}
-
-func TestResearchLegendNamesEveryNodeColorState(t *testing.T) {
-	want := []string{"current", "learned", "available", "locked"}
-	seenColors := make(map[color.RGBA]struct{}, len(researchLegendEntries))
-	for index, entry := range researchLegendEntries {
-		if entry.label != want[index] {
-			t.Fatalf("research legend entry %d = %q, want %q", index, entry.label, want[index])
-		}
-		border, _, _ := researchNodeColors(entry.option)
-		seenColors[border] = struct{}{}
-	}
-	if len(seenColors) != len(researchLegendEntries) {
-		t.Fatalf("research legend has %d distinct colors for %d states", len(seenColors), len(researchLegendEntries))
-	}
-}
-
-func TestFieldNoteWrappingPreservesWordsAndBoundsLines(t *testing.T) {
-	value := "Historical context uses several words that need wrapping.\nHint remains separate."
-	lines := wrapTextLines(value, 24)
-	if len(lines) < 3 || strings.Join(lines, " ") != strings.ReplaceAll(value, "\n", " ") {
-		t.Fatalf("wrapped lines = %#v", lines)
-	}
-	for _, line := range lines {
-		if len([]rune(line)) > 24 {
-			t.Fatalf("overlong wrapped line %q", line)
-		}
-	}
-}
-
-func TestFieldNoteMaxScrollUsesRenderedLineLayout(t *testing.T) {
-	note := FieldNote{Introduction: strings.Repeat("bounded words ", 30)}
-	want := max(0, len(fieldNoteLines(note))-visibleFieldNoteLines)
-	if got := FieldNoteMaxScroll(note); got != want || got == 0 {
-		t.Fatalf("FieldNoteMaxScroll = %d, want non-zero %d", got, want)
-	}
-}
-
-func TestFieldNoteWrapUsesAvailablePanelWidth(t *testing.T) {
-	note := FieldNote{Introduction: "The campaign begins in East Africa.", Context: "It is 80,000 years before present; the map reveals as sapiens expand."}
-	lines := fieldNoteLines(note)
-	if len(lines) != 3 {
-		t.Fatalf("representative Field Note wrapped into %d lines, want 3: %#v", len(lines), lines)
-	}
-	for _, line := range lines {
-		if len([]rune(line)) > fieldNoteWrapLimit {
-			t.Fatalf("Field Note line exceeds wrap limit: %q", line)
-		}
-	}
-}
-
-func TestCleanWorkforceDraftHasNoPersistentStatus(t *testing.T) {
-	clean := WorkforceDraft{Valid: true}
-	if status, _ := workforceDraftStatus(clean); status != "" {
-		t.Fatalf("clean workforce status = %q, want no permanent badge", status)
-	}
-	dirty := clean
-	dirty.Dirty = true
-	if status, _ := workforceDraftStatus(dirty); status != "DIRTY" {
-		t.Fatalf("dirty workforce status = %q, want DIRTY", status)
-	}
-	invalid := WorkforceDraft{AllocationBP: [gameapi.AssignmentCount]uint16{2_100, 2_000, 2_000, 2_000, 2_000}}
-	if status, _ := workforceDraftStatus(invalid); status != "+1%" {
-		t.Fatalf("invalid workforce status = %q, want +1%%", status)
-	}
-}
-
-func TestRecentEventLinesShowNewestFirstAndStayBounded(t *testing.T) {
-	events := []gameapi.Event{
-		{Turn: 4, Kind: gameapi.EventMigration, Summary: "The first event"},
-		{Turn: 7, Kind: gameapi.EventTechnology, Summary: "A deliberately long technology event summary"},
-		{Turn: 8, Kind: gameapi.EventAchievement, Summary: "The latest event"},
-	}
-	lines := recentEventLines(events, 2)
-	if len(lines) != 2 || !strings.HasPrefix(lines[0], "T8 · Achievement") || !strings.HasPrefix(lines[1], "T7 · Technology") {
-		t.Fatalf("recent event lines = %#v", lines)
-	}
-	if !strings.HasSuffix(lines[1], "A deliberately long technology event summary") {
-		t.Fatalf("recentEventLines truncated %q; width is the caller's concern", lines[1])
-	}
-	if empty := recentEventLines(nil, 2); !reflect.DeepEqual(empty, []string{"No campaign events yet."}) {
-		t.Fatalf("empty event feed = %#v", empty)
-	}
-}
-
 func TestMapSceneDrawsTerrainVisibilityBandsAndPassagesOffscreen(t *testing.T) {
 	frame := representativeRenderFrame()
 	wantFrame := cloneRenderFrame(frame)
-	screen := renderMapOffscreen(t, frame, 7, MigrationPreview{}, FieldNote{}, false, EndScene{}, "")
+	screen := renderMapOffscreen(t, frame, 7, MigrationPreview{}, EndScene{}, "")
 	defer screen.Deallocate()
 	if !reflect.DeepEqual(frame, wantFrame) {
 		t.Fatal("drawing mutated the accepted frame")
@@ -278,7 +135,7 @@ func TestMapSceneDrawsEscarpmentBoundaryOffscreen(t *testing.T) {
 	frame.Tiles[1] = gameapi.Tile{ID: 1, X: 1, Y: 0, Land: true, Explored: true, Biome: gameapi.MountainousHighlands}
 	frame.Escarpments = []gameapi.Escarpment{{Name: "Test Front", First: 0, Second: 1}}
 	wantFrame := cloneRenderFrame(frame)
-	image := renderMapOffscreen(t, frame, 7, MigrationPreview{}, FieldNote{}, false, EndScene{}, "")
+	image := renderMapOffscreen(t, frame, 7, MigrationPreview{}, EndScene{}, "")
 	defer image.Deallocate()
 	if !reflect.DeepEqual(frame, wantFrame) {
 		t.Fatal("drawing the escarpment mutated the accepted frame")
@@ -300,8 +157,8 @@ func TestMapSceneCachesTerrainByTerrainRevisionAndAridity(t *testing.T) {
 	defer screen.Deallocate()
 	scene := NewMapScene()
 
-	scene.Draw(screen, frame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
-	scene.Draw(screen, frame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
+	scene.Draw(screen, frame, 7, MigrationPreview{}, "", EndScene{}, false)
+	scene.Draw(screen, frame, 7, MigrationPreview{}, "", EndScene{}, false)
 	if scene.terrainRebuilds != 1 {
 		t.Fatalf("terrain rebuilds for unchanged accepted frame = %d, want 1", scene.terrainRebuilds)
 	}
@@ -311,21 +168,21 @@ func TestMapSceneCachesTerrainByTerrainRevisionAndAridity(t *testing.T) {
 
 	nextFrame := cloneRenderFrame(frame)
 	nextFrame.WorldRevision++
-	scene.Draw(screen, nextFrame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
+	scene.Draw(screen, nextFrame, 7, MigrationPreview{}, "", EndScene{}, false)
 	if scene.terrainRebuilds != 1 {
 		t.Fatalf("terrain rebuilds after planning-only frame replacement = %d, want 1", scene.terrainRebuilds)
 	}
 
 	nextFrame = cloneRenderFrame(nextFrame)
 	nextFrame.TerrainRevision++
-	scene.Draw(screen, nextFrame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
+	scene.Draw(screen, nextFrame, 7, MigrationPreview{}, "", EndScene{}, false)
 	if scene.terrainRebuilds != 2 {
 		t.Fatalf("terrain rebuilds after terrain revision = %d, want 2", scene.terrainRebuilds)
 	}
 
 	nextFrame = cloneRenderFrame(nextFrame)
 	nextFrame.Climate.AridityIndex += 0.1
-	scene.Draw(screen, nextFrame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
+	scene.Draw(screen, nextFrame, 7, MigrationPreview{}, "", EndScene{}, false)
 	if scene.terrainRebuilds != 3 {
 		t.Fatalf("terrain rebuilds after water-grade change = %d, want 3", scene.terrainRebuilds)
 	}
@@ -369,7 +226,7 @@ func TestMapSceneBuildsPhysicalPresentationForAHighDPITarget(t *testing.T) {
 	highDPI := ebiten.NewImage(2560, 1440)
 	defer highDPI.Deallocate()
 	scene := NewMapScene()
-	scene.Draw(highDPI, frame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
+	scene.Draw(highDPI, frame, 7, MigrationPreview{}, "", EndScene{}, false)
 	if scene.frameWidth != 2560 || scene.frameHeight != 1440 {
 		t.Fatalf("cached target dimensions = %dx%d", scene.frameWidth, scene.frameHeight)
 	}
@@ -389,15 +246,15 @@ func TestMapSceneRebuildsTerrainOnlyWhenPhysicalScaleChanges(t *testing.T) {
 	highDPI := ebiten.NewImage(2560, 1440)
 	defer highDPI.Deallocate()
 
-	scene.Draw(standard, frame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
+	scene.Draw(standard, frame, 7, MigrationPreview{}, "", EndScene{}, false)
 	if scene.terrainRebuilds != 1 || scene.terrainScale != 1 {
 		t.Fatalf("standard terrain cache = %d rebuilds at scale %v", scene.terrainRebuilds, scene.terrainScale)
 	}
-	scene.Draw(highDPI, frame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
+	scene.Draw(highDPI, frame, 7, MigrationPreview{}, "", EndScene{}, false)
 	if scene.terrainRebuilds != 2 || scene.terrainScale != 2 {
 		t.Fatalf("high-DPI terrain cache = %d rebuilds at scale %v", scene.terrainRebuilds, scene.terrainScale)
 	}
-	scene.Draw(highDPI, frame, 7, MigrationPreview{}, "", FieldNote{}, false, EndScene{}, false)
+	scene.Draw(highDPI, frame, 7, MigrationPreview{}, "", EndScene{}, false)
 	if scene.terrainRebuilds != 2 {
 		t.Fatalf("unchanged high-DPI draw rebuilt terrain %d times", scene.terrainRebuilds)
 	}
@@ -405,27 +262,21 @@ func TestMapSceneRebuildsTerrainOnlyWhenPhysicalScaleChanges(t *testing.T) {
 
 func TestMapSceneDrawsQueuedAndPreviewMigrationsOffscreen(t *testing.T) {
 	baseFrame := representativeRenderFrame()
-	base := renderMapOffscreen(t, baseFrame, 7, MigrationPreview{}, FieldNote{}, false, EndScene{}, "")
+	base := renderMapOffscreen(t, baseFrame, 7, MigrationPreview{}, EndScene{}, "")
 	defer base.Deallocate()
 
 	queuedFrame := cloneRenderFrame(baseFrame)
 	queuedFrame.Bands[0].HasQueuedMigration = true
 	queuedFrame.Bands[0].QueuedMigration = 3
-	queued := renderMapOffscreen(t, queuedFrame, 7, MigrationPreview{}, FieldNote{}, false, EndScene{}, "")
+	queued := renderMapOffscreen(t, queuedFrame, 7, MigrationPreview{}, EndScene{}, "")
 	defer queued.Deallocate()
-	if summary := targetTileSummary(queuedFrame, &queuedFrame.Bands[0], MigrationPreview{}, TileHover{}); !strings.Contains(summary.status, "queued") {
-		t.Fatalf("queued target status = %q", summary.status)
-	}
 	if !queuedFrame.Bands[0].HasQueuedMigration || queuedFrame.Bands[0].QueuedMigration != 3 {
 		t.Fatalf("draw changed queued migration state: %#v", queuedFrame.Bands[0])
 	}
 
 	preview := MigrationPreview{BandID: 7, TileID: 4, Visible: true}
-	previewed := renderMapOffscreen(t, baseFrame, 7, preview, FieldNote{}, false, EndScene{}, "")
+	previewed := renderMapOffscreen(t, baseFrame, 7, preview, EndScene{}, "")
 	defer previewed.Deallocate()
-	if summary := targetTileSummary(baseFrame, &baseFrame.Bands[0], preview, TileHover{}); !strings.Contains(summary.status, "arrow cursor") || !strings.Contains(summary.status, "reachable") {
-		t.Fatalf("preview target status = %q", summary.status)
-	}
 	if baseFrame.Bands[0].HasQueuedMigration {
 		t.Fatal("drawing a preview queued it in authoritative state")
 	}
@@ -438,25 +289,8 @@ func TestMapSceneDrawsQueuedAndPreviewMigrationsOffscreen(t *testing.T) {
 	}
 }
 
-func TestMapSceneDrawsFieldNotesAndTerminalVariantsOffscreen(t *testing.T) {
+func TestMapSceneDrawsTerminalVariantsOffscreen(t *testing.T) {
 	frame := representativeRenderFrame()
-	note := FieldNote{
-		Topic: "Cold adaptation", Introduction: "A visible field note.", Context: "Scientific context.",
-		GameEffect: "A modeled effect.", Hint: "A useful hint.", Celebration: true,
-	}
-
-	visible := renderMapOffscreen(t, frame, 7, MigrationPreview{}, note, true, EndScene{}, "Technology learned")
-	defer visible.Deallocate()
-	if panel, heading := fieldNotePanelColors(note.Celebration); panel != (color.RGBA{R: 45, G: 39, B: 24, A: 255}) || heading != (color.RGBA{R: 255, G: 213, B: 92, A: 255}) {
-		t.Fatalf("celebration colors = panel %v, heading %v", panel, heading)
-	}
-
-	hidden := renderMapOffscreen(t, frame, 7, MigrationPreview{}, note, false, EndScene{}, "")
-	defer hidden.Deallocate()
-	if panel, heading := fieldNotePanelColors(false); panel != (color.RGBA{R: 19, G: 28, B: 34, A: 255}) || heading != (color.RGBA{R: 203, G: 172, B: 104, A: 255}) {
-		t.Fatalf("ordinary Field Notes colors = panel %v, heading %v", panel, heading)
-	}
-
 	endings := []struct {
 		name   string
 		result gameapi.CampaignResult
@@ -473,13 +307,10 @@ func TestMapSceneDrawsFieldNotesAndTerminalVariantsOffscreen(t *testing.T) {
 				Epilogue: "The journey is recorded.", Destinations: "Levant · South Asia", Turn: 400, YearBP: 20_000,
 				SapiensPopulation: 840, ArchaicPopulation: 190, SapiensBands: 8, ArchaicBands: 2, RegionsEstablished: 7, DestinationCount: 2,
 			}
-			image := renderMapOffscreen(t, frame, 7, MigrationPreview{}, note, true, ending, "")
+			image := renderMapOffscreen(t, frame, 7, MigrationPreview{}, ending, "")
 			defer image.Deallocate()
 			if got := endSceneAccent(test.result); got != test.accent {
 				t.Fatalf("end-scene accent = %v, want %v", got, test.accent)
-			}
-			if !NewCampaignButtonContains(newCampaignButtonX+5, newCampaignButtonY+5) {
-				t.Fatal("rendered new-campaign button has no active interior")
 			}
 		})
 	}
@@ -552,12 +383,12 @@ func cloneRenderFrame(frame *gameapi.Frame) *gameapi.Frame {
 	return &clone
 }
 
-func renderMapOffscreen(t *testing.T, frame *gameapi.Frame, selected gameapi.BandID, preview MigrationPreview, note FieldNote, notesVisible bool, ending EndScene, notice string) *ebiten.Image {
+func renderMapOffscreen(t *testing.T, frame *gameapi.Frame, selected gameapi.BandID, preview MigrationPreview, ending EndScene, notice string) *ebiten.Image {
 	t.Helper()
 	screen := ebiten.NewImage(1280, 720)
 	scene := NewMapScene()
 	scene.Update()
-	scene.Draw(screen, frame, selected, preview, notice, note, notesVisible, ending, false)
+	scene.Draw(screen, frame, selected, preview, notice, ending, false)
 	if screen.Bounds() != image.Rect(0, 0, 1280, 720) {
 		t.Fatalf("offscreen render bounds = %v", screen.Bounds())
 	}
@@ -590,7 +421,7 @@ func TestPassageOverlayShowsOnlyLocalGlyphUntilBothEndpointsExplored(t *testing.
 	frame = representativeRenderFrame()
 	frame.Passages = append(frame.Passages, gameapi.Passage{ID: gameapi.BeringStrait, From: 0, To: 2, Status: gameapi.PassageLocked, Explored: true})
 	wantFrame := cloneRenderFrame(frame)
-	screen := renderMapOffscreen(t, frame, 7, MigrationPreview{}, FieldNote{}, false, EndScene{}, "")
+	screen := renderMapOffscreen(t, frame, 7, MigrationPreview{}, EndScene{}, "")
 	defer screen.Deallocate()
 	if !reflect.DeepEqual(frame, wantFrame) {
 		t.Fatal("drawing a one-endpoint passage mutated the accepted frame")
@@ -615,30 +446,5 @@ func TestNoticeWrapsToBoxWidthByMeasuredPixels(t *testing.T) {
 	}
 	if got := noticeBoxHeight(len(lines)); got <= noticeBoxHeight(1) {
 		t.Fatalf("box height for %d lines = %.1f, not taller than one line %.1f", len(lines), got, noticeBoxHeight(1))
-	}
-}
-
-func TestRecentEventLinesTruncateByMeasuredWidthNotRuneCount(t *testing.T) {
-	scene := NewMapScene()
-	face := &text.GoTextFace{Source: scene.faceSource, Size: eventLineFontSize}
-	// A real macro-episode line is ~70 runes: the old 52-rune cap cut it off
-	// while roughly a third of the Field Notes panel stayed empty.
-	realistic := recentEventLines([]gameapi.Event{{Turn: 123, Kind: gameapi.EventMacroEpisode, Summary: "Band 12 was affected by the Campanian eruption."}}, 1)[0]
-	if got := scene.truncateTextToWidth(realistic, eventLineFontSize, fieldNotesEventLineWidth); got != realistic {
-		t.Fatalf("realistic event line %q was truncated to %q", realistic, got)
-	}
-	if width, _ := text.Measure(realistic, face, 0); width > fieldNotesEventLineWidth {
-		t.Fatalf("test premise broken: realistic line measures %.1f px, over the %d px panel", width, fieldNotesEventLineWidth)
-	}
-	long := recentEventLines([]gameapi.Event{{Turn: 400, Kind: gameapi.EventMacroEpisode, Summary: strings.Repeat("an extremely long summary ", 6)}}, 1)[0]
-	got := scene.truncateTextToWidth(long, eventLineFontSize, fieldNotesEventLineWidth)
-	if !strings.HasSuffix(got, "…") || !strings.HasPrefix(long, strings.TrimSuffix(got, "…")) {
-		t.Fatalf("overlong line truncated to %q, want a prefix of the original plus an ellipsis", got)
-	}
-	if width, _ := text.Measure(got, face, 0); width > fieldNotesEventLineWidth {
-		t.Fatalf("truncated line %q still measures %.1f px, over %d px", got, width, fieldNotesEventLineWidth)
-	}
-	if narrow := scene.truncateTextToWidth(long, eventLineFontSize, 1); narrow != "…" {
-		t.Fatalf("no-room truncation = %q, want a bare ellipsis", narrow)
 	}
 }
