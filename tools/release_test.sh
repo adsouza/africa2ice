@@ -16,11 +16,15 @@
 
 set -eu
 
-release_script="$(cd "$(dirname "$0")" && pwd)/release.sh"
-test -x "$release_script" || {
-	echo "release_test: $release_script is missing or not executable" >&2
-	exit 2
-}
+tools_dir="$(cd "$(dirname "$0")" && pwd)"
+release_script="$tools_dir/release.sh"
+tag_script="$tools_dir/check_release_tag.sh"
+for script in "$release_script" "$tag_script"; do
+	test -x "$script" || {
+		echo "release_test: $script is missing or not executable" >&2
+		exit 2
+	}
+done
 
 work_root="$(mktemp -d "${TMPDIR:-/tmp}/africa2ice-release-test.XXXXXX")"
 trap 'rm -rf "$work_root"' EXIT HUP INT TERM
@@ -181,6 +185,96 @@ git -C "$work" remote set-url --push origin "$work_root/unreachable/absent.git"
 expect_refusal "reports a failed push" "failed" 0.0.1
 expect_equal "removes the local tag after a failed push" "" \
 	"$(git -C "$work" tag --list v0.0.1)"
+
+# --- tools/check_release_tag.sh ------------------------------------------------
+#
+# The workflow step this script replaces was reachable only by a real tag push,
+# so no dry run could execute it -- and it was unconditionally broken for the
+# whole time it sat there. The clobber case below is that regression: it replays
+# the fetch sequence actions/checkout actually performs, which rewrites
+# refs/tags/<tag> to point at the commit and destroys the annotation.
+
+# tag_fixture NAME sets $origin (bare), $seed (a pusher) and $runner (a
+# checkout-like clone with no local main).
+tag_fixture() {
+	origin="$work_root/$1/origin.git"
+	seed="$work_root/$1/seed"
+	runner="$work_root/$1/runner"
+	mkdir -p "$work_root/$1"
+	git init --quiet --bare -b main "$origin"
+	git init --quiet -b main "$seed"
+	echo seed >"$seed/f"
+	git -C "$seed" add f
+	git -C "$seed" commit --quiet --message Seed
+	git -C "$seed" remote add origin "$origin"
+	git -C "$seed" push --quiet origin main
+	git init --quiet -b main "$runner"
+	git -C "$runner" remote add origin "$origin"
+}
+
+# simulate_checkout TAG reproduces actions/checkout's three fetches, including
+# the third one that downgrades the tag ref to a lightweight ref.
+simulate_checkout() {
+	git -C "$runner" fetch --quiet --prune origin \
+		"+refs/heads/*:refs/remotes/origin/*" "+refs/tags/*:refs/tags/*"
+	checkout_sha=$(git -C "$runner" rev-parse "refs/tags/$1^{commit}")
+	git -C "$runner" fetch --quiet --no-tags --prune origin \
+		"+${checkout_sha}:refs/tags/$1"
+	git -C "$runner" checkout --quiet --force "refs/tags/$1"
+}
+
+# expect_tag_refusal DESCRIPTION EXPECTED_MESSAGE TAG
+expect_tag_refusal() {
+	cases=$((cases + 1))
+	if (cd "$runner" && "$tag_script" "$3") >"$log" 2>&1; then
+		fail "$1: check_release_tag.sh accepted a tag it should refuse"
+		return 0
+	fi
+	if ! grep -Fq "$2" "$log"; then
+		fail "$1: refused without mentioning \"$2\""
+		return 0
+	fi
+	echo "ok   $1"
+}
+
+# expect_tag_success DESCRIPTION TAG
+expect_tag_success() {
+	cases=$((cases + 1))
+	if ! (cd "$runner" && "$tag_script" "$2") >"$log" 2>&1; then
+		fail "$1: check_release_tag.sh refused a tag it should accept"
+		return 0
+	fi
+	echo "ok   $1"
+}
+
+tag_fixture annotated
+git -C "$seed" tag --annotate v1.0.0 --message "Africa 2 Ice v1.0.0"
+git -C "$seed" push --quiet origin refs/tags/v1.0.0
+simulate_checkout v1.0.0
+expect_equal "actions/checkout really does downgrade the tag ref" commit \
+	"$(git -C "$runner" cat-file -t v1.0.0)"
+expect_tag_success "accepts an annotated tag on main after checkout's rewrite" v1.0.0
+
+tag_fixture lightweight
+git -C "$seed" tag v1.0.0
+git -C "$seed" push --quiet origin refs/tags/v1.0.0
+simulate_checkout v1.0.0
+expect_tag_refusal "refuses a lightweight tag" "not an annotated tag object" v1.0.0
+
+tag_fixture offmain
+git -C "$seed" checkout --quiet -b sidetrack
+echo side >"$seed/side.txt"
+git -C "$seed" add side.txt
+git -C "$seed" commit --quiet --message Side
+git -C "$seed" tag --annotate v1.0.0 --message "Africa 2 Ice v1.0.0"
+git -C "$seed" push --quiet origin refs/tags/v1.0.0
+simulate_checkout v1.0.0
+expect_tag_refusal "refuses a tag whose commit is not on main" \
+	"not reachable from origin/main" v1.0.0
+
+tag_fixture absent
+git -C "$runner" fetch --quiet origin "+refs/heads/*:refs/remotes/origin/*"
+expect_tag_refusal "refuses a tag that origin does not have" "v9.9.9" v9.9.9
 
 if [ "$failures" -ne 0 ]; then
 	echo "release_test: $failures of $cases assertions failed" >&2
