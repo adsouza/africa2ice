@@ -1,6 +1,7 @@
 package hud
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
@@ -199,7 +200,8 @@ func TestResearchRowListsAvailableTechnologiesAsButtons(t *testing.T) {
 
 func TestWorkforceRowRefreshesWithoutRebuildingAndGuardsApply(t *testing.T) {
 	panel := New()
-	state := testState(testFrame(1), 1)
+	frame := testFrame(1)
+	state := testState(frame, 1)
 	state.OpenRow = ui.RowWorkforce
 	panel.Update(state)
 	builds := panel.builds
@@ -219,6 +221,9 @@ func TestWorkforceRowRefreshesWithoutRebuildingAndGuardsApply(t *testing.T) {
 	if !panel.handles.workforce.apply.GetWidget().Disabled || panel.handles.workforce.total.Label != "Total 101% · reduce 1% to apply" {
 		t.Fatalf("invalid total not reflected: %q", panel.handles.workforce.total.Label)
 	}
+	if label := panel.handles.rowHeader[ui.RowWorkforce].Text().Label; !strings.Contains(label, "Unapplied changes") {
+		t.Fatalf("row header not refreshed for the dirty draft: %q", label)
+	}
 	panel.handles.workforce.plus[1].Click()
 	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentAdjustRole || intents[0].Role != gameapi.HuntingAndFishing || intents[0].Delta != 100 {
 		t.Fatalf("plus click = %+v", intents)
@@ -229,9 +234,21 @@ func TestWorkforceRowRefreshesWithoutRebuildingAndGuardsApply(t *testing.T) {
 	if panel.handles.workforce.apply.GetWidget().Disabled {
 		t.Fatal("valid dirty draft left Apply disabled")
 	}
+	if label := panel.handles.rowHeader[ui.RowWorkforce].Text().Label; !strings.Contains(label, "Unapplied changes") {
+		t.Fatalf("row header lost the dirty state once the draft became valid: %q", label)
+	}
 	panel.handles.workforce.apply.Click()
 	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentApplyWorkforce {
 		t.Fatalf("apply click = %+v", intents)
+	}
+	state.Workforce.AllocationBP = frame.Bands[0].AllocationBP
+	state.Workforce.Dirty = false
+	panel.Update(state)
+	if panel.builds != builds {
+		t.Fatal("clearing Dirty rebuilt the tree instead of refreshing in place")
+	}
+	if label := panel.handles.rowHeader[ui.RowWorkforce].Text().Label; !strings.Contains(label, "Forage 35") {
+		t.Fatalf("row header did not return to the applied summary: %q", label)
 	}
 }
 
