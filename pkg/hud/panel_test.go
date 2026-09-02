@@ -252,6 +252,45 @@ func TestWorkforceRowRefreshesWithoutRebuildingAndGuardsApply(t *testing.T) {
 	}
 }
 
+func TestDrawerHasThreeStatesAndClickableEvents(t *testing.T) {
+	frame := testFrame(1)
+	frame.Events = []gameapi.Event{{Turn: 11, Kind: gameapi.EventMigration, Summary: "Band 1 migrated"}, {Turn: 12, Kind: gameapi.EventMigration, Summary: "Band 1 migrated again"}}
+	panel := New()
+	state := testState(frame, 1)
+	state.Note = render.FieldNote{Topic: "FIRECRAFT", Introduction: "Controlled fire.", Context: "Attested early.", GameEffect: "Raises survival."}
+	panel.Update(state)
+	if panel.handles.drawerTab == nil || panel.handles.drawerTab.Text().Label != "hide notes · F" {
+		t.Fatal("compact drawer tab missing")
+	}
+	if panel.handles.drawerMore == nil || panel.handles.drawerMore.Text().Label != "▴ more" {
+		t.Fatal("compact drawer lacks the expand control")
+	}
+	if len(panel.handles.events) != 2 || panel.handles.events[0].Text().Label != "T12 · Migration · Band 1 migrated again" {
+		t.Fatalf("event lines = %d, first %q", len(panel.handles.events), panel.handles.events[0].Text().Label)
+	}
+	panel.handles.events[0].Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentFocusEvent || intents[0].Event != gameapi.EventMigration {
+		t.Fatalf("event click = %+v", intents)
+	}
+	panel.handles.drawerMore.Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentSetNotesMode || intents[0].Notes != NotesExpanded {
+		t.Fatalf("more click = %+v", intents)
+	}
+	state.NotesMode = NotesExpanded
+	panel.Update(state)
+	if panel.handles.drawerMore.Text().Label != "▾ less" {
+		t.Fatal("expanded drawer lacks the collapse control")
+	}
+	state.NotesMode = NotesHidden
+	panel.Update(state)
+	if panel.handles.drawerTab.Text().Label != "▴ notes · F  ·  T12 · Migration · Band 1 migrated again" {
+		t.Fatalf("hidden tab = %q, want newest event retained", panel.handles.drawerTab.Text().Label)
+	}
+	if panel.handles.drawerMore != nil || len(panel.handles.events) != 0 {
+		t.Fatal("hidden drawer still shows body controls")
+	}
+}
+
 func TestEndTurnButtonReflectsTheGate(t *testing.T) {
 	panel := New()
 	frame := testFrame(2)

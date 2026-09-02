@@ -12,10 +12,9 @@ import (
 
 // Chrome palette. Map colors stay in pkg/render; these are panel-only. Only
 // the colors and theme helpers a builder actually calls live here today:
-// Tasks 13 and 16 add the rest of the spec §3 palette (colorQueued,
-// colorGuide, colorDrawer, colorCelebrate) alongside the first widget that
-// needs each one, so the unused linter never has to flag scaffolding with no
-// caller.
+// Task 13 adds the rest of the spec §3 palette (colorQueued, colorGuide)
+// alongside the first widget that needs each one, so the unused linter never
+// has to flag scaffolding with no caller.
 var (
 	colorPanel       = color.RGBA{R: 25, G: 35, B: 42, A: 238}
 	colorPanelEdge   = color.RGBA{R: 58, G: 76, B: 82, A: 210}
@@ -36,6 +35,8 @@ var (
 	colorButtonDown  = color.RGBA{R: 24, G: 36, B: 42, A: 255}
 	colorDisabled    = color.RGBA{R: 92, G: 106, B: 109, A: 255}
 	colorBlack       = color.RGBA{R: 17, G: 17, B: 17, A: 255}
+	colorDrawer      = color.RGBA{R: 18, G: 28, B: 34, A: 240}
+	colorCelebrate   = color.RGBA{R: 45, G: 39, B: 24, A: 255}
 )
 
 // theme owns the font source and the current presentation scale. Every size

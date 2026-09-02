@@ -61,6 +61,9 @@ type handles struct {
 	research   [gameapi.TechCount]*widget.Button
 	workforce  workforceHandles
 	endTurn    *widget.Button
+	drawerTab  *widget.Button
+	drawerMore *widget.Button
+	events     []*widget.Button
 }
 
 func New() *Panel {
@@ -130,9 +133,7 @@ func (p *Panel) rebuild(state State) {
 		return
 	}
 	p.root.AddChild(p.buildPanel(state))
-	if drawer := p.buildDrawer(state); drawer != nil {
-		p.root.AddChild(drawer)
-	}
+	p.root.AddChild(p.buildDrawer(state))
 	if ending := p.buildEndScene(state); ending != nil {
 		p.root.AddChild(ending)
 	}
@@ -205,9 +206,8 @@ func (p *Panel) buildChecklist(state State, band *gameapi.Band) widget.Preferred
 	return column
 }
 
-// The three builders below are temporary minimal stand-ins so the package
+// The two builders below are temporary minimal stand-ins so the package
 // compiles and the Panel lifecycle can be exercised; later tasks replace them
 // file by file with the real chrome.
-func (p *Panel) buildDrawer(State) widget.PreferredSizeLocateableWidget   { return nil }
 func (p *Panel) buildEndScene(State) widget.PreferredSizeLocateableWidget { return nil }
 func (p *Panel) buildOverlay(State)                                       {}
