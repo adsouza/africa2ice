@@ -283,7 +283,7 @@ func LiveabilityRows(band *gameapi.Band, here, target TileLiveability) []Liveabi
 		}, capacityTier, true, func(s TileLiveability) float64 { return s.EcologicalK }),
 		row("Water", func(s TileLiveability) string { return fmt.Sprintf("%.0f / %.0f", s.WaterStock, s.WaterCap) }, waterTier, true, func(s TileLiveability) float64 { return s.WaterStock }),
 		row("Shelter", func(s TileLiveability) string { return fmt.Sprintf("%.0f%%", s.NaturalShelter*100) }, shelterTier, true, func(s TileLiveability) float64 { return s.NaturalShelter }),
-		row("Mortality", mortalityValue, mortalityTier, false, func(s TileLiveability) float64 { return s.SeasonalRisk + s.ChronicRisk + s.CrowdingDecline }),
+		row("Mortality", mortalityValue, mortalityTier, false, func(s TileLiveability) float64 { return s.SeasonalRisk + s.ChronicRisk }),
 		row("Route", routeValue, normal, true, nil),
 		row("Archaic", archaicValue, archaicTier, true, nil),
 	}

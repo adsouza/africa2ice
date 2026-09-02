@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
@@ -116,5 +117,33 @@ func TestTargetTileLiveabilityHidesFogAndExplainsUnreachable(t *testing.T) {
 	band.MigrationCandidates = nil
 	if far := TargetTileLiveability(frame, band, 1); !far.Available || far.Reachable || far.Status != "not reachable" {
 		t.Fatalf("unreachable summary = %+v", far)
+	}
+}
+
+func TestMortalityDeltaIgnoresCrowdingHeadcount(t *testing.T) {
+	frame := liveabilityFrame()
+	band := &frame.Bands[0]
+	// Set candidate rates much lower than band rates, with high crowding
+	frame.Bands[0].MigrationCandidates[0].SeasonalMortalityRate = 0.0001
+	frame.Bands[0].MigrationCandidates[0].ChronicMortalityRate = 0.0005
+	frame.Bands[0].MigrationCandidates[0].CrowdingDecline = 12
+
+	here := CurrentTileLiveability(frame, band)
+	target := TargetTileLiveability(frame, band, 1)
+	rows := LiveabilityRows(band, here, target)
+
+	byLabel := map[string]LiveabilityRow{}
+	for _, row := range rows {
+		byLabel[row.Label] = row
+	}
+
+	mortality := byLabel["Mortality"]
+	// Delta should be +1 (better) because seasonal+chronic rates are lower, ignoring crowding
+	if mortality.Delta != 1 {
+		t.Fatalf("mortality delta = %d, want 1 (target rates are lower despite high crowding)", mortality.Delta)
+	}
+	// Target string should show crowding
+	if !strings.Contains(mortality.Target, "crowding −12") {
+		t.Fatalf("mortality target = %q, want crowding −12", mortality.Target)
 	}
 }
