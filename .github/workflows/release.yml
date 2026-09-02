@@ -36,10 +36,7 @@ jobs:
       - name: Require an annotated tag reachable from main
         if: github.event_name == 'push'
         shell: bash
-        run: |
-          test "$(git cat-file -t "$GITHUB_REF_NAME")" = tag
-          git fetch origin main
-          git merge-base --is-ancestor HEAD origin/main
+        run: ./tools/check_release_tag.sh "$GITHUB_REF_NAME"
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: 1.26.4
