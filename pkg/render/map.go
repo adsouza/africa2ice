@@ -1167,9 +1167,14 @@ func (scene *MapScene) drawText(destination logicalCanvas, value string, x, y, s
 }
 
 func climateBiomeColor(biome gameapi.Biome, _ float64) color.RGBA {
+	// Terrain tiles are 7.6px, where chroma discrimination is weak and lightness
+	// is not, so these are spaced as an L* ladder -- riverine 29, highlands 39,
+	// shrubland 51, savanna 60, desert 72, tundra 80 -- rather than by hue alone.
+	// That keeps the desert margin and tundra line legible at tile size and for
+	// red-green color blindness, where hue-only separation collapses.
 	return [gameapi.BiomeCount]color.RGBA{
-		{R: 55, G: 105, B: 66, A: 255}, {R: 126, G: 137, B: 70, A: 255}, {R: 112, G: 126, B: 79, A: 255},
-		{R: 103, G: 104, B: 94, A: 255}, {R: 166, G: 134, B: 77, A: 255}, {R: 150, G: 166, B: 169, A: 255},
+		{R: 54, G: 75, B: 41, A: 255}, {R: 154, G: 145, B: 69, A: 255}, {R: 97, G: 129, B: 110, A: 255},
+		{R: 96, G: 91, B: 88, A: 255}, {R: 204, G: 170, B: 125, A: 255}, {R: 182, G: 201, B: 213, A: 255},
 	}[biome]
 }
 
