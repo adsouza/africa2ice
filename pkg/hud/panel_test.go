@@ -148,3 +148,114 @@ func TestChipColorsKeepMoveStatusBorderWhenSelected(t *testing.T) {
 		t.Fatalf("chipColors(done, unselected) border = %v, want colorGreen", border)
 	}
 }
+
+func TestRowHeadersOpenRowsAndMoveButtonsEmitIntents(t *testing.T) {
+	frame := testFrame(1)
+	panel := New()
+	state := testState(frame, 1)
+	state.Hover = render.TileHover{TileID: 1, Visible: true}
+	panel.Update(state)
+	if panel.handles.moveHere == nil || panel.handles.moveHere.GetWidget().Disabled {
+		t.Fatal("Move here should be enabled while hovering a reachable tile")
+	}
+	panel.handles.moveHere.Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentMoveTo || intents[0].Tile != 1 {
+		t.Fatalf("Move here = %+v", intents)
+	}
+	panel.handles.best.Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentMoveToBest {
+		t.Fatalf("Best tile = %+v", intents)
+	}
+	if !panel.handles.interbreed.GetWidget().Disabled {
+		t.Fatal("Interbreed enabled without a co-located archaic band")
+	}
+	panel.handles.rowHeader[ui.RowResearch].Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentOpenRow || intents[0].Row != ui.RowResearch {
+		t.Fatalf("row header = %+v", intents)
+	}
+	state.Hover = render.TileHover{}
+	panel.Update(state)
+	if !panel.handles.moveHere.GetWidget().Disabled {
+		t.Fatal("Move here should be disabled with no target")
+	}
+}
+
+func TestResearchRowListsAvailableTechnologiesAsButtons(t *testing.T) {
+	panel := New()
+	state := testState(testFrame(1), 1)
+	state.OpenRow = ui.RowResearch
+	panel.Update(state)
+	if panel.handles.research[gameapi.Firecraft] == nil {
+		t.Fatal("available technology has no button")
+	}
+	if panel.handles.research[gameapi.Campcraft] != nil && !panel.handles.research[gameapi.Campcraft].GetWidget().Disabled {
+		t.Fatal("locked technology is clickable")
+	}
+	panel.handles.research[gameapi.Firecraft].Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentChooseResearch || intents[0].Tech != gameapi.Firecraft {
+		t.Fatalf("research click = %+v", intents)
+	}
+}
+
+func TestWorkforceRowRefreshesWithoutRebuildingAndGuardsApply(t *testing.T) {
+	panel := New()
+	state := testState(testFrame(1), 1)
+	state.OpenRow = ui.RowWorkforce
+	panel.Update(state)
+	builds := panel.builds
+	sliders := panel.handles.workforce.sliders
+	if sliders[0] == nil || !panel.handles.workforce.apply.GetWidget().Disabled {
+		t.Fatal("clean draft should render sliders and a disabled Apply")
+	}
+	state.Workforce.AllocationBP[0] = 3_600
+	state.Workforce.Dirty, state.Workforce.Valid = true, false
+	panel.Update(state)
+	if panel.builds != builds {
+		t.Fatal("a workforce-only change rebuilt the tree and would break a slider drag")
+	}
+	if panel.handles.workforce.sliders[0] != sliders[0] || panel.handles.workforce.sliders[0].Current != 36 {
+		t.Fatalf("slider not refreshed in place: %v", panel.handles.workforce.sliders[0].Current)
+	}
+	if !panel.handles.workforce.apply.GetWidget().Disabled || panel.handles.workforce.total.Label != "Total 101% · reduce 1% to apply" {
+		t.Fatalf("invalid total not reflected: %q", panel.handles.workforce.total.Label)
+	}
+	panel.handles.workforce.plus[1].Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentAdjustRole || intents[0].Role != gameapi.HuntingAndFishing || intents[0].Delta != 100 {
+		t.Fatalf("plus click = %+v", intents)
+	}
+	state.Workforce.AllocationBP[1] = 2_900
+	state.Workforce.Valid = true
+	panel.Update(state)
+	if panel.handles.workforce.apply.GetWidget().Disabled {
+		t.Fatal("valid dirty draft left Apply disabled")
+	}
+	panel.handles.workforce.apply.Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentApplyWorkforce {
+		t.Fatalf("apply click = %+v", intents)
+	}
+}
+
+func TestEndTurnButtonReflectsTheGate(t *testing.T) {
+	panel := New()
+	frame := testFrame(2)
+	state := testState(frame, 1)
+	panel.Update(state)
+	if panel.handles.endTurn.GetWidget().Disabled || panel.handles.endTurn.Text().Label != "End turn · 2 bands still need a move" {
+		t.Fatalf("soft gate button = %q", panel.handles.endTurn.Text().Label)
+	}
+	panel.handles.endTurn.Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentEndTurn || intents[0].Force {
+		t.Fatalf("soft click = %+v", intents)
+	}
+	state.EndTurn = ui.EndTurnGateFor(frame, true, false, false)
+	panel.Update(state)
+	if !panel.handles.endTurn.GetWidget().Disabled {
+		t.Fatal("hard block did not disable the button")
+	}
+	state.EndTurn = ui.EndTurnGateFor(frame, false, false, true)
+	panel.Update(state)
+	panel.handles.endTurn.Click()
+	if intents := panel.Update(state); len(intents) != 1 || !intents[0].Force {
+		t.Fatalf("armed click = %+v", intents)
+	}
+}

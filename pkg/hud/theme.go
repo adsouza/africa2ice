@@ -12,10 +12,10 @@ import (
 
 // Chrome palette. Map colors stay in pkg/render; these are panel-only. Only
 // the colors and theme helpers a builder actually calls live here today:
-// Tasks 9, 13, and 16 add the rest of the spec §3 palette (colorCyan,
-// colorRed, colorQueued, colorGuide, colorDrawer, colorCelebrate, colorBlack)
-// alongside the first widget that needs each one, so the unused linter never
-// has to flag scaffolding with no caller.
+// Tasks 13 and 16 add the rest of the spec §3 palette (colorQueued,
+// colorGuide, colorDrawer, colorCelebrate) alongside the first widget that
+// needs each one, so the unused linter never has to flag scaffolding with no
+// caller.
 var (
 	colorPanel       = color.RGBA{R: 25, G: 35, B: 42, A: 238}
 	colorPanelEdge   = color.RGBA{R: 58, G: 76, B: 82, A: 210}
@@ -27,12 +27,15 @@ var (
 	colorGold        = color.RGBA{R: 245, G: 202, B: 92, A: 255}
 	colorGoldDeep    = color.RGBA{R: 203, G: 172, B: 104, A: 255}
 	colorGreen       = color.RGBA{R: 121, G: 195, B: 137, A: 255}
+	colorCyan        = color.RGBA{R: 87, G: 211, B: 211, A: 255}
 	colorAmber       = color.RGBA{R: 237, G: 176, B: 84, A: 255}
+	colorRed         = color.RGBA{R: 247, G: 137, B: 119, A: 255}
 	colorInterbreed  = color.RGBA{R: 186, G: 148, B: 232, A: 255}
 	colorButtonIdle  = color.RGBA{R: 35, G: 51, B: 58, A: 255}
 	colorButtonHover = color.RGBA{R: 48, G: 68, B: 78, A: 255}
 	colorButtonDown  = color.RGBA{R: 24, G: 36, B: 42, A: 255}
 	colorDisabled    = color.RGBA{R: 92, G: 106, B: 109, A: 255}
+	colorBlack       = color.RGBA{R: 17, G: 17, B: 17, A: 255}
 )
 
 // theme owns the font source and the current presentation scale. Every size

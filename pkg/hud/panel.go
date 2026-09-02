@@ -4,6 +4,7 @@ import (
 	"image"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
+	"github.com/adsouza/africa2ice/pkg/ui"
 	"github.com/ebitenui/ebitenui"
 	"github.com/ebitenui/ebitenui/input"
 	"github.com/ebitenui/ebitenui/widget"
@@ -42,17 +43,24 @@ type Panel struct {
 
 // handles keeps pointers to widgets tests and refreshes need to reach. Later
 // tasks add fields here as they wire up the widgets those fields point to
-// (endTurn, rowHeader, guideNext, guideX and friends): a field with no writer
-// or reader anywhere in the package is exactly the dead code the unused
-// linter exists to catch, so it is added alongside its first use, not ahead
-// of it.
+// (guideNext, guideX and friends): a field with no writer or reader anywhere
+// in the package is exactly the dead code the unused linter exists to catch,
+// so it is added alongside its first use, not ahead of it.
 type handles struct {
-	chips    map[uint32]*widget.Button // keyed by gameapi.BandID
-	more     *widget.Button
-	bandList *widget.Window
-	details  *widget.Button
-	traits   map[gameapi.HeritableTrait]*widget.Button
-	overlay  *widget.Window
+	chips      map[uint32]*widget.Button // keyed by gameapi.BandID
+	more       *widget.Button
+	bandList   *widget.Window
+	details    *widget.Button
+	traits     map[gameapi.HeritableTrait]*widget.Button
+	overlay    *widget.Window
+	rowHeader  [ui.ChecklistRowCount]*widget.Button
+	moveHere   *widget.Button
+	best       *widget.Button
+	split      *widget.Button
+	interbreed *widget.Button
+	research   [gameapi.TechCount]*widget.Button
+	workforce  workforceHandles
+	endTurn    *widget.Button
 }
 
 func New() *Panel {
@@ -65,10 +73,15 @@ func New() *Panel {
 // Update rebuilds on change, runs ebitenui, and returns the intents clicks
 // produced this tick. Call it before map input so Hovered is current.
 func (p *Panel) Update(state State) []Intent {
-	if !p.built || state != p.last {
+	structural, lastStructural := state, p.last
+	structural.Workforce, lastStructural.Workforce = WorkforceDraft{}, WorkforceDraft{}
+	switch {
+	case !p.built || structural != lastStructural:
 		p.rebuild(state)
-		p.last = state
 		p.built = true
+	case state.Workforce != p.last.Workforce:
+		p.last = state
+		p.refreshWorkforce(state)
 	}
 	p.ui.Update()
 	intents := p.intents
@@ -150,14 +163,50 @@ func (p *Panel) buildPanel(state State) widget.PreferredSizeLocateableWidget {
 // buildGuideCard is a stub; Task 16 implements the first-turn guide overlay.
 func (p *Panel) buildGuideCard(State) widget.PreferredSizeLocateableWidget { return nil }
 
-// buildChecklist is a stub; Task 9 implements the move/research/interbreed
-// checklist rows.
-func (p *Panel) buildChecklist(State, *gameapi.Band) widget.PreferredSizeLocateableWidget {
-	return p.theme.column(6, nil, nil, stretch())
+// buildChecklist is the three-row Move/Research/Workforce checklist (spec
+// §5) plus the End turn button.
+func (p *Panel) buildChecklist(state State, band *gameapi.Band) widget.PreferredSizeLocateableWidget {
+	t := p.theme
+	column := t.column(4, nil, nil, stretch())
+	column.AddChild(t.label("THIS TURN", 9.5, colorDim))
+	if band == nil {
+		column.AddChild(t.label("Select a band on the map or a chip above.", 10, colorText))
+		column.AddChild(p.buildEndTurn(state))
+		return column
+	}
+	summaries := [ui.ChecklistRowCount]string{
+		ui.MoveSummary(state.Frame, *band), ui.ResearchSummary(*band), ui.WorkforceSummary(state.Workforce.AllocationBP, state.Workforce.Dirty),
+	}
+	dones := [ui.ChecklistRowCount]bool{ui.MoveDone(*band), ui.ResearchDone(*band), false}
+	for row := ui.ChecklistRow(0); row < ui.ChecklistRowCount; row++ {
+		open := row == state.OpenRow
+		header := p.rowHeader(row, dones[row], open, summaries[row])
+		if row == ui.RowWorkforce {
+			p.handles.workforce.header = header
+		}
+		column.AddChild(header)
+		if !open {
+			continue
+		}
+		switch row {
+		case ui.RowMove:
+			column.AddChild(p.buildMoveBody(state, band))
+		case ui.RowResearch:
+			column.AddChild(p.buildResearchBody(state, band))
+		case ui.RowWorkforce:
+			if state.Workforce.Visible {
+				column.AddChild(p.buildWorkforceBody(state, band))
+			} else {
+				column.AddChild(t.label("Computer controlled · allocation read only", 9.5, colorDim))
+			}
+		}
+	}
+	column.AddChild(p.buildEndTurn(state))
+	return column
 }
 
 // The three builders below are temporary minimal stand-ins so the package
-// compiles and the Panel lifecycle can be exercised; Tasks 9-13 replace them
+// compiles and the Panel lifecycle can be exercised; later tasks replace them
 // file by file with the real chrome.
 func (p *Panel) buildDrawer(State) widget.PreferredSizeLocateableWidget   { return nil }
 func (p *Panel) buildEndScene(State) widget.PreferredSizeLocateableWidget { return nil }
