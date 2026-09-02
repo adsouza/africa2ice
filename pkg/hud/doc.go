@@ -5,5 +5,3 @@
 // saves, and every layout constant it owns is authored in DIPs and scaled at
 // build time.
 package hud
-
-import _ "github.com/ebitenui/ebitenui"

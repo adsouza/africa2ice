@@ -1,0 +1,80 @@
+package hud
+
+import (
+	"github.com/adsouza/africa2ice/pkg/gameapi"
+	"github.com/adsouza/africa2ice/pkg/render"
+	"github.com/adsouza/africa2ice/pkg/ui"
+)
+
+// NotesMode is the Field Notes drawer's height state (spec §4).
+type NotesMode uint8
+
+const (
+	NotesHidden NotesMode = iota
+	NotesCompact
+	NotesExpanded
+)
+
+// WorkforceDraft mirrors the application's UI-local allocation draft.
+type WorkforceDraft struct {
+	Visible      bool
+	Population   uint32
+	AllocationBP [gameapi.AssignmentCount]uint16
+	SelectedRole gameapi.WorkforceRole
+	Dirty        bool
+	Valid        bool
+}
+
+// CameraState tells the panel whether the Focus toggle applies (spec §6).
+type CameraState struct {
+	FocusAvailable bool
+	Focused        bool
+}
+
+// StorageRow is one save-slot line in the storage browser overlay.
+type StorageRow struct {
+	Label    string
+	Detail   string
+	Slot     int
+	Occupied bool
+	Writable bool
+}
+
+// OverlayState describes the modal scene the panel must draw, if any.
+type OverlayState struct {
+	Scene            ui.SceneID
+	StorageHeading   string
+	StorageRows      [7]StorageRow
+	StorageBusy      string
+	SettingsDisabled bool
+	MasterVolume     float64
+	Muted            bool
+}
+
+// State is everything the chrome draws. The application derives it every
+// tick; the panel never stores anything the frame or UI-local fields do not
+// already hold. It is comparable so the panel can rebuild only on change.
+type State struct {
+	Frame           *gameapi.Frame
+	SelectedBand    gameapi.BandID
+	Preview         render.MigrationPreview
+	Hover           render.TileHover
+	OpenRow         ui.ChecklistRow
+	DetailsOpen     bool
+	Workforce       WorkforceDraft
+	InterbreedFocus gameapi.BandID
+	EndTurn         ui.EndTurnGate
+	Note            render.FieldNote
+	NotesMode       NotesMode
+	Guide           ui.GuideState
+	Camera          CameraState
+	Overlay         OverlayState
+	Ending          render.EndScene
+	Viewport        render.Viewport
+	Transform       render.PresentationTransform
+}
+
+// Note: a selectedBand helper (walk state.Frame.Bands for state.SelectedBand)
+// belongs here once a caller needs it; Task 8's buildPanel is the first one.
+// Adding it now, with nothing calling it yet, would be exactly the dead code
+// the unused linter exists to catch.
