@@ -71,3 +71,68 @@ func TestPanelRebuildsOnlyWhenStateChanges(t *testing.T) {
 		t.Fatal("changed state did not rebuild the widget tree")
 	}
 }
+
+func TestChipsCarryProgressColorMarkerAndSelection(t *testing.T) {
+	frame := testFrame(3)
+	frame.Bands[1].HasQueuedMigration = true
+	frame.Bands[2].Health = 0.4
+	panel := New()
+	panel.Update(testState(frame, 1))
+	if len(panel.handles.chips) != 3 {
+		t.Fatalf("chip count = %d", len(panel.handles.chips))
+	}
+	if got := panel.handles.chips[1].Text().Label; got != "B1" {
+		t.Fatalf("selected chip label = %q", got)
+	}
+	if got := panel.handles.chips[3].Text().Label; got != "!! B3" {
+		t.Fatalf("suffering chip label = %q, want the !! prefix", got)
+	}
+	panel.handles.chips[2].Click()
+	intents := panel.Update(testState(frame, 1))
+	if len(intents) != 1 || intents[0].Kind != IntentSelectBand || intents[0].Band != 2 {
+		t.Fatalf("chip click intents = %+v", intents)
+	}
+}
+
+func TestChipRowOverflowsIntoAPlusChip(t *testing.T) {
+	panel := New()
+	state := testState(testFrame(12), 1)
+	panel.Update(state)
+	if len(panel.handles.chips) != 7 {
+		t.Fatalf("visible chips = %d, want 7 alongside the +N chip", len(panel.handles.chips))
+	}
+	if panel.handles.more == nil || panel.handles.more.Text().Label != "+5" {
+		t.Fatal("overflow chip missing or mislabelled")
+	}
+	panel.handles.more.Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentToggleBandList {
+		t.Fatalf("+N click intents = %+v", intents)
+	}
+	state.BandListOpen = true
+	panel.Update(state)
+	if panel.handles.bandList == nil {
+		t.Fatal("band list window not shown when BandListOpen")
+	}
+}
+
+func TestDetailsDisclosureListsTraitsAsFocusButtons(t *testing.T) {
+	panel := New()
+	state := testState(testFrame(1), 1)
+	panel.Update(state)
+	if panel.handles.details == nil || len(panel.handles.traits) != 0 {
+		t.Fatal("collapsed details should have a toggle and no trait cells")
+	}
+	panel.handles.details.Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentToggleDetails {
+		t.Fatalf("details click = %+v", intents)
+	}
+	state.DetailsOpen = true
+	panel.Update(state)
+	if len(panel.handles.traits) != int(gameapi.HeritableTraitCount) {
+		t.Fatalf("trait cells = %d", len(panel.handles.traits))
+	}
+	panel.handles.traits[gameapi.PigmentationLevel].Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentFocusTrait || intents[0].Trait != gameapi.PigmentationLevel {
+		t.Fatalf("trait click = %+v", intents)
+	}
+}

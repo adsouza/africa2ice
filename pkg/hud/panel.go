@@ -3,6 +3,7 @@ package hud
 import (
 	"image"
 
+	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/ebitenui/ebitenui"
 	"github.com/ebitenui/ebitenui/input"
 	"github.com/ebitenui/ebitenui/widget"
@@ -46,8 +47,12 @@ type Panel struct {
 // linter exists to catch, so it is added alongside its first use, not ahead
 // of it.
 type handles struct {
-	chips   map[uint32]*widget.Button // keyed by gameapi.BandID
-	overlay *widget.Window
+	chips    map[uint32]*widget.Button // keyed by gameapi.BandID
+	more     *widget.Button
+	bandList *widget.Window
+	details  *widget.Button
+	traits   map[gameapi.HeritableTrait]*widget.Button
+	overlay  *widget.Window
 }
 
 func New() *Panel {
@@ -77,6 +82,8 @@ func (p *Panel) Draw(screen *ebiten.Image) { p.ui.Draw(screen) }
 // can yield. Valid after Update.
 func (p *Panel) Hovered() bool { return input.UIHovered }
 
+func (p *Panel) emit(intent Intent) { p.intents = append(p.intents, intent) }
+
 // rect converts a DIP rectangle to render pixels including the letterbox offset.
 func (p *Panel) rect(x, y, width, height float64) fixedRect {
 	transform := p.last.Transform
@@ -100,8 +107,12 @@ func (p *Panel) rebuild(state State) {
 		p.handles.overlay.Close()
 		p.handles.overlay = nil
 	}
+	if p.handles.bandList != nil {
+		p.handles.bandList.Close()
+		p.handles.bandList = nil
+	}
 	p.root.RemoveChildren()
-	p.handles = handles{chips: map[uint32]*widget.Button{}}
+	p.handles = handles{chips: map[uint32]*widget.Button{}, traits: map[gameapi.HeritableTrait]*widget.Button{}}
 	if state.Frame == nil {
 		return
 	}
@@ -115,15 +126,39 @@ func (p *Panel) rebuild(state State) {
 	p.buildOverlay(state)
 }
 
-// The four builders below are temporary minimal stand-ins so the package
-// compiles and the Panel lifecycle can be exercised; Tasks 8-13 replace them
-// file by file with the real chrome.
+// buildPanel is the full chrome column: header, chips, band line, details,
+// guide card (Task 16 fills), checklist (Task 9), end turn (Task 9), footer.
 func (p *Panel) buildPanel(state State) widget.PreferredSizeLocateableWidget {
-	column := p.theme.column(6, p.theme.insets(panelPadding, panelPadding, panelPadding, panelPadding), solid(colorPanel),
+	t := p.theme
+	column := t.column(8, t.insets(14, panelPadding, panelPadding, 12), solid(colorPanel),
 		widget.WidgetOpts.LayoutData(p.rect(panelX, panelY, panelWidth, panelHeight)))
-	column.AddChild(p.theme.label("Africa 2 Ice", 24, colorTitle))
+	band := state.selectedBand()
+	column.AddChild(p.buildHeader(state))
+	column.AddChild(p.buildChips(state))
+	column.AddChild(p.buildBandLine(state, band))
+	if state.DetailsOpen && band != nil {
+		column.AddChild(p.buildDetails(state, band))
+	}
+	if guide := p.buildGuideCard(state); guide != nil {
+		column.AddChild(guide)
+	}
+	column.AddChild(p.buildChecklist(state, band))
+	column.AddChild(t.label("Space ends the turn · Tab next band · ? shortcuts", 9.5, colorDim))
 	return column
 }
+
+// buildGuideCard is a stub; Task 16 implements the first-turn guide overlay.
+func (p *Panel) buildGuideCard(State) widget.PreferredSizeLocateableWidget { return nil }
+
+// buildChecklist is a stub; Task 9 implements the move/research/interbreed
+// checklist rows.
+func (p *Panel) buildChecklist(State, *gameapi.Band) widget.PreferredSizeLocateableWidget {
+	return p.theme.column(6, nil, nil, stretch())
+}
+
+// The three builders below are temporary minimal stand-ins so the package
+// compiles and the Panel lifecycle can be exercised; Tasks 9-13 replace them
+// file by file with the real chrome.
 func (p *Panel) buildDrawer(State) widget.PreferredSizeLocateableWidget   { return nil }
 func (p *Panel) buildEndScene(State) widget.PreferredSizeLocateableWidget { return nil }
 func (p *Panel) buildOverlay(State)                                       {}

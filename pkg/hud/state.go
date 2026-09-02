@@ -61,6 +61,7 @@ type State struct {
 	Hover           render.TileHover
 	OpenRow         ui.ChecklistRow
 	DetailsOpen     bool
+	BandListOpen    bool
 	Workforce       WorkforceDraft
 	InterbreedFocus gameapi.BandID
 	EndTurn         ui.EndTurnGate
@@ -74,7 +75,15 @@ type State struct {
 	Transform       render.PresentationTransform
 }
 
-// Note: a selectedBand helper (walk state.Frame.Bands for state.SelectedBand)
-// belongs here once a caller needs it; Task 8's buildPanel is the first one.
-// Adding it now, with nothing calling it yet, would be exactly the dead code
-// the unused linter exists to catch.
+// selectedBand returns the selected band within the frame, or nil.
+func (state State) selectedBand() *gameapi.Band {
+	if state.Frame == nil {
+		return nil
+	}
+	for index := range state.Frame.Bands {
+		if state.Frame.Bands[index].ID == state.SelectedBand {
+			return &state.Frame.Bands[index]
+		}
+	}
+	return nil
+}

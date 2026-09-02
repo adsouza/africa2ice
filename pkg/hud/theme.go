@@ -12,12 +12,27 @@ import (
 
 // Chrome palette. Map colors stay in pkg/render; these are panel-only. Only
 // the colors and theme helpers a builder actually calls live here today:
-// Tasks 8-13 add the rest of the spec §3 palette and the button/wrapped/
-// rowOf/stretch helpers alongside the first widget that needs each one, so
-// the unused linter never has to flag scaffolding with no caller.
+// Tasks 9, 13, and 16 add the rest of the spec §3 palette (colorCyan,
+// colorRed, colorQueued, colorGuide, colorDrawer, colorCelebrate, colorBlack)
+// alongside the first widget that needs each one, so the unused linter never
+// has to flag scaffolding with no caller.
 var (
-	colorPanel = color.RGBA{R: 25, G: 35, B: 42, A: 238}
-	colorTitle = color.RGBA{R: 239, G: 220, B: 178, A: 255}
+	colorPanel       = color.RGBA{R: 25, G: 35, B: 42, A: 238}
+	colorPanelEdge   = color.RGBA{R: 58, G: 76, B: 82, A: 210}
+	colorRow         = color.RGBA{R: 20, G: 29, B: 35, A: 255}
+	colorRowOpen     = color.RGBA{R: 28, G: 40, B: 48, A: 255}
+	colorTitle       = color.RGBA{R: 239, G: 220, B: 178, A: 255}
+	colorText        = color.RGBA{R: 223, G: 229, B: 225, A: 255}
+	colorDim         = color.RGBA{R: 159, G: 177, B: 174, A: 255}
+	colorGold        = color.RGBA{R: 245, G: 202, B: 92, A: 255}
+	colorGoldDeep    = color.RGBA{R: 203, G: 172, B: 104, A: 255}
+	colorGreen       = color.RGBA{R: 121, G: 195, B: 137, A: 255}
+	colorAmber       = color.RGBA{R: 237, G: 176, B: 84, A: 255}
+	colorInterbreed  = color.RGBA{R: 186, G: 148, B: 232, A: 255}
+	colorButtonIdle  = color.RGBA{R: 35, G: 51, B: 58, A: 255}
+	colorButtonHover = color.RGBA{R: 48, G: 68, B: 78, A: 255}
+	colorButtonDown  = color.RGBA{R: 24, G: 36, B: 42, A: 255}
+	colorDisabled    = color.RGBA{R: 92, G: 106, B: 109, A: 255}
 )
 
 // theme owns the font source and the current presentation scale. Every size
@@ -66,9 +81,44 @@ func (t *theme) insets(top, left, right, bottom float64) *widget.Insets {
 
 func solid(c color.Color) *image.NineSlice { return image.NewNineSliceColor(c) }
 
+func bordered(body, border color.Color, widthPx int) *image.NineSlice {
+	return image.NewBorderedNineSliceColor(body, border, max(1, widthPx))
+}
+
+// buttonImages is the standard clickable look; border color varies by role.
+func (t *theme) buttonImages(border color.RGBA) *widget.ButtonImage {
+	width := t.px(1)
+	return &widget.ButtonImage{
+		Idle:     bordered(colorButtonIdle, border, width),
+		Hover:    bordered(colorButtonHover, border, width),
+		Pressed:  bordered(colorButtonDown, border, width),
+		Disabled: bordered(colorRow, colorDisabled, width),
+	}
+}
+
+func (t *theme) buttonText(idle color.RGBA) *widget.ButtonTextColor {
+	return &widget.ButtonTextColor{Idle: idle, Hover: idle, Pressed: idle, Disabled: colorDisabled}
+}
+
+// button builds a labelled button that emits handler on click.
+func (t *theme) button(label string, sizeDIP float64, border, textColor color.RGBA, handler func()) *widget.Button {
+	return widget.NewButton(
+		widget.ButtonOpts.Image(t.buttonImages(border)),
+		widget.ButtonOpts.Text(label, t.face(sizeDIP), t.buttonText(textColor)),
+		widget.ButtonOpts.TextPadding(t.insets(3, 8, 8, 3)),
+		widget.ButtonOpts.ClickedHandler(func(*widget.ButtonClickedEventArgs) { handler() }),
+		widget.ButtonOpts.WidgetOpts(widget.WidgetOpts.CursorHovered("pointer")),
+	)
+}
+
 // label builds static text.
 func (t *theme) label(value string, sizeDIP float64, textColor color.Color) *widget.Text {
 	return widget.NewText(widget.TextOpts.Text(value, t.face(sizeDIP), textColor))
+}
+
+// wrapped builds text that wraps at a DIP width.
+func (t *theme) wrapped(value string, sizeDIP float64, textColor color.Color, widthDIP float64) *widget.Text {
+	return widget.NewText(widget.TextOpts.Text(value, t.face(sizeDIP), textColor), widget.TextOpts.MaxWidth(float64(t.px(widthDIP))))
 }
 
 // column is a vertical row layout container with DIP spacing and padding.
@@ -85,4 +135,20 @@ func (t *theme) column(spacingDIP float64, padding *widget.Insets, background *i
 		containerOpts = append(containerOpts, widget.ContainerOpts.BackgroundImage(background))
 	}
 	return widget.NewContainer(containerOpts...)
+}
+
+// rowOf is a horizontal row layout container.
+func (t *theme) rowOf(spacingDIP float64, opts ...widget.WidgetOpt) *widget.Container {
+	return widget.NewContainer(
+		widget.ContainerOpts.Layout(widget.NewRowLayout(
+			widget.RowLayoutOpts.Direction(widget.DirectionHorizontal),
+			widget.RowLayoutOpts.Spacing(t.px(spacingDIP)),
+		)),
+		widget.ContainerOpts.WidgetOpts(opts...),
+	)
+}
+
+// stretch is the row-layout data that makes a child fill the cross axis.
+func stretch() widget.WidgetOpt {
+	return widget.WidgetOpts.LayoutData(widget.RowLayoutData{Stretch: true})
 }
