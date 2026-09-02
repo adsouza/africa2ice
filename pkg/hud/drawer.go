@@ -32,6 +32,18 @@ func eventLine(event gameapi.Event) string {
 	return fmt.Sprintf("T%d · %s · %s", event.Turn, event.Kind, event.Summary)
 }
 
+// truncateRunes returns value unchanged when it has at most limit runes, and
+// otherwise the first limit-1 runes plus an ellipsis. The hidden drawer tab
+// sits in a fixed-width RowLayout that neither wraps nor clips, so a long
+// event summary must be shortened before it reaches the button label.
+func truncateRunes(value string, limit int) string {
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[:limit-1]) + "…"
+}
+
 // newestEvents returns up to limit events, newest first.
 func newestEvents(events []gameapi.Event, limit int) []gameapi.Event {
 	result := make([]gameapi.Event, 0, limit)
@@ -63,11 +75,16 @@ func (p *Panel) buildDrawer(state State) widget.PreferredSizeLocateableWidget {
 	tabRow := t.rowOf(4, widget.WidgetOpts.LayoutData(p.rect(mapRight-2*drawerTabW-8, mapBottom-height-drawerTabH, 2*drawerTabW, drawerTabH)))
 	events := newestEvents(state.Frame.Events, drawerEventLines)
 	if state.NotesMode == NotesHidden {
+		border, textColor := colorGoldDeep, colorGoldDeep
 		label := "▴ notes · F"
-		if len(events) > 0 {
-			label += "  ·  " + eventLine(events[0])
+		if state.Note.Celebration {
+			border, textColor = colorGold, colorGold
+			label = "BREAKTHROUGH · " + label
 		}
-		tab := t.button(label, 9, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentSetNotesMode, Notes: NotesCompact}) })
+		if len(events) > 0 {
+			label += "  ·  " + truncateRunes(eventLine(events[0]), 42)
+		}
+		tab := t.button(label, 9, border, textColor, func() { p.emit(Intent{Kind: IntentSetNotesMode, Notes: NotesCompact}) })
 		p.handles.drawerTab = tab
 		tabRow.AddChild(tab)
 		root.AddChild(tabRow)

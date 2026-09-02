@@ -291,6 +291,25 @@ func TestDrawerHasThreeStatesAndClickableEvents(t *testing.T) {
 	}
 }
 
+func TestHiddenTabTruncatesLongEventsAndShowsBreakthrough(t *testing.T) {
+	frame := testFrame(1)
+	frame.Events = []gameapi.Event{{Turn: 12, Kind: gameapi.EventMigration, Summary: strings.Repeat("x", 70)}}
+	panel := New()
+	state := testState(frame, 1)
+	state.NotesMode = NotesHidden
+	panel.Update(state)
+	label := panel.handles.drawerTab.Text().Label
+	parts := strings.SplitN(label, "  ·  ", 2)
+	if len(parts) != 2 || !strings.HasSuffix(parts[1], "…") || len([]rune(parts[1])) != 42 {
+		t.Fatalf("hidden tab with long event = %q, want a 42-rune truncated event part ending in an ellipsis", label)
+	}
+	state.Note.Celebration = true
+	panel.Update(state)
+	if got := panel.handles.drawerTab.Text().Label; !strings.HasPrefix(got, "BREAKTHROUGH · ") {
+		t.Fatalf("celebration hidden tab = %q, want the BREAKTHROUGH prefix", got)
+	}
+}
+
 func TestEndTurnButtonReflectsTheGate(t *testing.T) {
 	panel := New()
 	frame := testFrame(2)
