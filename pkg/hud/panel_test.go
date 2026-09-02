@@ -136,3 +136,15 @@ func TestDetailsDisclosureListsTraitsAsFocusButtons(t *testing.T) {
 		t.Fatalf("trait click = %+v", intents)
 	}
 }
+
+func TestChipColorsKeepMoveStatusBorderWhenSelected(t *testing.T) {
+	if border, fill, borderPx := chipColors(true, true); border != colorGreen || fill != colorButtonHover || borderPx != 2 {
+		t.Fatalf("chipColors(done, selected) = %v, %v, %v", border, fill, borderPx)
+	}
+	if border, fill, borderPx := chipColors(false, false); border != colorGold || fill != colorButtonIdle || borderPx != 1 {
+		t.Fatalf("chipColors(open, unselected) = %v, %v, %v", border, fill, borderPx)
+	}
+	if border, _, _ := chipColors(true, false); border != colorGreen {
+		t.Fatalf("chipColors(done, unselected) border = %v, want colorGreen", border)
+	}
+}

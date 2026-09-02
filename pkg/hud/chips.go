@@ -3,6 +3,7 @@ package hud
 import (
 	"fmt"
 	"image"
+	"image/color"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/adsouza/africa2ice/pkg/ui"
@@ -35,25 +36,44 @@ func visibleChipIDs(frame *gameapi.Frame, selected gameapi.BandID) ([]gameapi.Ba
 	return visible, len(ordered) - len(visible)
 }
 
+// chipColors picks the chip's Move-status border/fill/border-width: the
+// border colour always signals Move status (gold open, green done), and
+// selection adds a distinct fill plus a thicker ring rather than overriding
+// the status colour (spec §4 item 2).
+func chipColors(done, selected bool) (border, fill color.RGBA, borderPx float64) {
+	border = colorGold
+	if done {
+		border = colorGreen
+	}
+	fill = colorButtonIdle
+	if selected {
+		fill = colorButtonHover
+	}
+	borderPx = 1
+	if selected {
+		borderPx = 2
+	}
+	return border, fill, borderPx
+}
+
 func (p *Panel) chipButton(band gameapi.Band, selected bool) *widget.Button {
 	t := p.theme
-	border, textColor := colorGold, colorGold
-	if ui.MoveDone(band) {
-		border, textColor = colorGreen, colorGreen
-	}
+	done := ui.MoveDone(band)
+	border, fill, borderPx := chipColors(done, selected)
 	label := fmt.Sprintf("B%d", band.ID)
 	if marker := ui.ConditionForSapiensBand(band).Marker(); marker != "" {
 		label = marker + " " + label
 	}
-	images := t.buttonImages(border)
-	if selected {
-		images.Idle = bordered(colorButtonHover, colorText, t.px(2))
-		images.Hover = images.Idle
+	width := t.px(borderPx)
+	images := &widget.ButtonImage{
+		Idle:    bordered(fill, border, width),
+		Hover:   bordered(colorButtonHover, border, width),
+		Pressed: bordered(colorButtonDown, border, width),
 	}
 	id := band.ID
 	button := widget.NewButton(
 		widget.ButtonOpts.Image(images),
-		widget.ButtonOpts.Text(label, t.face(10.5), t.buttonText(textColor)),
+		widget.ButtonOpts.Text(label, t.face(10.5), t.buttonText(border)),
 		widget.ButtonOpts.TextPadding(t.insets(1, 8, 8, 1)),
 		widget.ButtonOpts.ClickedHandler(func(*widget.ButtonClickedEventArgs) { p.emit(Intent{Kind: IntentSelectBand, Band: id}) }),
 		widget.ButtonOpts.WidgetOpts(widget.WidgetOpts.CursorHovered("pointer")),

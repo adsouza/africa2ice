@@ -61,7 +61,7 @@ func (p *Panel) buildDetails(state State, band *gameapi.Band) widget.PreferredSi
 	}
 	pressures := [gameapi.HeritableTraitCount]string{
 		fmt.Sprintf("%.0f °C", tile.LocalTemperatureC), fmt.Sprintf("%.1f km", tile.ElevationKm), tile.Biome.String(),
-		fmt.Sprintf("%.0f °C", tile.LocalTemperatureC), fmt.Sprintf("%.0f° lat", tile.Latitude), "diet",
+		fmt.Sprintf("moisture %.2f", tile.BaseMoisture), fmt.Sprintf("%.0f° lat", tile.Latitude), "diet",
 	}
 	grid := widget.NewContainer(
 		widget.ContainerOpts.Layout(widget.NewGridLayout(widget.GridLayoutOpts.Columns(3), widget.GridLayoutOpts.Spacing(t.px(4), t.px(4)))),
