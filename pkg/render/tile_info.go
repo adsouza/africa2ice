@@ -39,7 +39,6 @@ type tileLiveabilitySummary struct {
 	foodCap            float64
 	floraStock         float64
 	faunaStock         float64
-	faunaOpportunity   string
 	waterStock         float64
 	waterCap           float64
 	ecologicalK        float64
@@ -134,7 +133,6 @@ func summarizeTile(frame *gameapi.Frame, tileID gameapi.TileID, heading string) 
 	summary.foodCap = tile.FloraCap + tile.FaunaCap
 	summary.floraStock = tile.FloraStock
 	summary.faunaStock = tile.FaunaStock
-	summary.faunaOpportunity = dominantFaunaOpportunity(tile.Fauna)
 	summary.waterStock = tile.WaterStock
 	summary.waterCap = tile.WaterCap
 	summary.ecologicalK = tile.EcologicalK
@@ -172,10 +170,12 @@ func liveabilityLines(summary tileLiveabilitySummary) [9]string {
 	if !summary.showDetails {
 		return lines
 	}
-	lines[0] = summary.biome
-	lines[1] = fmt.Sprintf("%s · %.0f°C · %.1f km · pulse %+.2f", summary.region, summary.temperatureC, summary.elevationKm, summary.abruptClimate)
+	// Terrain on one line and climate on the next: with "Yellow River Basin"
+	// and a pulse on the same line the column overflows by ~25 px.
+	lines[0] = fmt.Sprintf("%s · %.1f km", summary.biome, summary.elevationKm)
+	lines[1] = fmt.Sprintf("%s · %.0f°C · pulse %+.2f", summary.region, summary.temperatureC, summary.abruptClimate)
 	lines[2] = fmt.Sprintf("Food stock %.0f/%.0f FU", summary.foodStock, summary.foodCap)
-	lines[3] = fmt.Sprintf("Plants %.0f · animals %.0f · %s", summary.floraStock, summary.faunaStock, summary.faunaOpportunity)
+	lines[3] = fmt.Sprintf("Plants %.0f · animals %.0f", summary.floraStock, summary.faunaStock)
 	lines[4] = fmt.Sprintf("Water %.0f/%.0f WU", summary.waterStock, summary.waterCap)
 	lines[5] = fmt.Sprintf("Capacity %.0f/%.0f · degraded %.0f%%", summary.ecologicalK, summary.baselineK, summary.degradation*100)
 	lines[archaicPresenceLineIndex] = formatArchaicPresence(summary.archaicBandCount, summary.archaicPopulation)

@@ -14,53 +14,71 @@ import (
 )
 
 const (
-	TerrainGridWidth       = 96
-	TerrainGridHeight      = 64
-	mapOriginX             = 20
-	mapOriginY             = 74
-	mapTileSize            = 8
-	mapPixelWidth          = TerrainGridWidth * mapTileSize
-	mapPixelHeight         = TerrainGridHeight * mapTileSize
-	mapLegendOriginY       = 48
-	mapLegendHeight        = 25
-	hudPanelX              = 908
-	hudPanelWidth          = 352
-	fieldNotesPanelX       = hudPanelX + 14
-	fieldNotesPanelWidth   = 324
-	fieldNotesToggleX      = hudPanelX + 273
-	fieldNotesToggleY      = 78
-	fieldNotesToggleWidth  = 65
-	fieldNotesToggleHeight = 24
-	bandListOriginY        = 230
-	bandRowHeight          = 16
-	bandOutcomeOriginY     = 310
-	tileInspectorOriginY   = 340
-	tileInspectorHeight    = 116
-	tileInspectorTextSize  = 7.4
-	tileInspectorRowGap    = 8.8
-	interbreedPanelLineY   = 446
-	fieldNotesPanelOriginY = 462
-	fieldNotesPanelHeight  = 138
-	fieldNoteWrapLimit     = 78
-	visibleFieldNoteLines  = 5
-	workforcePanelOriginY  = 604
-	workforceRoleOriginY   = 612
-	workforceRoleRowGap    = 9
-	controlsDividerY       = 641
-	controlsReferenceY     = 645
-	controlsReferenceGap   = 13
-	bottomInspectorOriginY = 590
-	bottomInspectorHeight  = 118
-	menuOverlayX           = 340
-	menuOverlayY           = 150
-	menuOverlayWidth       = 600
-	menuOverlayHeight      = 420
-	menuRowHitOffsetY      = 73
-	menuRowTextOffsetY     = 78
-	menuRowHeight          = 36
-	settingsSliderLeft     = 650
-	settingsSliderRight    = 870
-	settingsSliderY        = 239
+	TerrainGridWidth     = 96
+	TerrainGridHeight    = 64
+	mapOriginX           = 20
+	mapOriginY           = 74
+	mapTileSize          = 8
+	mapPixelWidth        = TerrainGridWidth * mapTileSize
+	mapPixelHeight       = TerrainGridHeight * mapTileSize
+	mapLegendOriginY     = 48
+	mapLegendHeight      = 25
+	hudPanelX            = 908
+	hudPanelWidth        = 352
+	fieldNotesPanelX     = hudPanelX + 14
+	fieldNotesPanelWidth = 324
+	// Event lines are measured against the room actually left in their panel
+	// rather than cut at a rune count tuned for an average glyph width.
+	fieldNotesEventLineWidth = fieldNotesPanelWidth - 2*14
+	hudEventLineWidth        = hudPanelWidth - 2*18
+	eventLineFontSize        = 7.2
+	hudEventLineFontSize     = 7.6
+	fieldNotesToggleX        = hudPanelX + 273
+	fieldNotesToggleY        = 78
+	fieldNotesToggleWidth    = 65
+	fieldNotesToggleHeight   = 24
+	bandListOriginY          = 230
+	bandRowHeight            = 16
+	bandOutcomeOriginY       = 310
+	tileInspectorOriginY     = 340
+	tileInspectorHeight      = 116
+	tileInspectorTextSize    = 7.4
+	tileInspectorRowGap      = 8.8
+	// Text in either inspector column must stay narrower than the gap between
+	// the column origins (167) less the separator inset on both sides (8).
+	tileInspectorColumnWidth = 151
+	interbreedPanelLineY     = 446
+	fieldNotesPanelOriginY   = 462
+	fieldNotesPanelHeight    = 138
+	fieldNoteWrapLimit       = 78
+	noticeBoxX               = 28
+	noticeBoxY               = 82
+	noticeBoxWidth           = 650
+	noticeBoxMinHeight       = 30
+	noticeTextX              = 40
+	noticeTextY              = 89
+	noticeFontSize           = 14
+	noticeTextMaxWidth       = noticeBoxWidth - 2*(noticeTextX-noticeBoxX)
+	textLineSpacing          = 1.35
+	visibleFieldNoteLines    = 5
+	workforcePanelOriginY    = 604
+	workforceRoleOriginY     = 612
+	workforceRoleRowGap      = 9
+	controlsDividerY         = 641
+	controlsReferenceY       = 645
+	controlsReferenceGap     = 13
+	bottomInspectorOriginY   = 590
+	bottomInspectorHeight    = 118
+	menuOverlayX             = 340
+	menuOverlayY             = 150
+	menuOverlayWidth         = 600
+	menuOverlayHeight        = 420
+	menuRowHitOffsetY        = 73
+	menuRowTextOffsetY       = 78
+	menuRowHeight            = 36
+	settingsSliderLeft       = 650
+	settingsSliderRight      = 870
+	settingsSliderY          = 239
 )
 
 var (
@@ -243,10 +261,18 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 		if !visible {
 			continue
 		}
-		from, to := frame.Tiles[passage.From], frame.Tiles[passage.To]
-		fromX, fromY := scene.tilePoint(from)
-		toX, toY := scene.tilePoint(to)
-		vector.StrokeLine(screen, fromX, fromY, toX, toY, 2, lineColor, false)
+		switch kind, anchor := passageOverlayForRender(frame, passage); kind {
+		case passageOverlayLine:
+			from, to := frame.Tiles[passage.From], frame.Tiles[passage.To]
+			fromX, fromY := scene.tilePoint(from)
+			toX, toY := scene.tilePoint(to)
+			vector.StrokeLine(screen, fromX, fromY, toX, toY, 2, lineColor, false)
+		case passageOverlayGlyph:
+			// A lone explored shore marks that a crossing starts here without
+			// drawing a line into fog toward the hidden far endpoint.
+			x, y := scene.tilePoint(frame.Tiles[anchor])
+			drawPassageGlyph(screen, x, y, lineColor)
+		}
 	}
 	var interbreedTiles map[gameapi.TileID]bool
 	if actor := selectedBandInFrame(frame, selectedBand); actor != nil {
@@ -277,8 +303,11 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 	scene.drawEndScene(screen, ending)
 	scene.drawMenuOverlay(screen)
 	if notice != "" {
-		vector.FillRect(screen, 28, 82, 650, 30, color.RGBA{R: 26, G: 38, B: 45, A: 240}, false)
-		scene.drawText(screen, notice, 40, 89, 14, color.RGBA{R: 239, G: 220, B: 178, A: 255})
+		// Long diagnostics wrap and grow the box downward over the map rather
+		// than running past its right edge.
+		lines := scene.wrapTextToWidth(notice, noticeFontSize, noticeTextMaxWidth)
+		vector.FillRect(screen, noticeBoxX, noticeBoxY, noticeBoxWidth, noticeBoxHeight(len(lines)), color.RGBA{R: 26, G: 38, B: 45, A: 240}, false)
+		scene.drawText(screen, strings.Join(lines, "\n"), noticeTextX, noticeTextY, noticeFontSize, color.RGBA{R: 239, G: 220, B: 178, A: 255})
 	}
 }
 
@@ -720,7 +749,11 @@ func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selec
 			scene.drawText(screen, fmt.Sprintf("SCROLL %d/%d · wheel or PgUp/PgDn", scroll+1, len(lines)-visibleFieldNoteLines+1), panelX+147, fieldNotesPanelOriginY+91, 7, color.RGBA{R: 145, G: 163, B: 161, A: 255})
 		}
 		scene.drawText(screen, "RECENT EVENTS", fieldNotesPanelX+14, fieldNotesPanelOriginY+104, 7.5, headingColor)
-		scene.drawText(screen, strings.Join(recentEventLines(frame.Events, 2, 52), "\n"), fieldNotesPanelX+14, fieldNotesPanelOriginY+116, 7.2, color.RGBA{R: 184, G: 198, B: 194, A: 255})
+		eventLines := recentEventLines(frame.Events, 2)
+		for index := range eventLines {
+			eventLines[index] = scene.truncateTextToWidth(eventLines[index], eventLineFontSize, fieldNotesEventLineWidth)
+		}
+		scene.drawText(screen, strings.Join(eventLines, "\n"), fieldNotesPanelX+14, fieldNotesPanelOriginY+116, eventLineFontSize, color.RGBA{R: 184, G: 198, B: 194, A: 255})
 	} else {
 		label := "F: show Field Notes"
 		labelColor := color.RGBA{R: 203, G: 172, B: 104, A: 255}
@@ -729,7 +762,7 @@ func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selec
 			labelColor = color.RGBA{R: 255, G: 213, B: 92, A: 255}
 		}
 		scene.drawText(screen, "RECENT EVENT", panelX+18, 548, 8.5, color.RGBA{R: 167, G: 184, B: 181, A: 255})
-		scene.drawText(screen, recentEventLines(frame.Events, 1, 55)[0], panelX+18, 562, 7.6, color.RGBA{R: 202, G: 210, B: 206, A: 255})
+		scene.drawText(screen, scene.truncateTextToWidth(recentEventLines(frame.Events, 1)[0], hudEventLineFontSize, hudEventLineWidth), panelX+18, 562, hudEventLineFontSize, color.RGBA{R: 202, G: 210, B: 206, A: 255})
 		scene.drawText(screen, label, panelX+18, 584, 10.5, labelColor)
 	}
 	scene.drawControlsReference(screen, frame, selectedBand)
@@ -765,7 +798,9 @@ func fieldNoteLines(note FieldNote) []string {
 	return wrapTextLines(body, fieldNoteWrapLimit)
 }
 
-func recentEventLines(events []gameapi.Event, limit, maxRunes int) []string {
+// recentEventLines formats the newest events first and leaves fitting them to
+// the caller, which knows its panel width and font size.
+func recentEventLines(events []gameapi.Event, limit int) []string {
 	if limit <= 0 {
 		return nil
 	}
@@ -776,7 +811,7 @@ func recentEventLines(events []gameapi.Event, limit, maxRunes int) []string {
 		if summary == "" {
 			summary = event.Kind.String()
 		}
-		lines = append(lines, truncateRunes(fmt.Sprintf("T%d · %s · %s", event.Turn, event.Kind, summary), maxRunes))
+		lines = append(lines, fmt.Sprintf("T%d · %s · %s", event.Turn, event.Kind, summary))
 	}
 	if len(lines) == 0 {
 		lines = append(lines, "No campaign events yet.")
@@ -784,21 +819,47 @@ func recentEventLines(events []gameapi.Event, limit, maxRunes int) []string {
 	return lines
 }
 
-func truncateRunes(value string, limit int) string {
-	runes := []rune(value)
-	if limit <= 0 || len(runes) <= limit {
+// truncateTextToWidth keeps the longest prefix of value that, with a trailing
+// ellipsis, measures within maxWidth logical pixels at the given font size.
+// Text that already fits is returned unchanged.
+func (scene *MapScene) truncateTextToWidth(value string, size, maxWidth float32) string {
+	face := &text.GoTextFace{Source: scene.faceSource, Size: float64(size)}
+	fits := func(candidate string) bool {
+		width, _ := text.Measure(candidate, face, 0)
+		return float32(width) <= maxWidth
+	}
+	if fits(value) {
 		return value
 	}
-	if limit == 1 {
-		return "…"
+	runes := []rune(value)
+	for keep := len(runes) - 1; keep > 0; keep-- {
+		if candidate := strings.TrimRight(string(runes[:keep]), " ") + "…"; fits(candidate) {
+			return candidate
+		}
 	}
-	return string(runes[:limit-1]) + "…"
+	return "…"
 }
 
 func wrapTextLines(value string, limit int) []string {
 	if limit <= 0 {
 		return strings.Split(value, "\n")
 	}
+	return wrapWords(value, func(line string) bool { return len([]rune(line)) <= limit })
+}
+
+// wrapTextToWidth wraps at measured pixel widths for the given font size, so
+// proportional glyphs cannot push a line past its box the way a rune count can.
+func (scene *MapScene) wrapTextToWidth(value string, size, maxWidth float32) []string {
+	face := &text.GoTextFace{Source: scene.faceSource, Size: float64(size)}
+	return wrapWords(value, func(line string) bool {
+		width, _ := text.Measure(line, face, 0)
+		return float32(width) <= maxWidth
+	})
+}
+
+// wrapWords greedily packs each paragraph's words into lines that satisfy fits.
+// A single word that never fits stands on its own line rather than being split.
+func wrapWords(value string, fits func(string) bool) []string {
 	lines := make([]string, 0)
 	for _, paragraph := range strings.Split(value, "\n") {
 		words := strings.Fields(paragraph)
@@ -808,8 +869,8 @@ func wrapTextLines(value string, limit int) []string {
 		}
 		line := words[0]
 		for _, word := range words[1:] {
-			if len([]rune(line))+1+len([]rune(word)) <= limit {
-				line += " " + word
+			if candidate := line + " " + word; fits(candidate) {
+				line = candidate
 				continue
 			}
 			lines = append(lines, line)
@@ -818,6 +879,12 @@ func wrapTextLines(value string, limit int) []string {
 		lines = append(lines, line)
 	}
 	return lines
+}
+
+// noticeBoxHeight fits one line in the original 30 px bar and adds the
+// drawText line spacing for each further wrapped line.
+func noticeBoxHeight(lines int) float32 {
+	return noticeBoxMinHeight + float32(max(lines, 1)-1)*noticeFontSize*textLineSpacing
 }
 
 func FieldNotesToggleContains(x, y int) bool {
@@ -1162,7 +1229,7 @@ func (scene *MapScene) drawText(destination logicalCanvas, value string, x, y, s
 	scale := float64(destination.scale)
 	options.GeoM.Translate(float64(x)*scale, float64(y)*scale)
 	options.ColorScale.ScaleWithColor(textColor)
-	options.LineSpacing = float64(size) * 1.35 * scale
+	options.LineSpacing = float64(size) * textLineSpacing * scale
 	text.Draw(destination.image, value, &text.GoTextFace{Source: scene.faceSource, Size: float64(size) * scale}, options)
 }
 
@@ -1186,4 +1253,45 @@ func clampRender(value float64) float64 {
 		return 1
 	}
 	return value
+}
+
+// passageOverlayKind is how much of a named passage the map may draw.
+type passageOverlayKind uint8
+
+const (
+	passageOverlayHidden passageOverlayKind = iota
+	passageOverlayGlyph
+	passageOverlayLine
+)
+
+// passageOverlayForRender reads the endpoint tiles' own exploration bits rather
+// than Passage.Explored, which the projection sets when either endpoint is
+// known and so cannot separate one reached shore from both. With exactly one
+// endpoint explored it returns that tile as the glyph anchor.
+func passageOverlayForRender(frame *gameapi.Frame, passage gameapi.Passage) (passageOverlayKind, gameapi.TileID) {
+	if frame == nil || int(passage.From) >= len(frame.Tiles) || int(passage.To) >= len(frame.Tiles) {
+		return passageOverlayHidden, 0
+	}
+	fromExplored, toExplored := frame.Tiles[passage.From].Explored, frame.Tiles[passage.To].Explored
+	switch {
+	case fromExplored && toExplored:
+		return passageOverlayLine, passage.From
+	case fromExplored:
+		return passageOverlayGlyph, passage.From
+	case toExplored:
+		return passageOverlayGlyph, passage.To
+	default:
+		return passageOverlayHidden, 0
+	}
+}
+
+// drawPassageGlyph strokes a small diamond at a passage endpoint. It is
+// symmetric so it hints at nothing about the far shore's direction, and its
+// shape keeps it apart from the round band markers and selection rings.
+func drawPassageGlyph(screen logicalCanvas, x, y float32, tint color.RGBA) {
+	const half = float32(4.2)
+	vector.StrokeLine(screen, x, y-half, x+half, y, 1.5, tint, true)
+	vector.StrokeLine(screen, x+half, y, x, y+half, 1.5, tint, true)
+	vector.StrokeLine(screen, x, y+half, x-half, y, 1.5, tint, true)
+	vector.StrokeLine(screen, x-half, y, x, y-half, 1.5, tint, true)
 }

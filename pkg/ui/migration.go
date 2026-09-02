@@ -126,10 +126,20 @@ func MigrationDiagnosticMessage(diagnostic MigrationDiagnostic, band *gameapi.Ba
 	case MigrationBlockedUnexplored:
 		return "That area is unexplored; move into an outlined frontier tile first."
 	case MigrationBlockedWater:
+		if passage, status, ok := localPassage(band); ok {
+			switch {
+			case status == gameapi.PassageOpen:
+				return fmt.Sprintf("Bands cannot occupy open water; %s crosses it from here: select its highlighted far endpoint.", passage)
+			case passage == gameapi.BeringStrait:
+				return "Bands cannot occupy open water; Beringia is closed until long-term cooling exposes the land bridge."
+			default:
+				return fmt.Sprintf("Bands cannot occupy open water; research Coastal Navigation to cross %s.", passage)
+			}
+		}
 		if band != nil && band.AcquiredTech&(1<<gameapi.CoastalNavigation) != 0 {
 			return "Bands cannot occupy open water; use a land endpoint of a named passage."
 		}
-		return "Bands cannot migrate into open water; Coastal Navigation unlocks named sea crossings."
+		return "Bands cannot migrate into open water; only named passages cross it, and Coastal Navigation unlocks the Wallacea crossings."
 	case MigrationBlockedUninhabitable:
 		return "This terrain is uninhabitable now; climate change may make it viable later."
 	case MigrationBlockedPassageTechnology:
@@ -163,4 +173,26 @@ func absInt(value int) int {
 		return -value
 	}
 	return value
+}
+
+// localPassage reports the named passage whose endpoint the band occupies,
+// preferring an open crossing over a locked one. The projection maps
+// NotAtEndpoint (and an uninhabitable far shore) to Unavailable, so any other
+// status places the band on that passage's shore.
+func localPassage(band *gameapi.Band) (gameapi.PassageID, gameapi.PassageStatus, bool) {
+	if band == nil {
+		return 0, gameapi.PassageUnavailable, false
+	}
+	found, foundStatus, ok := gameapi.PassageID(0), gameapi.PassageUnavailable, false
+	for id, status := range band.PassageStatuses {
+		switch status {
+		case gameapi.PassageOpen:
+			return gameapi.PassageID(id), status, true
+		case gameapi.PassageLocked:
+			if !ok {
+				found, foundStatus, ok = gameapi.PassageID(id), status, true
+			}
+		}
+	}
+	return found, foundStatus, ok
 }

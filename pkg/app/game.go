@@ -1648,7 +1648,7 @@ func newestResumeSlot(slots []gameapi.SlotMetadata) (int, bool) {
 }
 
 func (g *Game) showNotice(message string) {
-	g.showNoticeFor(message, 120)
+	g.showNoticeFor(message, ui.NoticeFrames(message))
 }
 
 func (g *Game) showNoticeFor(message string, frames int) {
@@ -1662,7 +1662,7 @@ func (g *Game) queueToast(message string, isError bool) {
 	if _, ok := g.toasts.Current(); !ok {
 		wasEmpty = true
 	}
-	g.toasts.Push(message, isError, 120)
+	g.toasts.Push(message, isError, ui.NoticeFrames(message))
 	if wasEmpty {
 		if current, ok := g.toasts.Current(); ok {
 			g.notice = current.Message

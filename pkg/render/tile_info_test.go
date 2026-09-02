@@ -209,3 +209,26 @@ func TestLiveabilityRiskLineNamesTheDominantCause(t *testing.T) {
 		t.Fatalf("uncrowded risk line = %q", line)
 	}
 }
+
+func TestLiveabilityLinesFitTheirColumn(t *testing.T) {
+	scene := NewMapScene()
+	frame := representativeRenderFrame()
+	// Worst plausible content: the longest region name, four-digit stocks, a
+	// deep cold reading, full degradation, and a coastal prey profile.
+	tile := &frame.Tiles[0]
+	tile.Region = gameapi.YellowRiverBasin
+	tile.Biome = gameapi.MountainousHighlands
+	tile.LocalTemperatureC = -45
+	tile.ElevationKm = 5.5
+	tile.FloraStock, tile.FloraCap, tile.FaunaStock, tile.FaunaCap = 9999, 9999, 9999, 9999
+	tile.WaterStock, tile.WaterCap = 9999, 9999
+	tile.BaselineK, tile.EcologicalK = 9999, 1
+	tile.Fauna.Weights = [gameapi.FaunaGroupCount]float64{0.15, 0.15, 0.10, 0.05, 0.35, 0.20}
+	summary := currentTileSummary(frame, &frame.Bands[0])
+	face := &text.GoTextFace{Source: scene.faceSource, Size: tileInspectorTextSize}
+	for index, line := range liveabilityLines(summary) {
+		if width, _ := text.Measure(line, face, 0); width > tileInspectorColumnWidth {
+			t.Errorf("line %d %q measures %.1f px, wider than the %d px column", index, line, width, tileInspectorColumnWidth)
+		}
+	}
+}

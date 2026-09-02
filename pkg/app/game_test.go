@@ -1006,3 +1006,12 @@ func migrationPreviewFrame() *gameapi.Frame {
 }
 
 var _ gameapi.Game = (*gameStub)(nil)
+
+func TestShowNoticeScalesDurationWithLength(t *testing.T) {
+	game := New(&gameStub{frame: migrationPreviewFrame()})
+	message := "Too far away: move one outlined tile or use an eligible named passage. Keep using arrows, or press Esc to clear."
+	game.showNotice(message)
+	if game.notice != message || game.noticeFrames != ui.NoticeFrames(message) || game.noticeFrames <= 120 {
+		t.Fatalf("showNotice = %q for %d frames, want ui.NoticeFrames %d (> 120)", game.notice, game.noticeFrames, ui.NoticeFrames(message))
+	}
+}

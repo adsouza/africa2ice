@@ -9,6 +9,7 @@ import (
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
 func TestMapTileAt(t *testing.T) {
@@ -219,16 +220,14 @@ func TestRecentEventLinesShowNewestFirstAndStayBounded(t *testing.T) {
 		{Turn: 7, Kind: gameapi.EventTechnology, Summary: "A deliberately long technology event summary"},
 		{Turn: 8, Kind: gameapi.EventAchievement, Summary: "The latest event"},
 	}
-	lines := recentEventLines(events, 2, 32)
+	lines := recentEventLines(events, 2)
 	if len(lines) != 2 || !strings.HasPrefix(lines[0], "T8 · Achievement") || !strings.HasPrefix(lines[1], "T7 · Technology") {
 		t.Fatalf("recent event lines = %#v", lines)
 	}
-	for _, line := range lines {
-		if len([]rune(line)) > 32 {
-			t.Fatalf("overlong recent event line %q", line)
-		}
+	if !strings.HasSuffix(lines[1], "A deliberately long technology event summary") {
+		t.Fatalf("recentEventLines truncated %q; width is the caller's concern", lines[1])
 	}
-	if empty := recentEventLines(nil, 2, 52); !reflect.DeepEqual(empty, []string{"No campaign events yet."}) {
+	if empty := recentEventLines(nil, 2); !reflect.DeepEqual(empty, []string{"No campaign events yet."}) {
 		t.Fatalf("empty event feed = %#v", empty)
 	}
 }
@@ -563,4 +562,83 @@ func renderMapOffscreen(t *testing.T, frame *gameapi.Frame, selected gameapi.Ban
 		t.Fatalf("offscreen render bounds = %v", screen.Bounds())
 	}
 	return screen
+}
+
+func TestPassageOverlayShowsOnlyLocalGlyphUntilBothEndpointsExplored(t *testing.T) {
+	frame := representativeRenderFrame()
+	// Tile 2 is the fixture's only unexplored tile; the projection sets
+	// Passage.Explored whenever either endpoint is known, so that bit alone
+	// cannot say which shore the player has actually reached.
+	passage := gameapi.Passage{ID: gameapi.BeringStrait, From: 0, To: 2, Status: gameapi.PassageLocked, Explored: true}
+	if kind, anchor := passageOverlayForRender(frame, passage); kind != passageOverlayGlyph || anchor != 0 {
+		t.Fatalf("one explored endpoint = (%v, %d), want glyph at tile 0", kind, anchor)
+	}
+	passage.From, passage.To = 2, 0
+	if kind, anchor := passageOverlayForRender(frame, passage); kind != passageOverlayGlyph || anchor != 0 {
+		t.Fatalf("reversed endpoints = (%v, %d), want glyph at the explored tile 0", kind, anchor)
+	}
+	passage.From, passage.To = 0, 3
+	if kind, _ := passageOverlayForRender(frame, passage); kind != passageOverlayLine {
+		t.Fatalf("both endpoints explored = %v, want full line", kind)
+	}
+	frame.Tiles[0].Explored = false
+	passage.From, passage.To = 0, 2
+	if kind, _ := passageOverlayForRender(frame, passage); kind != passageOverlayHidden {
+		t.Fatalf("stale Explored bit with both tiles hidden = %v, want hidden", kind)
+	}
+
+	frame = representativeRenderFrame()
+	frame.Passages = append(frame.Passages, gameapi.Passage{ID: gameapi.BeringStrait, From: 0, To: 2, Status: gameapi.PassageLocked, Explored: true})
+	wantFrame := cloneRenderFrame(frame)
+	screen := renderMapOffscreen(t, frame, 7, MigrationPreview{}, FieldNote{}, false, EndScene{}, "")
+	defer screen.Deallocate()
+	if !reflect.DeepEqual(frame, wantFrame) {
+		t.Fatal("drawing a one-endpoint passage mutated the accepted frame")
+	}
+}
+
+func TestNoticeWrapsToBoxWidthByMeasuredPixels(t *testing.T) {
+	scene := NewMapScene()
+	long := "Bands cannot occupy open water; South Wallacea crosses it from here: select its highlighted far endpoint. Keep using arrows, or press Esc to clear."
+	lines := scene.wrapTextToWidth(long, noticeFontSize, noticeTextMaxWidth)
+	if len(lines) < 2 || strings.Join(lines, " ") != long {
+		t.Fatalf("long notice wrapped to %#v", lines)
+	}
+	face := &text.GoTextFace{Source: scene.faceSource, Size: noticeFontSize}
+	for _, line := range lines {
+		if width, _ := text.Measure(line, face, 0); width > noticeTextMaxWidth {
+			t.Fatalf("line %q measures %.1f px, wider than the %d px notice box", line, width, noticeTextMaxWidth)
+		}
+	}
+	if short := scene.wrapTextToWidth("Workforce allocation applied", noticeFontSize, noticeTextMaxWidth); len(short) != 1 {
+		t.Fatalf("short notice wrapped to %#v", short)
+	}
+	if got := noticeBoxHeight(len(lines)); got <= noticeBoxHeight(1) {
+		t.Fatalf("box height for %d lines = %.1f, not taller than one line %.1f", len(lines), got, noticeBoxHeight(1))
+	}
+}
+
+func TestRecentEventLinesTruncateByMeasuredWidthNotRuneCount(t *testing.T) {
+	scene := NewMapScene()
+	face := &text.GoTextFace{Source: scene.faceSource, Size: eventLineFontSize}
+	// A real macro-episode line is ~70 runes: the old 52-rune cap cut it off
+	// while roughly a third of the Field Notes panel stayed empty.
+	realistic := recentEventLines([]gameapi.Event{{Turn: 123, Kind: gameapi.EventMacroEpisode, Summary: "Band 12 was affected by the Campanian eruption."}}, 1)[0]
+	if got := scene.truncateTextToWidth(realistic, eventLineFontSize, fieldNotesEventLineWidth); got != realistic {
+		t.Fatalf("realistic event line %q was truncated to %q", realistic, got)
+	}
+	if width, _ := text.Measure(realistic, face, 0); width > fieldNotesEventLineWidth {
+		t.Fatalf("test premise broken: realistic line measures %.1f px, over the %d px panel", width, fieldNotesEventLineWidth)
+	}
+	long := recentEventLines([]gameapi.Event{{Turn: 400, Kind: gameapi.EventMacroEpisode, Summary: strings.Repeat("an extremely long summary ", 6)}}, 1)[0]
+	got := scene.truncateTextToWidth(long, eventLineFontSize, fieldNotesEventLineWidth)
+	if !strings.HasSuffix(got, "…") || !strings.HasPrefix(long, strings.TrimSuffix(got, "…")) {
+		t.Fatalf("overlong line truncated to %q, want a prefix of the original plus an ellipsis", got)
+	}
+	if width, _ := text.Measure(got, face, 0); width > fieldNotesEventLineWidth {
+		t.Fatalf("truncated line %q still measures %.1f px, over %d px", got, width, fieldNotesEventLineWidth)
+	}
+	if narrow := scene.truncateTextToWidth(long, eventLineFontSize, 1); narrow != "…" {
+		t.Fatalf("no-room truncation = %q, want a bare ellipsis", narrow)
+	}
 }

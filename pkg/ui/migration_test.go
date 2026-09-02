@@ -90,7 +90,7 @@ func TestDiagnoseMigrationNamesPassageRequirement(t *testing.T) {
 func TestMigrationWaterMessageExplainsNavigationLimit(t *testing.T) {
 	frame, band := migrationFixture()
 	diagnostic := DiagnoseMigration(frame, band, 3)
-	if message := MigrationDiagnosticMessage(diagnostic, band); !strings.Contains(message, "cannot migrate into open water") || !strings.Contains(message, "Coastal Navigation") {
+	if message := MigrationDiagnosticMessage(diagnostic, band); !strings.Contains(message, "cannot migrate into open water") || !strings.Contains(message, "Coastal Navigation") || !strings.Contains(message, "Wallacea") {
 		t.Fatalf("message %q does not explain the water restriction", message)
 	}
 
@@ -119,4 +119,27 @@ func migrationFixture() (*gameapi.Frame, *gameapi.Band) {
 		MigrationCandidates: []gameapi.MigrationCandidate{{TileID: 1}, {TileID: 8}},
 	}
 	return frame, band
+}
+
+func TestMigrationWaterMessageAtPassageEndpointNamesTheRealGate(t *testing.T) {
+	frame, band := migrationFixture()
+	diagnostic := DiagnoseMigration(frame, band, 3)
+
+	// PassageStatuses maps NotAtEndpoint to Unavailable, so a Locked or Open
+	// status places the band on that passage's shore.
+	band.PassageStatuses[gameapi.BeringStrait] = gameapi.PassageLocked
+	if message := MigrationDiagnosticMessage(diagnostic, band); strings.Contains(message, "Coastal Navigation") || !strings.Contains(message, "Beringia") {
+		t.Fatalf("Bering endpoint message %q blames technology for a climate gate", message)
+	}
+
+	band.PassageStatuses[gameapi.BeringStrait] = gameapi.PassageUnavailable
+	band.PassageStatuses[gameapi.SouthWallacea] = gameapi.PassageLocked
+	if message := MigrationDiagnosticMessage(diagnostic, band); !strings.Contains(message, "Coastal Navigation") || !strings.Contains(message, "South Wallacea") {
+		t.Fatalf("Wallacea endpoint message %q does not name the locked passage and its technology", message)
+	}
+
+	band.PassageStatuses[gameapi.SouthWallacea] = gameapi.PassageOpen
+	if message := MigrationDiagnosticMessage(diagnostic, band); !strings.Contains(message, "South Wallacea") || !strings.Contains(message, "far endpoint") {
+		t.Fatalf("open passage message %q does not direct the player to the far endpoint", message)
+	}
 }
