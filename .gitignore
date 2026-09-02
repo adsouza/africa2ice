@@ -43,3 +43,6 @@ wasm-size.json
 reference-checkpoints.json
 performance-profile.json
 tools/web-e2e/node_modules/
+
+# Brainstorming visual companion sessions
+.superpowers/
