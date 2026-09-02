@@ -9,13 +9,15 @@ import (
 	"math"
 )
 
-const UISettingsSchemaVersion = 1
+const UISettingsSchemaVersion = 2
 
 type UISettings struct {
-	SchemaVersion     int     `json:"SchemaVersion"`
-	FieldNotesVisible bool    `json:"FieldNotesVisible"`
-	MasterVolume      float64 `json:"MasterVolume"`
-	Muted             bool    `json:"Muted"`
+	SchemaVersion      int     `json:"SchemaVersion"`
+	FieldNotesVisible  bool    `json:"FieldNotesVisible"`
+	MasterVolume       float64 `json:"MasterVolume"`
+	Muted              bool    `json:"Muted"`
+	GuideDismissed     bool    `json:"GuideDismissed"`
+	FieldNotesExpanded bool    `json:"FieldNotesExpanded"`
 }
 
 func DefaultUISettings() UISettings {
@@ -45,19 +47,26 @@ func DecodeUISettings(payload []byte) (UISettings, error) {
 		}
 		return DefaultUISettings(), fmt.Errorf("decode UI settings: %w", err)
 	}
-	required := [...]string{"SchemaVersion", "FieldNotesVisible", "MasterVolume", "Muted"}
+	var settings UISettings
+	if raw, ok := fields["SchemaVersion"]; !ok || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return DefaultUISettings(), errors.New("decode UI settings: missing or null SchemaVersion")
+	} else if err := json.Unmarshal(raw, &settings.SchemaVersion); err != nil {
+		return DefaultUISettings(), fmt.Errorf("decode UI settings schema: %w", err)
+	}
+	required := []string{"FieldNotesVisible", "MasterVolume", "Muted"}
+	switch settings.SchemaVersion {
+	case 1:
+		// Schema 1 predates the guide and drawer height; both default to false.
+	case 2:
+		required = append(required, "GuideDismissed", "FieldNotesExpanded")
+	default:
+		return DefaultUISettings(), fmt.Errorf("unsupported UI settings schema %d", settings.SchemaVersion)
+	}
 	for _, name := range required {
 		value, ok := fields[name]
 		if !ok || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 			return DefaultUISettings(), fmt.Errorf("decode UI settings: missing or null %s", name)
 		}
-	}
-	var settings UISettings
-	if err := json.Unmarshal(fields["SchemaVersion"], &settings.SchemaVersion); err != nil {
-		return DefaultUISettings(), fmt.Errorf("decode UI settings schema: %w", err)
-	}
-	if settings.SchemaVersion != UISettingsSchemaVersion {
-		return DefaultUISettings(), fmt.Errorf("unsupported UI settings schema %d", settings.SchemaVersion)
 	}
 	if err := json.Unmarshal(fields["FieldNotesVisible"], &settings.FieldNotesVisible); err != nil {
 		return DefaultUISettings(), fmt.Errorf("decode FieldNotesVisible: %w", err)
@@ -70,6 +79,14 @@ func DecodeUISettings(payload []byte) (UISettings, error) {
 	}
 	if err := json.Unmarshal(fields["Muted"], &settings.Muted); err != nil {
 		return DefaultUISettings(), fmt.Errorf("decode Muted: %w", err)
+	}
+	if settings.SchemaVersion == 2 {
+		if err := json.Unmarshal(fields["GuideDismissed"], &settings.GuideDismissed); err != nil {
+			return DefaultUISettings(), fmt.Errorf("decode GuideDismissed: %w", err)
+		}
+		if err := json.Unmarshal(fields["FieldNotesExpanded"], &settings.FieldNotesExpanded); err != nil {
+			return DefaultUISettings(), fmt.Errorf("decode FieldNotesExpanded: %w", err)
+		}
 	}
 	return NormalizeUISettings(settings), nil
 }

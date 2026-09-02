@@ -243,7 +243,7 @@ func TestPresentationSettingsInstallAtomicallyAndCoalesceWrites(t *testing.T) {
 	if !game.settingsLoading || len(store.reads) != 1 || len(sounds.masters) != 0 {
 		t.Fatalf("initial settings state = loading %t reads %v masters %v", game.settingsLoading, store.reads, sounds.masters)
 	}
-	loaded := ui.UISettings{SchemaVersion: 1, FieldNotesVisible: false, MasterVolume: 0.8, Muted: true}
+	loaded := ui.UISettings{SchemaVersion: ui.UISettingsSchemaVersion, FieldNotesVisible: false, MasterVolume: 0.8, Muted: true}
 	store.completions = []ui.UISettingsCompletion{{Operation: ui.UISettingsRead, Revision: 1, Settings: loaded}}
 	game.pollUISettings()
 	if game.settingsLoading || game.settings != loaded || game.fieldNotesVisible || len(sounds.masters) != 1 || sounds.masters[0].volume != 0.8 || !sounds.masters[0].muted {

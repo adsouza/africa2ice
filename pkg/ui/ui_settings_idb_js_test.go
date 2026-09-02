@@ -12,7 +12,7 @@ func TestIndexedDBUISettingsStoreBrowserContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := UISettings{SchemaVersion: 1, FieldNotesVisible: false, MasterVolume: 0.65, Muted: true}
+	want := UISettings{SchemaVersion: UISettingsSchemaVersion, FieldNotesVisible: false, MasterVolume: 0.65, Muted: true}
 	if err := store.BeginWrite(1, want); err != nil {
 		t.Fatal(err)
 	}
