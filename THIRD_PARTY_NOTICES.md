@@ -15,14 +15,18 @@ text. This audit is an attribution and release-review record, not legal advice.
 
 | Ecosystem | Component | Version | License | Current scope | Upstream record |
 | --- | --- | --- | --- | --- | --- |
+| Go | `github.com/davecgh/go-spew` | `v1.1.1` | ISC | Complete Go build list only | [source](https://pkg.go.dev/github.com/davecgh/go-spew@v1.1.1?tab=licenses) |
 | Go | `github.com/ebitengine/debugui` | `v0.2.0` | Apache-2.0 | Complete Go build list only | [source](https://pkg.go.dev/github.com/ebitengine/debugui@v0.2.0?tab=licenses) |
 | Go | `github.com/ebitengine/gomobile` | `v0.0.0-20250923094054-ea854a63cce1` | BSD-3-Clause | Complete Go build list only | [source](https://github.com/ebitengine/gomobile/blob/ea854a63cce1/LICENSE) |
 | Go | `github.com/ebitengine/hideconsole` | `v1.0.0` | Apache-2.0 | Release import graph | [source](https://pkg.go.dev/github.com/ebitengine/hideconsole@v1.0.0?tab=licenses) |
 | Go | `github.com/ebitengine/oto/v3` | `v3.4.1` | Apache-2.0 | Release import graph | [source](https://pkg.go.dev/github.com/ebitengine/oto/v3@v3.4.1?tab=licenses) |
 | Go | `github.com/ebitengine/purego` | `v0.9.1` | Apache-2.0 | Release import graph | [source](https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1?tab=licenses) |
+| Go | `github.com/ebitenui/ebitenui` | `v0.7.3` | MIT | Release import graph | [source](https://pkg.go.dev/github.com/ebitenui/ebitenui@v0.7.3?tab=licenses) |
+| Go | `github.com/frustra/bbcode` | `v0.0.0-20201127003707-6ef347fbe1c8` | MIT | Release import graph | [source](https://github.com/frustra/bbcode/blob/6ef347fbe1c8/LICENSE) |
 | Go | `github.com/gen2brain/mpeg` | `v0.5.0` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/gen2brain/mpeg@v0.5.0?tab=licenses) |
 | Go | `github.com/go-text/typesetting` | `v0.3.0` | Unlicense OR BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/github.com/go-text/typesetting@v0.3.0?tab=licenses) |
 | Go | `github.com/go-text/typesetting-utils` | `v0.0.0-20241103174707-87a29e9e6066` | Unlicense OR BSD-3-Clause | Complete Go build list only | [source](https://github.com/go-text/typesetting-utils/blob/87a29e9e6066/LICENSE) |
+| Go | `github.com/google/go-cmp` | `v0.6.0` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/github.com/google/go-cmp@v0.6.0?tab=licenses) |
 | Go | `github.com/hajimehoshi/bitmapfont/v4` | `v4.1.0` | Apache-2.0 | Complete Go build list only | [source](https://pkg.go.dev/github.com/hajimehoshi/bitmapfont/v4@v4.1.0?tab=licenses) |
 | Go | `github.com/hajimehoshi/ebiten/v2` | `v2.9.10` | Apache-2.0 | Release import graph | [source](https://pkg.go.dev/github.com/hajimehoshi/ebiten/v2@v2.9.10?tab=licenses) |
 | Go | `github.com/hajimehoshi/go-mp3` | `v0.3.4` | Apache-2.0 | Complete Go build list only | [source](https://pkg.go.dev/github.com/hajimehoshi/go-mp3@v0.3.4?tab=licenses) |
@@ -31,9 +35,18 @@ text. This audit is an attribution and release-review record, not legal advice.
 | Go | `github.com/jfreymuth/oggvorbis` | `v1.0.5` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/jfreymuth/oggvorbis@v1.0.5?tab=licenses) |
 | Go | `github.com/jfreymuth/vorbis` | `v1.0.2` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/jfreymuth/vorbis@v1.0.2?tab=licenses) |
 | Go | `github.com/kisielk/errcheck` | `v1.9.0` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/kisielk/errcheck@v1.9.0?tab=licenses) |
+| Go | `github.com/kr/pretty` | `v0.3.1` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/kr/pretty@v0.3.1?tab=licenses) |
+| Go | `github.com/matryer/is` | `v1.4.1` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/matryer/is@v1.4.1?tab=licenses) |
 | Go | `github.com/pierrec/lz4/v4` | `v4.1.22` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/github.com/pierrec/lz4/v4@v4.1.22?tab=licenses) |
+| Go | `github.com/pmezard/go-difflib` | `v1.0.0` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/github.com/pmezard/go-difflib@v1.0.0?tab=licenses) |
 | Go | `github.com/rivo/uniseg` | `v0.4.7` | MIT | Release import graph | [source](https://pkg.go.dev/github.com/rivo/uniseg@v0.4.7?tab=licenses) |
+| Go | `github.com/stretchr/objx` | `v0.5.2` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/stretchr/objx@v0.5.2?tab=licenses) |
+| Go | `github.com/stretchr/testify` | `v1.10.0` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/stretchr/testify@v1.10.0?tab=licenses) |
+| Go | `golang.design/x/clipboard` | `v0.7.0` | MIT | Complete Go build list only | [source](https://pkg.go.dev/golang.design/x/clipboard@v0.7.0?tab=licenses) |
+| Go | `golang.org/x/exp` | `v0.0.0-20250305212735-054e65f0b394` | BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/golang.org/x/exp@v0.0.0-20250305212735-054e65f0b394?tab=licenses) |
+| Go | `golang.org/x/exp/shiny` | `v0.0.0-20250305212735-054e65f0b394` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/golang.org/x/exp/shiny@v0.0.0-20250305212735-054e65f0b394?tab=licenses) |
 | Go | `golang.org/x/image` | `v0.43.0` | BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/golang.org/x/image@v0.43.0?tab=licenses) |
+| Go | `golang.org/x/mobile` | `v0.0.0-20231127183840-76ac6878050a` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/golang.org/x/mobile@v0.0.0-20231127183840-76ac6878050a?tab=licenses) |
 | Go | `golang.org/x/mod` | `v0.36.0` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/golang.org/x/mod@v0.36.0?tab=licenses) |
 | Go | `golang.org/x/sync` | `v0.21.0` | BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/golang.org/x/sync@v0.21.0?tab=licenses) |
 | Go | `golang.org/x/sys` | `v0.44.0` | BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/golang.org/x/sys@v0.44.0?tab=licenses) |
@@ -41,6 +54,8 @@ text. This audit is an attribution and release-review record, not legal advice.
 | Go | `golang.org/x/tools` | `v0.45.0` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/golang.org/x/tools@v0.45.0?tab=licenses) |
 | Go | `golang.org/x/tools/go/expect` | `v0.1.1-deprecated` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/golang.org/x/tools/go/expect@v0.1.1-deprecated?tab=licenses) |
 | Go | `golang.org/x/tools/go/packages/packagestest` | `v0.1.1-deprecated` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/golang.org/x/tools/go/packages/packagestest@v0.1.1-deprecated?tab=licenses) |
+| Go | `gopkg.in/check.v1` | `v1.0.0-20201130134442-10cb98267c6c` | BSD-2-Clause | Complete Go build list only | [source](https://pkg.go.dev/gopkg.in/check.v1@v1.0.0-20201130134442-10cb98267c6c?tab=licenses) |
+| Go | `gopkg.in/yaml.v3` | `v3.0.1` | MIT | Complete Go build list only | [source](https://pkg.go.dev/gopkg.in/yaml.v3@v3.0.1?tab=licenses) |
 
 ## License texts for release-imported modules
 
@@ -254,6 +269,36 @@ versions contains an additional top-level `NOTICE` file.
    limitations under the License.
 ```
 
+### MIT License
+
+This text applies to `github.com/ebitenui/ebitenui` (Copyright 2020 Maik Schreiber) and
+`github.com/frustra/bbcode` (Copyright (C) 2015 Frustra). The two modules ship the same
+permission text with only the copyright line and line-wrapping differing.
+
+```text
+MIT License
+
+Copyright 2020 Maik Schreiber
+Copyright (C) 2015 Frustra.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
 ### `github.com/rivo/uniseg` — MIT License
 
 ```text
@@ -327,6 +372,9 @@ such litigation is filed.
 ```
 
 ### `golang.org/x/image`, `x/sync`, `x/sys`, and `x/text` — BSD-3-Clause
+
+This text also applies to `golang.org/x/exp`, whose LICENSE at
+`v0.0.0-20250305212735-054e65f0b394` is byte-for-byte identical.
 
 ```text
 Copyright 2009 The Go Authors.

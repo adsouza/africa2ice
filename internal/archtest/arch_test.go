@@ -106,6 +106,8 @@ func packageCategory(file string) string {
 		return "ui"
 	case strings.HasPrefix(file, "pkg/audio/"):
 		return "audio"
+	case strings.HasPrefix(file, "pkg/hud/"):
+		return "hud"
 	case strings.HasPrefix(file, "pkg/app/"):
 		return "app"
 	default:
@@ -133,8 +135,10 @@ func allowedImports(category string) ([]string, bool) {
 		return []string{module + "/pkg/gameapi", module + "/pkg/render", module + "/pkg/audio", "github.com/hajimehoshi/ebiten/v2"}, true
 	case "audio":
 		return []string{"github.com/hajimehoshi/ebiten/v2"}, true
+	case "hud":
+		return []string{module + "/pkg/gameapi", module + "/pkg/ui", module + "/pkg/render", "github.com/hajimehoshi/ebiten/v2", "github.com/ebitenui/ebitenui", "golang.org/x/image"}, true
 	case "app":
-		return []string{module + "/internal/application", module + "/internal/adapters/logging", module + "/internal/adapters/storage", module + "/pkg/gameapi", module + "/pkg/render", module + "/pkg/ui", module + "/pkg/audio", "github.com/hajimehoshi/ebiten/v2"}, true
+		return []string{module + "/internal/application", module + "/internal/adapters/logging", module + "/internal/adapters/storage", module + "/pkg/gameapi", module + "/pkg/render", module + "/pkg/ui", module + "/pkg/hud", module + "/pkg/audio", "github.com/hajimehoshi/ebiten/v2", "github.com/ebitenui/ebitenui"}, true
 	default:
 		return nil, false
 	}
@@ -164,6 +168,27 @@ func TestVerificationDependencyAllowlist(t *testing.T) {
 				t.Fatalf("disallowed import %q accepted", test.imported)
 			}
 		})
+	}
+}
+
+func TestHUDCategoryAllowsEbitenUIAndNothingElseDoes(t *testing.T) {
+	ebitenui := "github.com/ebitenui/ebitenui/widget"
+	if violation := importViolation("pkg/hud/panel.go", ebitenui); violation != "" {
+		t.Fatalf("hud may import ebitenui: %s", violation)
+	}
+	if violation := importViolation("pkg/hud/panel.go", module+"/pkg/ui"); violation != "" {
+		t.Fatalf("hud may import ui: %s", violation)
+	}
+	if violation := importViolation("pkg/app/game.go", "github.com/ebitenui/ebitenui/input"); violation != "" {
+		t.Fatalf("app may read ebitenui input state: %s", violation)
+	}
+	for _, file := range []string{"pkg/render/map.go", "pkg/ui/bands.go", "internal/application/service.go"} {
+		if importViolation(file, ebitenui) == "" {
+			t.Fatalf("%s accepted an ebitenui import", file)
+		}
+	}
+	if importViolation("pkg/hud/panel.go", module+"/internal/application") == "" {
+		t.Fatal("hud accepted an application import")
 	}
 }
 
