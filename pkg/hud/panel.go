@@ -59,6 +59,7 @@ type handles struct {
 	more       *widget.Button
 	bandList   *widget.Window
 	details    *widget.Button
+	bandDetail *widget.Text
 	traits     map[gameapi.HeritableTrait]*widget.Button
 	overlay    *widget.Window
 	rowHeader  [ui.ChecklistRowCount]*widget.Button

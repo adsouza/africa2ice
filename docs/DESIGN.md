@@ -6968,8 +6968,11 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   its climate gate. These diagnostics explain the current accepted frame; the candidate list remains
   the sole authority for whether `QueueMigration` may be sent.
 - **Band line and details:** the selected band's identity line, `Band <id> · Pop <n> · Health
-  <pct>%`, and a `details ▼` / `details ▲` toggle (`▲`/`▼` are plain-text glyphs, chosen because
-  the bundled Go Regular font lacks the outline triangles used elsewhere in the wider ecosystem).
+  <pct>%`, where `<n>` is the band's current population followed by the last completed turn's
+  population change in parentheses whenever that turn changed the population (e.g. `Band 3 · Pop 68
+  (+1) · Health 100%`), and a `details ▼` / `details ▲` toggle (`▲`/`▼` are plain-text glyphs, chosen
+  because the bundled Go Regular font lacks the outline triangles used elsewhere in the wider
+  ecosystem).
   Archaic selection appends `· Computer controlled · read only` and disables every action button.
   The details disclosure, collapsed by default and expanding in place, shows: the last completed
   turn's food line (required, eaten, short FU and its unmet percentage, labeled by turn); the last
@@ -8722,7 +8725,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    activations and reject disabled/repeated/slider/hover paths; save-sound fixtures key exactly once
    by successful manual/quick-save operation ID and keep autosave/load/delete/failure silent.
    Implement and test Field Notes in this step: visible by default; hidden/compact (102 px)/expanded
-   (300 px) drawer states docked over the lower edge of the map area; the edge tab's `hide · F` and
+   (300 px) drawer states docked over the lower edge of the map area; the edge tab's `hide notes · F` and
    `▲ more`/`▼ less` controls; `F` toggles visibility and `Shift+F` toggles compact/expanded; the
    hidden tab retains the newest event; stable context priority for
    explicit trait/technology/passage/interbreeding focus, newly established region, current/warned

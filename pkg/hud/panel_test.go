@@ -138,6 +138,39 @@ func TestDetailsDisclosureListsTraitsAsFocusButtons(t *testing.T) {
 	}
 }
 
+func TestBandLineShowsLastTurnPopulationDelta(t *testing.T) {
+	panel := New()
+	frame := testFrame(1)
+	frame.Bands[0].Population = 61
+	frame.Bands[0].LastOutcomeReport = gameapi.OutcomeReport{Turn: 3, StartingPopulation: 60, EndingPopulation: 61}
+	state := testState(frame, 1)
+	panel.Update(state)
+	if panel.handles.bandDetail == nil {
+		t.Fatal("band detail label not wired up")
+	}
+	if label := panel.handles.bandDetail.Label; !strings.Contains(label, "Pop 61 (+1)") {
+		t.Fatalf("band detail = %q, want it to contain %q", label, "Pop 61 (+1)")
+	}
+
+	freshFrame := testFrame(1)
+	panel = New()
+	state = testState(freshFrame, 1)
+	panel.Update(state)
+	if label := panel.handles.bandDetail.Label; !strings.Contains(label, "Pop 60") || strings.Contains(label, "(") {
+		t.Fatalf("fresh band detail = %q, want Pop 60 with no delta", label)
+	}
+
+	declineFrame := testFrame(1)
+	declineFrame.Bands[0].Population = 56
+	declineFrame.Bands[0].LastOutcomeReport = gameapi.OutcomeReport{Turn: 4, StartingPopulation: 60, EndingPopulation: 56}
+	panel = New()
+	state = testState(declineFrame, 1)
+	panel.Update(state)
+	if label := panel.handles.bandDetail.Label; !strings.Contains(label, "Pop 56 (-4)") {
+		t.Fatalf("decline band detail = %q, want it to contain %q", label, "Pop 56 (-4)")
+	}
+}
+
 func TestChipColorsKeepMoveStatusBorderWhenSelected(t *testing.T) {
 	if border, fill, borderPx := chipColors(true, true); border != colorGreen || fill != colorButtonHover || borderPx != 2 {
 		t.Fatalf("chipColors(done, selected) = %v, %v, %v", border, fill, borderPx)

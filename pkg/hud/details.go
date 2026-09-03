@@ -19,12 +19,20 @@ func (p *Panel) buildBandLine(state State, band *gameapi.Band) widget.PreferredS
 		return row
 	}
 	identity := fmt.Sprintf("Band %d", band.ID)
-	detail := fmt.Sprintf("· Pop %d · Health %.0f%%", band.Population, band.Health*100)
+	detail := fmt.Sprintf("· Pop %d", band.Population)
+	if report := band.LastOutcomeReport; report.Turn > 0 {
+		if delta := int64(report.EndingPopulation) - int64(report.StartingPopulation); delta != 0 {
+			detail += fmt.Sprintf(" (%+d)", delta)
+		}
+	}
+	detail += fmt.Sprintf(" · Health %.0f%%", band.Health*100)
 	if band.Species == gameapi.ArchaicHominin {
 		detail += " · Computer controlled · read only"
 	}
 	row.AddChild(t.label(identity, 13, colorText))
-	row.AddChild(t.label(detail, 10.5, colorDim))
+	detailLabel := t.label(detail, 10.5, colorDim)
+	p.handles.bandDetail = detailLabel
+	row.AddChild(detailLabel)
 	label := "details ▼"
 	if state.DetailsOpen {
 		label = "details ▲"
