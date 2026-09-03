@@ -8,10 +8,30 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
+// gameplayKeysActive reports whether handleGameplayKeys should process
+// gameplay keys. It is false while the modal shortcut sheet is open: the
+// scene stays SceneGameplay while the sheet is shown, so without this guard
+// Space/Tab/etc. would fire behind a sheet that claims only ? or Esc closes
+// it. Esc itself is handled earlier in Update, via escape(), which peels
+// shortcutsOpen before handleGameplayKeys ever runs; only the ? (Shift+/)
+// toggle needs to keep working from inside this function while the guard is
+// closed. Factored out as its own method (rather than inlined into the
+// switch below) because Ebitengine key state cannot be injected in tests —
+// this predicate is the seam tests can exercise directly.
+func (g *Game) gameplayKeysActive() bool {
+	return !g.shortcutsOpen
+}
+
 // handleGameplayKeys is the keyboard half of spec §8: global keys first, then
 // the keys the open checklist row owns.
 func (g *Game) handleGameplayKeys() {
 	shift := ebiten.IsKeyPressed(ebiten.KeyShift)
+	if !g.gameplayKeysActive() {
+		if inpututil.IsKeyJustPressed(ebiten.KeySlash) && shift {
+			g.toggleShortcutSheet()
+		}
+		return
+	}
 	switch {
 	case inpututil.IsKeyJustPressed(ebiten.KeyTab):
 		if g.assignmentDraftDirty() {

@@ -121,6 +121,33 @@ func TestPageKeysAndShiftArrowsChangeTheOpenRow(t *testing.T) {
 	}
 }
 
+func TestShortcutSheetSwallowsGameplayKeys(t *testing.T) {
+	stub := &gameStub{frame: migrationPreviewFrame()}
+	game := New(stub)
+	initialBand := game.selectedBand
+
+	game.shortcutsOpen = true
+	if game.gameplayKeysActive() {
+		t.Fatal("gameplayKeysActive() = true while the shortcut sheet is open, want false")
+	}
+
+	// One call path: handleGameplayKeys itself must respect the guard (no
+	// real key is pressed in this headless test either way, but the guarded
+	// early return must not panic or otherwise misbehave on the path that a
+	// live Space/Tab press would take).
+	game.handleGameplayKeys()
+	if stub.endTurns != 0 || game.selectedBand != initialBand {
+		t.Fatalf("handleGameplayKeys acted while the shortcut sheet was open: endTurns=%d selectedBand=%d", stub.endTurns, game.selectedBand)
+	}
+
+	if !game.escape() || game.shortcutsOpen {
+		t.Fatal("escape() did not close the shortcut sheet")
+	}
+	if !game.gameplayKeysActive() {
+		t.Fatal("gameplayKeysActive() = false after the sheet closed, want true")
+	}
+}
+
 func TestEscapePeelsOneLayerAtATime(t *testing.T) {
 	game := New(&gameStub{frame: migrationPreviewFrame()})
 	// See TestArrowsBelongToTheOpenRow: reaching the frame's only migration
