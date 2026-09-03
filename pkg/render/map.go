@@ -138,6 +138,11 @@ func (scene *MapScene) geometry(frame *gameapi.Frame) MapGeometry {
 
 // Draw renders the map, its overlays, and the terminal scene. Every piece of
 // interactive chrome now belongs to pkg/hud, which draws over this image.
+// The screen is presented every tick regardless of whether the underlying
+// frame changed — pkg/hud's panel redraws every tick and, with Ebitengine's
+// automatic screen clear disabled in production, an untouched screen would
+// leave stale pixels wherever chrome shrank or closed since the last frame.
+// Only drawFrame's expensive work is worth caching, keyed on frameKey.
 func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, ending EndScene, resizeRequired bool) {
 	if frame == nil {
 		screen.Fill(color.RGBA{R: 15, G: 22, B: 29, A: 255})
@@ -149,29 +154,35 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 		camera: scene.camera, visibleHeight: scene.visibleHeight, guideHighlight: scene.guideHighlight,
 	}
 	width, height := screen.Bounds().Dx(), screen.Bounds().Dy()
+	var transform PresentationTransform
 	if scene.frameCached && scene.frameKey == key && scene.frameWidth == width && scene.frameHeight == height {
-		// Production disables Ebitengine's automatic screen clear. Leaving an
-		// unchanged screen untouched lets the engine skip GPU work entirely for
-		// this turn-based presentation.
-		return
+		// The expensive drawFrame work is skipped on an unchanged key, but
+		// production disables Ebitengine's automatic screen clear
+		// (SetScreenClearedEveryFrame(false)), so the screen must still be
+		// repainted every tick: pkg/hud's chrome draws over this image and
+		// redraws every tick regardless, and when chrome shrinks or closes
+		// (details collapsing, the drawer compacting, a window closing) the
+		// vacated region needs this frame's pixels blitted back over it.
+		transform = FitPresentation(width, height)
+	} else {
+		if scene.frameImage != nil {
+			scene.frameImage.Deallocate()
+		}
+		transform = FitPresentation(width, height)
+		contentWidth := max(1, int(math.Ceil(PresentationWidth*transform.Scale)))
+		contentHeight := max(1, int(math.Ceil(PresentationHeight*transform.Scale)))
+		scene.frameImage = ebiten.NewImage(contentWidth, contentHeight)
+		canvas := newLogicalCanvas(scene.frameImage, transform.Scale)
+		scene.drawFrame(canvas, frame, selectedBand, preview, notice, ending)
+		if resizeRequired {
+			scene.drawResizeOverlay(canvas)
+		}
+		scene.frameKey = key
+		scene.frameWidth = width
+		scene.frameHeight = height
+		scene.frameScale = transform.Scale
+		scene.frameCached = true
 	}
-	if scene.frameImage != nil {
-		scene.frameImage.Deallocate()
-	}
-	transform := FitPresentation(width, height)
-	contentWidth := max(1, int(math.Ceil(PresentationWidth*transform.Scale)))
-	contentHeight := max(1, int(math.Ceil(PresentationHeight*transform.Scale)))
-	scene.frameImage = ebiten.NewImage(contentWidth, contentHeight)
-	canvas := newLogicalCanvas(scene.frameImage, transform.Scale)
-	scene.drawFrame(canvas, frame, selectedBand, preview, notice, ending)
-	if resizeRequired {
-		scene.drawResizeOverlay(canvas)
-	}
-	scene.frameKey = key
-	scene.frameWidth = width
-	scene.frameHeight = height
-	scene.frameScale = transform.Scale
-	scene.frameCached = true
 	screen.Fill(color.RGBA{R: 6, G: 11, B: 15, A: 255})
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(transform.OffsetX, transform.OffsetY)

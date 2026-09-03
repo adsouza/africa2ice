@@ -190,6 +190,22 @@ func TestMapSceneCachesTerrainByTerrainRevisionAndAridity(t *testing.T) {
 	}
 }
 
+func TestDrawRepaintsTheScreenEvenWhenTheFrameIsCached(t *testing.T) {
+	frame := representativeRenderFrame()
+	screen := ebiten.NewImage(1280, 720)
+	defer screen.Deallocate()
+	scene := NewMapScene()
+
+	scene.Draw(screen, frame, 7, MigrationPreview{}, "", EndScene{}, false)
+
+	screen.Fill(color.RGBA{R: 255, G: 0, B: 255, A: 255})
+	scene.Draw(screen, frame, 7, MigrationPreview{}, "", EndScene{}, false)
+
+	if got := screen.At(2, 2); got == (color.RGBA{R: 255, G: 0, B: 255, A: 255}) {
+		t.Fatalf("screen.At(2,2) = %v, want the cached frame repainted over the stale magenta fill", got)
+	}
+}
+
 func TestTopDownTerrainKeepsColorPickingAndMarkersOnTheSameGrid(t *testing.T) {
 	frame := representativeRenderFrame()
 	frame.Tiles[5].Biome = gameapi.MountainousHighlands
