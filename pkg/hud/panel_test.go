@@ -247,7 +247,7 @@ func TestWorkforceRowRefreshesWithoutRebuildingAndGuardsApply(t *testing.T) {
 	if panel.builds != builds {
 		t.Fatal("clearing Dirty rebuilt the tree instead of refreshing in place")
 	}
-	if label := panel.handles.rowHeader[ui.RowWorkforce].Text().Label; !strings.Contains(label, "Forage 35") {
+	if label := panel.handles.rowHeader[ui.RowWorkforce].Text().Label; !strings.Contains(label, "F 35") {
 		t.Fatalf("row header did not return to the applied summary: %q", label)
 	}
 }
@@ -262,7 +262,7 @@ func TestDrawerHasThreeStatesAndClickableEvents(t *testing.T) {
 	if panel.handles.drawerTab == nil || panel.handles.drawerTab.Text().Label != "hide notes · F" {
 		t.Fatal("compact drawer tab missing")
 	}
-	if panel.handles.drawerMore == nil || panel.handles.drawerMore.Text().Label != "▴ more" {
+	if panel.handles.drawerMore == nil || panel.handles.drawerMore.Text().Label != "▲ more" {
 		t.Fatal("compact drawer lacks the expand control")
 	}
 	if len(panel.handles.events) != 2 || panel.handles.events[0].Text().Label != "T12 · Migration · Band 1 migrated again" {
@@ -278,12 +278,12 @@ func TestDrawerHasThreeStatesAndClickableEvents(t *testing.T) {
 	}
 	state.NotesMode = NotesExpanded
 	panel.Update(state)
-	if panel.handles.drawerMore.Text().Label != "▾ less" {
+	if panel.handles.drawerMore.Text().Label != "▼ less" {
 		t.Fatal("expanded drawer lacks the collapse control")
 	}
 	state.NotesMode = NotesHidden
 	panel.Update(state)
-	if panel.handles.drawerTab.Text().Label != "▴ notes · F  ·  T12 · Migration · Band 1 migrated again" {
+	if panel.handles.drawerTab.Text().Label != "▲ notes · F  ·  T12 · Migration · Band 1 migrated again" {
 		t.Fatalf("hidden tab = %q, want newest event retained", panel.handles.drawerTab.Text().Label)
 	}
 	if panel.handles.drawerMore != nil || len(panel.handles.events) != 0 {

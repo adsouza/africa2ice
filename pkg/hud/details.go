@@ -25,9 +25,9 @@ func (p *Panel) buildBandLine(state State, band *gameapi.Band) widget.PreferredS
 	}
 	row.AddChild(t.label(identity, 13, colorText))
 	row.AddChild(t.label(detail, 10.5, colorDim))
-	label := "details ▾"
+	label := "details ▼"
 	if state.DetailsOpen {
-		label = "details ▴"
+		label = "details ▲"
 	}
 	toggle := t.button(label, 10, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentToggleDetails}) })
 	toggle.GetWidget().LayoutData = widget.RowLayoutData{Position: widget.RowLayoutPositionEnd}

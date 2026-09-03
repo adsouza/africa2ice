@@ -194,7 +194,10 @@ func (g *Game) Update() error {
 	if g.viewportInitialized && !g.viewport.SupportsGameplay() {
 		return nil
 	}
-	g.handleIntents(g.panel.Update(g.hudState()))
+	intents := g.panel.Update(g.hudState())
+	if g.scenes.Current() == ui.SceneGameplay {
+		g.handleIntents(intents)
+	}
 	modifier := ebiten.IsKeyPressed(ebiten.KeyControl) || ebiten.IsKeyPressed(ebiten.KeyMeta)
 	if modifier && inpututil.IsKeyJustPressed(ebiten.KeyS) && g.scenes.Current() == ui.SceneGameplay {
 		g.beginQuickSave()
@@ -320,7 +323,7 @@ func (g *Game) Update() error {
 		}
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
-		g.endTurn(false)
+		g.endTurn(true)
 	}
 	return nil
 }
@@ -678,6 +681,7 @@ func (g *Game) requestInterbreed() {
 		if g.apply(gameapi.Interbreed{BandID: band.ID, TargetBandID: target}) {
 			g.clearMigrationPreview()
 			g.showNotice(fmt.Sprintf("Interbreeding with archaic band %d — gene flow resolves when the turn ends.", target))
+			g.advanceOpenRow()
 		}
 	}
 }
@@ -956,7 +960,9 @@ func (g *Game) chooseResearchTechnology(technology gameapi.Tech) {
 		g.showNotice("Archaic research is computer controlled; its DAG is read only.")
 		return
 	}
-	g.apply(gameapi.ResearchTech{BandID: band.ID, Tech: technology})
+	if g.apply(gameapi.ResearchTech{BandID: band.ID, Tech: technology}) {
+		g.advanceOpenRow()
+	}
 }
 
 func (g *Game) handleDirectionalMigration(dx, dy int) {
@@ -1026,7 +1032,11 @@ func (g *Game) confirmMigrationPreview() {
 func (g *Game) tryQueueMigration(band *gameapi.Band, tileID gameapi.TileID) bool {
 	diagnostic := ui.DiagnoseMigration(g.frame, band, tileID)
 	if diagnostic.Reason == ui.MigrationAllowed {
-		return g.apply(gameapi.QueueMigration{BandID: band.ID, TileID: tileID})
+		if g.apply(gameapi.QueueMigration{BandID: band.ID, TileID: tileID}) {
+			g.advanceOpenRow()
+			return true
+		}
+		return false
 	}
 	g.showNotice(ui.MigrationDiagnosticMessage(diagnostic, band))
 	return false
@@ -1297,7 +1307,9 @@ func (g *Game) setNotesMode(mode hud.NotesMode) {
 	}
 	settings := g.settings
 	settings.FieldNotesVisible = mode != hud.NotesHidden
-	settings.FieldNotesExpanded = mode == hud.NotesExpanded
+	if mode != hud.NotesHidden {
+		settings.FieldNotesExpanded = mode == hud.NotesExpanded
+	}
 	g.updateUISettings(settings)
 }
 
@@ -1340,6 +1352,7 @@ func (g *Game) splitSelectedBand() {
 		}
 		if g.apply(gameapi.SplitBand{BandID: g.selectedBand, Destination: candidate.TileID}) {
 			g.clearMigrationPreview()
+			g.advanceOpenRow()
 		}
 		return
 	}

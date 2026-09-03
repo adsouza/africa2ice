@@ -769,15 +769,21 @@ func TestRepeatedTileClicksCycleVisibleSapiensAndArchaicBands(t *testing.T) {
 // The title and game-menu overlays are panel widgets from Task 13 onward; this
 // coverage returns against game.overlayState() there.
 func TestTitleAndGameMenuExposeCampaignNavigation(t *testing.T) {
+	// Original assertions Task 13 must restore:
+	//   - the title scene's overlay shows the heading "Africa 2 Ice: Paleolithic
+	//     Dispersal" and a "New Campaign" row.
 	t.Skip("rewritten in Task 13")
 }
 
 func TestGameMenuDescribesTurnBasedBehavior(t *testing.T) {
+	// Original assertions Task 13 must restore:
+	//   - the game-menu overlay shows the heading "Game Menu", its first row is
+	//     "Esc  Back to game", and its help text does not contain "pause" but
+	//     does contain "explicitly end".
 	t.Skip("rewritten in Task 13")
 }
 
 func TestStorageBrowserListsAllGroupsAndActivatesExplicitOperations(t *testing.T) {
-	t.Skip("rewritten in Task 13")
 	stub := &gameStub{frame: migrationPreviewFrame()}
 	game := New(stub)
 	game.scenes.Push(ui.SceneMenu)
@@ -808,7 +814,6 @@ func TestStorageBrowserListsAllGroupsAndActivatesExplicitOperations(t *testing.T
 }
 
 func TestStorageBrowserRestrictsWritesButCanDeleteAnyOccupiedGroup(t *testing.T) {
-	t.Skip("rewritten in Task 13")
 	stub := &gameStub{frame: migrationPreviewFrame()}
 	game := New(stub)
 	game.scenes.Push(ui.SceneMenu)
@@ -828,6 +833,9 @@ func TestStorageBrowserRestrictsWritesButCanDeleteAnyOccupiedGroup(t *testing.T)
 }
 
 func TestSettingsSceneReportsLivePreferences(t *testing.T) {
+	// Original assertions Task 13 must restore:
+	//   - the settings overlay shows "70%" for volume, "Muted  On" when muted,
+	//     and "Field Notes  Hidden" when the drawer is hidden.
 	t.Skip("rewritten in Task 13")
 }
 

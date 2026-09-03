@@ -29,7 +29,7 @@ func (p *Panel) buildHeader(state State) widget.PreferredSizeLocateableWidget {
 	column := t.column(2, nil, nil, stretch())
 	title := t.rowOf(8, stretch())
 	title.AddChild(t.label("Africa 2 Ice", 24, colorTitle))
-	menu := t.button("☰ Menu · Esc", 10.5, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentOpenMenu}) })
+	menu := t.button("Menu · Esc", 10.5, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentOpenMenu}) })
 	menu.GetWidget().LayoutData = widget.RowLayoutData{Position: widget.RowLayoutPositionEnd}
 	title.AddChild(menu)
 	column.AddChild(title)

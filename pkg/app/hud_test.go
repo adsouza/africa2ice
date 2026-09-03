@@ -69,6 +69,61 @@ func TestIntentsReuseHotkeyPaths(t *testing.T) {
 	}
 }
 
+func TestHidingNotesPreservesTheLastChosenHeight(t *testing.T) {
+	game := New(&gameStub{frame: migrationPreviewFrame()})
+	game.setNotesMode(hud.NotesExpanded)
+	game.setNotesMode(hud.NotesHidden)
+	game.toggleFieldNotes()
+	if game.notesMode != hud.NotesExpanded || !game.settings.FieldNotesExpanded {
+		t.Fatalf("after hide+toggle: notesMode %v expanded %t, want NotesExpanded preserved", game.notesMode, game.settings.FieldNotesExpanded)
+	}
+}
+
+func TestAcceptedActionsAdvanceOpenRowUnlessThePlayerChoseOne(t *testing.T) {
+	newGameWithMoveDone := func() (*Game, *gameStub) {
+		before := migrationPreviewFrame()
+		before.Bands[0].SpatialActionUsed = true
+		stub := &gameStub{frame: before}
+		game := New(stub)
+		after := migrationPreviewFrame()
+		after.Bands[0].SpatialActionUsed = true
+		after.Bands[0].HasResearchTarget = true
+		stub.frame = after
+		return game, stub
+	}
+
+	game, _ := newGameWithMoveDone()
+	if game.openRow != ui.RowResearch || game.rowChosen {
+		t.Fatalf("setup: open row %v chosen %t, want Research open and unchosen", game.openRow, game.rowChosen)
+	}
+	game.chooseResearchTechnology(gameapi.Firecraft)
+	if game.openRow != ui.RowMove {
+		t.Fatalf("unchosen: open row after research accepted = %v, want RowMove (both rows done)", game.openRow)
+	}
+
+	chosenGame, _ := newGameWithMoveDone()
+	chosenGame.openRow, chosenGame.rowChosen = ui.RowWorkforce, true
+	chosenGame.chooseResearchTechnology(gameapi.Firecraft)
+	if chosenGame.openRow != ui.RowWorkforce {
+		t.Fatalf("chosen: open row after research accepted = %v, want unchanged RowWorkforce", chosenGame.openRow)
+	}
+}
+
+func TestSpaceEndsTheTurnPastTheSoftBlock(t *testing.T) {
+	stub := &gameStub{frame: migrationPreviewFrame()}
+	game := New(stub)
+	game.endTurn(false)
+	if stub.endTurns != 0 || !game.endTurnArmed {
+		t.Fatalf("unforced end turn with a band still needing a move = turns %d armed %t", stub.endTurns, game.endTurnArmed)
+	}
+	stub2 := &gameStub{frame: migrationPreviewFrame()}
+	game2 := New(stub2)
+	game2.endTurn(true)
+	if stub2.endTurns != 1 {
+		t.Fatalf("forced end turn (Space) = turns %d, want 1 on the first call", stub2.endTurns)
+	}
+}
+
 func TestSelectionChangeResetsDisclosure(t *testing.T) {
 	frame := migrationPreviewFrame()
 	frame.Bands = append(frame.Bands, gameapi.Band{ID: 9, Species: gameapi.HomoSapiens, Population: 50, TileID: 0, HasResearchTarget: true, SpatialActionUsed: true})

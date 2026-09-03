@@ -78,7 +78,7 @@ func RoleShortLabel(role gameapi.WorkforceRole) string {
 	return [...]string{"Foraging", "Hunt / fish", "Toolcraft", "Megafauna", "Shelter / care"}[role]
 }
 
-var roleSummaryLabels = [gameapi.AssignmentCount]string{"Forage", "Hunt", "Tools", "Mega", "Shelter"}
+var roleSummaryLabels = [gameapi.AssignmentCount]string{"F", "H", "T", "M", "S"}
 
 // WorkforceSummary is the collapsed Workforce row's one-line state.
 func WorkforceSummary(allocation [gameapi.AssignmentCount]uint16, dirty bool) string {

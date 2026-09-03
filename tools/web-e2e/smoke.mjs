@@ -32,23 +32,6 @@ const origin = `http://127.0.0.1:${port}`;
 const browser = await chromium.launch({ headless: true });
 const pressGameKey = (page, key) => page.keyboard.press(key, { delay: 40 });
 
-// endTurnWithSpace ends the turn from the keyboard. The End turn gate soft-
-// blocks while any band still has an open spatial action: the first Space arms
-// the gate and shows why, and the next one ends the turn anyway.
-const endTurnWithSpace = async (page, expectedTurn) => {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    await pressGameKey(page, "Space");
-    await page.waitForTimeout(150);
-    const summary = JSON.parse(await page.locator("html").getAttribute("data-africa2ice-summary"));
-    if (summary.turn === expectedTurn) return;
-  }
-  await page.waitForFunction(
-    expected => JSON.parse(document.documentElement.dataset.africa2iceSummary).turn === expected,
-    expectedTurn,
-    { timeout: 5_000 },
-  );
-};
-
 const openGame = async (context, page) => {
   const failures = [];
   page.on("pageerror", error => failures.push(`pageerror: ${error.message}`));
@@ -93,7 +76,8 @@ try {
   }
   if (!queued) throw new Error("could not queue a legal migration with the keyboard");
 
-  await endTurnWithSpace(page, 1);
+  await pressGameKey(page, "Space");
+  await page.waitForFunction(() => JSON.parse(document.documentElement.dataset.africa2iceSummary).turn === 1, null, { timeout: 5_000 });
   const saved = await page.locator("html").getAttribute("data-africa2ice-summary");
   await pressGameKey(page, "Control+S");
   await page.waitForTimeout(1_000);
@@ -108,7 +92,8 @@ try {
 
   await pressGameKey(page, "F1");
   await page.waitForTimeout(1_000);
-  await endTurnWithSpace(page, 2);
+  await pressGameKey(page, "Space");
+  await page.waitForFunction(() => JSON.parse(document.documentElement.dataset.africa2iceSummary).turn === 2, null, { timeout: 5_000 });
   await page.keyboard.down("Shift");
   await pressGameKey(page, "F1");
   await page.waitForTimeout(50);

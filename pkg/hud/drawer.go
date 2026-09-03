@@ -76,7 +76,7 @@ func (p *Panel) buildDrawer(state State) widget.PreferredSizeLocateableWidget {
 	events := newestEvents(state.Frame.Events, drawerEventLines)
 	if state.NotesMode == NotesHidden {
 		border, textColor := colorGoldDeep, colorGoldDeep
-		label := "▴ notes · F"
+		label := "▲ notes · F"
 		if state.Note.Celebration {
 			border, textColor = colorGold, colorGold
 			label = "BREAKTHROUGH · " + label
@@ -90,9 +90,9 @@ func (p *Panel) buildDrawer(state State) widget.PreferredSizeLocateableWidget {
 		root.AddChild(tabRow)
 		return root
 	}
-	moreLabel, moreMode := "▴ more", NotesExpanded
+	moreLabel, moreMode := "▲ more", NotesExpanded
 	if state.NotesMode == NotesExpanded {
-		moreLabel, moreMode = "▾ less", NotesCompact
+		moreLabel, moreMode = "▼ less", NotesCompact
 	}
 	more := t.button(moreLabel, 9, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentSetNotesMode, Notes: moreMode}) })
 	p.handles.drawerMore = more

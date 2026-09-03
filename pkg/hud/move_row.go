@@ -72,7 +72,11 @@ func (p *Panel) buildMoveBody(state State, band *gameapi.Band) widget.PreferredS
 		widget.ContainerOpts.Layout(widget.NewGridLayout(widget.GridLayoutOpts.Columns(3), widget.GridLayoutOpts.Spacing(t.px(8), t.px(2)), widget.GridLayoutOpts.Stretch([]bool{false, true, true}, nil))),
 		widget.ContainerOpts.WidgetOpts(stretch()),
 	)
-	grid.AddChild(t.label("", 9.5, colorDim), t.label("HERE", 9.5, colorGold), t.label("TARGET · "+source.Label(), 9.5, colorCyan))
+	targetHeader := "TARGET"
+	if source != ui.TargetNone {
+		targetHeader = "TARGET · " + source.Label()
+	}
+	grid.AddChild(t.label("", 9.5, colorDim), t.label("HERE", 9.5, colorGold), t.label(targetHeader, 9.5, colorCyan))
 	for _, row := range ui.LiveabilityRows(band, here, target) {
 		mark, markColor := deltaMark(row.Delta)
 		grid.AddChild(t.label(row.Label, 9.5, colorDim))
@@ -123,8 +127,11 @@ func (p *Panel) buildMoveBody(state State, band *gameapi.Band) widget.PreferredS
 		body.AddChild(picker)
 	}
 	hint := "Arrows move a cursor instead of the pointer · Esc clears it · staying put is fine"
-	if band.Species == gameapi.ArchaicHominin {
+	switch {
+	case band.Species == gameapi.ArchaicHominin:
 		hint = "Computer controlled · no player actions"
+	case source == ui.TargetNone:
+		hint = "Hover or click an outlined tile · arrows move a cursor · Esc clears"
 	}
 	body.AddChild(t.label(hint, 8.5, colorDim))
 	return body

@@ -72,7 +72,7 @@ func TestSummariesNameTheAcceptedState(t *testing.T) {
 	}
 
 	allocation := [gameapi.AssignmentCount]uint16{3_500, 3_000, 1_500, 500, 1_500}
-	if got := WorkforceSummary(allocation, false); got != "Forage 35 · Hunt 30 · Tools 15 · Mega 5 · Shelter 15" {
+	if got := WorkforceSummary(allocation, false); got != "F 35 · H 30 · T 15 · M 5 · S 15" {
 		t.Fatalf("workforce summary = %q", got)
 	}
 	if got := WorkforceSummary(allocation, true); got != "Unapplied changes" {

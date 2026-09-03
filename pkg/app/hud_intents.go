@@ -29,18 +29,14 @@ func (g *Game) handleIntent(intent hud.Intent) {
 	case hud.IntentMoveTo:
 		if band := g.selected(); band != nil {
 			g.clearMigrationPreview()
-			if g.tryQueueMigration(band, intent.Tile) {
-				g.advanceOpenRow()
-			}
+			g.tryQueueMigration(band, intent.Tile)
 		}
 	case hud.IntentMoveToBest:
 		if band := g.selected(); band != nil {
 			for _, candidate := range band.MigrationCandidates {
 				if !candidate.RequiresPassage {
 					g.clearMigrationPreview()
-					if g.tryQueueMigration(band, candidate.TileID) {
-						g.advanceOpenRow()
-					}
+					g.tryQueueMigration(band, candidate.TileID)
 					return
 				}
 			}
@@ -48,16 +44,13 @@ func (g *Game) handleIntent(intent hud.Intent) {
 		}
 	case hud.IntentSplit:
 		g.splitSelectedBand()
-		g.advanceOpenRow()
 	case hud.IntentInterbreed:
 		if intent.Band != 0 {
 			g.interbreedFocus = intent.Band
 		}
 		g.requestInterbreed()
-		g.advanceOpenRow()
 	case hud.IntentChooseResearch:
 		g.chooseResearchTechnology(intent.Tech)
-		g.advanceOpenRow()
 	case hud.IntentSelectRole:
 		g.assignmentRole = intent.Role
 	case hud.IntentAdjustRole:
