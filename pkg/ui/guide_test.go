@@ -52,6 +52,18 @@ func TestGuideAdvancesOnDonePredicatesAndNextButOnlyDismissEnds(t *testing.T) {
 	}
 }
 
+// TestGuideSkipsAlreadySatisfiedSteps covers the reviewer-found defect:
+// Observe advanced at most one step, so a player who chose Research before
+// Move left the guide on Move; completing Move then advanced only to
+// Research even though it was already satisfied too.
+func TestGuideSkipsAlreadySatisfiedSteps(t *testing.T) {
+	guide := GuideState{Step: GuideMove}
+	band := &gameapi.Band{Species: gameapi.HomoSapiens, HasQueuedMigration: true, HasResearchTarget: true}
+	if guide = guide.Observe(band); guide.Step != GuideWorkforce {
+		t.Fatalf("guide landed on %v after one Observe, want GuideWorkforce", guide.Step)
+	}
+}
+
 func TestGuideCopyAndProgress(t *testing.T) {
 	steps := []GuideStep{GuideMove, GuideResearch, GuideWorkforce, GuideEndTurn}
 	for index, step := range steps {

@@ -41,18 +41,25 @@ func (guide GuideState) Next() GuideState {
 func (guide GuideState) Dismiss() GuideState { return GuideState{Step: GuideDismissed} }
 
 // Observe advances the Move and Research steps when the selected band's row
-// predicate flips true. Workforce is optional and advances only on Next.
+// predicate is already satisfied, looping so a player who does both out of
+// order (choosing Research before Move, say) catches the guide up to
+// Workforce in one call rather than needing a second Observe to notice the
+// step Next already skipped past. Workforce is optional and advances only on
+// Next, so the loop always stops there.
 func (guide GuideState) Observe(band *gameapi.Band) GuideState {
 	if band == nil {
 		return guide
 	}
-	switch {
-	case guide.Step == GuideMove && MoveDone(*band):
-		return guide.Next()
-	case guide.Step == GuideResearch && ResearchDone(*band):
-		return guide.Next()
+	for {
+		switch {
+		case guide.Step == GuideMove && MoveDone(*band):
+			guide = guide.Next()
+		case guide.Step == GuideResearch && ResearchDone(*band):
+			guide = guide.Next()
+		default:
+			return guide
+		}
 	}
-	return guide
 }
 
 // ObserveTurnCompleted moves the End turn step to the closing card.
