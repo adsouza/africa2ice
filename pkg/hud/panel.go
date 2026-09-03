@@ -68,6 +68,8 @@ type handles struct {
 	overlayButtons []*widget.Button
 	deleteButtons  []*widget.Button
 	newCampaign    *widget.Button
+	volumeSlider   *widget.Slider
+	volumeLabel    *widget.Text
 }
 
 func New() *Panel {
@@ -82,6 +84,7 @@ func New() *Panel {
 func (p *Panel) Update(state State) []Intent {
 	structural, lastStructural := state, p.last
 	structural.Workforce, lastStructural.Workforce = WorkforceDraft{}, WorkforceDraft{}
+	structural.Overlay.MasterVolume, lastStructural.Overlay.MasterVolume = 0, 0
 	switch {
 	case !p.built || structural != lastStructural:
 		p.rebuild(state)
@@ -89,6 +92,9 @@ func (p *Panel) Update(state State) []Intent {
 	case state.Workforce != p.last.Workforce:
 		p.last = state
 		p.refreshWorkforce(state)
+	case state.Overlay.MasterVolume != p.last.Overlay.MasterVolume:
+		p.last = state
+		p.refreshVolume(state)
 	}
 	p.ui.Update()
 	intents := p.intents

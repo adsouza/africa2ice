@@ -19,13 +19,18 @@ const (
 // assert on it without inspecting widget internals.
 const menuHelp = "Turns advance only when you explicitly end them."
 
+// titleHeading is the title overlay's heading; kept as a constant so tests
+// can assert on it without inspecting widget internals, and so the label
+// drawn on screen cannot drift from what a test checks.
+const titleHeading = "Africa 2 Ice: Paleolithic Dispersal"
+
 // buildOverlay shows the modal for the current non-gameplay scene, or the
 // shortcut sheet, as an ebitenui window that blocks input beneath it.
 func (p *Panel) buildOverlay(state State) {
 	var content *widget.Container
 	switch {
 	case state.Overlay.Scene == ui.SceneTitle:
-		content = p.menuList("Africa 2 Ice: Paleolithic Dispersal", "Guide Homo sapiens from East Africa, 80,000–20,000 BP.", []menuEntry{
+		content = p.menuList(titleHeading, "Guide Homo sapiens from East Africa, 80,000–20,000 BP.", []menuEntry{
 			{"Continue · Enter", Intent{Kind: IntentContinue}},
 			{"New Campaign · N", Intent{Kind: IntentNewCampaign}},
 			{"Load a checkpoint · L", Intent{Kind: IntentOpenStorage}},
@@ -130,7 +135,9 @@ func (p *Panel) settingsPanel(state State) *widget.Container {
 	}
 	frame := p.overlayFrame("Settings", help)
 	volume := t.rowOf(10, stretch())
-	volume.AddChild(t.label(fmt.Sprintf("Master volume %3.0f%%", state.Overlay.MasterVolume*100), 13, colorText))
+	label := t.label(fmt.Sprintf("Master volume %3.0f%%", state.Overlay.MasterVolume*100), 13, colorText)
+	p.handles.volumeLabel = label
+	volume.AddChild(label)
 	slider := widget.NewSlider(
 		widget.SliderOpts.Orientation(widget.DirectionHorizontal),
 		widget.SliderOpts.MinMax(0, 100),
@@ -143,6 +150,7 @@ func (p *Panel) settingsPanel(state State) *widget.Container {
 		widget.SliderOpts.WidgetOpts(widget.WidgetOpts.MinSize(t.px(220), t.px(14))),
 	)
 	slider.GetWidget().Disabled = state.Overlay.SettingsDisabled
+	p.handles.volumeSlider = slider
 	volume.AddChild(slider)
 	frame.AddChild(volume)
 	mute := "Muted: off · M"
@@ -169,6 +177,21 @@ func (p *Panel) settingsPanel(state State) *widget.Container {
 		frame.AddChild(button)
 	}
 	return frame
+}
+
+// refreshVolume updates the settings overlay's slider position and label
+// without rebuilding the tree, so ebitenui's drag state (which lives on the
+// *Slider instance) survives a mid-drag ChangedHandler round trip through
+// the application and back into State.Overlay.MasterVolume.
+func (p *Panel) refreshVolume(state State) {
+	if p.handles.volumeSlider != nil {
+		if current := int(state.Overlay.MasterVolume*100 + 0.5); p.handles.volumeSlider.Current != current {
+			p.handles.volumeSlider.Current = current
+		}
+	}
+	if p.handles.volumeLabel != nil {
+		p.handles.volumeLabel.Label = fmt.Sprintf("Master volume %3.0f%%", state.Overlay.MasterVolume*100)
+	}
 }
 
 func (p *Panel) shortcutSheet() *widget.Container {

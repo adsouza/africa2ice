@@ -768,7 +768,8 @@ func TestRepeatedTileClicksCycleVisibleSapiensAndArchaicBands(t *testing.T) {
 
 // The title and game-menu overlays are panel widgets from Task 13 onward.
 func TestTitleAndGameMenuExposeCampaignNavigation(t *testing.T) {
-	game := New(&gameStub{frame: migrationPreviewFrame()})
+	stub := &gameStub{frame: migrationPreviewFrame()}
+	game := New(stub)
 	game.scenes.Push(ui.SceneTitle)
 	if game.overlayState().Scene != ui.SceneTitle {
 		t.Fatal("title scene not reported")
@@ -781,6 +782,16 @@ func TestTitleAndGameMenuExposeCampaignNavigation(t *testing.T) {
 	game.handleIntents([]hud.Intent{{Kind: hud.IntentOpenSettings}})
 	if game.scenes.Current() != ui.SceneSettings {
 		t.Fatal("Settings intent did not open settings")
+	}
+
+	game.scenes.Reset()
+	game.scenes.Push(ui.SceneTitle)
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentNewCampaign}})
+	if stub.newCampaigns != 1 {
+		t.Fatalf("new campaigns = %d, want 1", stub.newCampaigns)
+	}
+	if game.scenes.Current() != ui.SceneGameplay {
+		t.Fatal("New Campaign from the title did not return to gameplay")
 	}
 }
 

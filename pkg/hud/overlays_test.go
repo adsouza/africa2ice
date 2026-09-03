@@ -6,6 +6,7 @@ import (
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/adsouza/africa2ice/pkg/ui"
+	"github.com/ebitenui/ebitenui/widget"
 )
 
 // TestGameMenuDescribesTurnBasedBehavior covers the Game Menu overlay's help
@@ -60,6 +61,56 @@ func TestStorageOverlayRowsCarrySlots(t *testing.T) {
 	}
 	if len(panel.handles.deleteButtons) != 2 || !panel.handles.deleteButtons[1].GetWidget().Disabled {
 		t.Fatal("delete controls: want one per labelled row, disabled for empty slots")
+	}
+}
+
+// TestTitleOverlayShowsHeadingAndNewCampaign covers the title overlay's
+// content and its New Campaign row, which had no dedicated coverage before.
+func TestTitleOverlayShowsHeadingAndNewCampaign(t *testing.T) {
+	panel := New()
+	state := testState(testFrame(1), 1)
+	state.Overlay = OverlayState{Scene: ui.SceneTitle}
+	panel.Update(state)
+	if panel.handles.overlay == nil || len(panel.handles.overlayButtons) != 3 {
+		t.Fatalf("title buttons = %d", len(panel.handles.overlayButtons))
+	}
+	if label := panel.handles.overlayButtons[1].Text().Label; !strings.Contains(label, "New Campaign") {
+		t.Fatalf("title button 1 = %q, want it to contain New Campaign", label)
+	}
+	panel.handles.overlayButtons[1].Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentNewCampaign {
+		t.Fatalf("new campaign click = %+v", intents)
+	}
+	content := panel.handles.overlay.GetContainer().Children()[0].(*widget.Container)
+	heading := content.Children()[0].(*widget.Text)
+	if heading.Label != titleHeading {
+		t.Fatalf("title heading = %q, want %q", heading.Label, titleHeading)
+	}
+}
+
+// TestSettingsVolumeRefreshesWithoutRebuilding guards against a rebuild on
+// every slider tick: ebitenui's drag state lives on the *Slider instance, so
+// a rebuild mid-drag (recreating the slider) would kill the drag after the
+// first tick. A volume-only state change must go through refreshVolume
+// instead of Panel.rebuild.
+func TestSettingsVolumeRefreshesWithoutRebuilding(t *testing.T) {
+	panel := New()
+	state := testState(testFrame(1), 1)
+	state.Overlay = OverlayState{Scene: ui.SceneSettings, MasterVolume: 0.5}
+	panel.Update(state)
+	builds := panel.builds
+
+	state.Overlay.MasterVolume = 0.6
+	panel.Update(state)
+
+	if panel.builds != builds {
+		t.Fatalf("builds = %d, want %d (volume-only change must not rebuild)", panel.builds, builds)
+	}
+	if panel.handles.volumeSlider.Current != 60 {
+		t.Fatalf("slider current = %d, want 60", panel.handles.volumeSlider.Current)
+	}
+	if !strings.Contains(panel.handles.volumeLabel.Label, "60%") {
+		t.Fatalf("volume label = %q, want it to contain 60%%", panel.handles.volumeLabel.Label)
 	}
 }
 
