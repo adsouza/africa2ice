@@ -203,7 +203,7 @@ func (p *Panel) shortcutSheet() *widget.Container {
 		"Move row:  arrows steer the cursor · Enter queues · Esc clears",
 		"Research row:  Up/Down highlight · Enter chooses · 1–9 direct",
 		"Workforce row:  Up/Down pick a role · Left/Right or −/+ step 1% · Shift 5% · Enter/A apply · D discard",
-		"N split · I interbreed · J cycle partner · G cycle trait note",
+		"N split · I interbreed · J cycle partner · G cycle trait note · B best tile",
 		"F notes · Shift+F expand notes · wheel scrolls notes · Z camera",
 		"Ctrl/Cmd+S quick-save · F1–F3 save · Shift+F1–F3 load · M mute · Esc menu",
 	}

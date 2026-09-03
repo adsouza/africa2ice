@@ -4,9 +4,39 @@ import (
 	"testing"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
+	"github.com/adsouza/africa2ice/pkg/hud"
 	"github.com/adsouza/africa2ice/pkg/ui"
 	"github.com/hajimehoshi/ebiten/v2"
 )
+
+func TestBestTileHotkeySharesTheButtonPath(t *testing.T) {
+	stub := &gameStub{frame: migrationPreviewFrame()}
+	game := New(stub)
+
+	game.moveToBestTile()
+	command, ok := stub.appliedCommand.(gameapi.QueueMigration)
+	if !ok || command.BandID != 7 || command.TileID != 2 {
+		t.Fatalf("moveToBestTile applied %#v, want QueueMigration for band 7 to tile 2", stub.appliedCommand)
+	}
+
+	frame := migrationPreviewFrame()
+	frame.Bands[0].MigrationCandidates = []gameapi.MigrationCandidate{{TileID: 2, RequiresPassage: true}}
+	passageOnlyStub := &gameStub{frame: frame}
+	passageOnlyGame := New(passageOnlyStub)
+
+	passageOnlyGame.moveToBestTile()
+	if passageOnlyStub.appliedCommand != nil || passageOnlyGame.notice != "No reachable land tile to move to this turn." {
+		t.Fatalf("passage-only moveToBestTile = command %#v, notice %q", passageOnlyStub.appliedCommand, passageOnlyGame.notice)
+	}
+
+	mouseStub := &gameStub{frame: migrationPreviewFrame()}
+	mouseGame := New(mouseStub)
+	mouseGame.handleIntents([]hud.Intent{{Kind: hud.IntentMoveToBest}})
+	mouseCommand, ok := mouseStub.appliedCommand.(gameapi.QueueMigration)
+	if !ok || mouseCommand != command {
+		t.Fatalf("mouse path applied %#v, want the same command as the keyboard path %#v", mouseStub.appliedCommand, command)
+	}
+}
 
 func TestArrowsBelongToTheOpenRow(t *testing.T) {
 	stub := &gameStub{frame: migrationPreviewFrame()}

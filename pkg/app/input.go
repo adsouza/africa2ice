@@ -56,6 +56,8 @@ func (g *Game) handleGameplayKeys() {
 		g.selectNextInterbreedTarget()
 	case inpututil.IsKeyJustPressed(ebiten.KeyG):
 		g.focusNextTraitNote()
+	case inpututil.IsKeyJustPressed(ebiten.KeyB):
+		g.moveToBestTile()
 	case inpututil.IsKeyJustPressed(ebiten.KeySpace):
 		g.endTurn(true)
 	case inpututil.IsKeyJustPressed(ebiten.KeyMinus):

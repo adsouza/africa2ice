@@ -98,7 +98,7 @@ func (p *Panel) buildMoveBody(state State, band *gameapi.Band) widget.PreferredS
 	moveHere := t.button("Move here · Enter", 10.5, colorCyan, colorCyan, func() { p.emit(Intent{Kind: IntentMoveTo, Tile: targetTile}) })
 	moveHere.GetWidget().Disabled = !canMove
 	p.handles.moveHere = moveHere
-	best := t.button("Best tile", 10.5, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentMoveToBest}) })
+	best := t.button("Best tile · B", 10.5, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentMoveToBest}) })
 	best.GetWidget().Disabled = done || len(band.MigrationCandidates) == 0
 	p.handles.best = best
 	split := t.button("Split · N", 10.5, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentSplit}) })

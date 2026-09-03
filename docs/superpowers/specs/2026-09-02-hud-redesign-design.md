@@ -138,7 +138,7 @@ otherwise reads "hover or click an outlined tile". Relative ▲▼ marks compare
 Absolute coloring (§5.4) applies to both columns.
 
 Buttons: `Move here · Enter` (cyan when the cursor or hovered tile is in `MigrationCandidates`,
-otherwise disabled), `Best tile` (first-ranked ordinary-land candidate), `Split · N`,
+otherwise disabled), `Best tile · B` (first-ranked ordinary-land candidate), `Split · N`,
 `Interbreed · I` with a partner picker when more than one archaic band qualifies. Disabled
 buttons show the `pkg/ui` migration diagnostic as a tooltip. Clicking an unreachable tile keeps
 the existing explanatory notice.
@@ -239,7 +239,7 @@ Order inside `Game.Update` after storage and settings polling:
 4. Keyboard: global keys, then row-owned keys.
 
 **Global**: Space end turn · Tab / Shift+Tab bands · Esc · F notes · N split · I interbreed ·
-J cycle partner · G cycle trait note · 1–9 research · M mute · Ctrl/Cmd+S · F1–F3, Shift+F1–F3 ·
+J cycle partner · G cycle trait note · B move to the best tile · 1–9 research · M mute · Ctrl/Cmd+S · F1–F3, Shift+F1–F3 ·
 new: `Z` camera override · `?` shortcut sheet · Shift+Up/Down and PgUp/PgDn change open row ·
 Shift+PgUp/PgDn scroll the drawer · Shift+F toggles the drawer between compact and expanded.
 

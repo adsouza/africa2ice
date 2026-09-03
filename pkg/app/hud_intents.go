@@ -34,16 +34,7 @@ func (g *Game) handleIntent(intent hud.Intent) {
 			g.tryQueueMigration(band, intent.Tile)
 		}
 	case hud.IntentMoveToBest:
-		if band := g.selected(); band != nil {
-			for _, candidate := range band.MigrationCandidates {
-				if !candidate.RequiresPassage {
-					g.clearMigrationPreview()
-					g.tryQueueMigration(band, candidate.TileID)
-					return
-				}
-			}
-			g.showNotice("No reachable land tile to move to this turn.")
-		}
+		g.moveToBestTile()
 	case hud.IntentSplit:
 		g.splitSelectedBand()
 	case hud.IntentInterbreed:
@@ -86,6 +77,24 @@ func (g *Game) handleIntent(intent hud.Intent) {
 	default:
 		g.handleOverlayIntent(intent)
 	}
+}
+
+// moveToBestTile queues a migration to the selected band's first ordinary
+// (non-passage) MigrationCandidates entry, sharing one code path between the
+// Best tile button and the B hotkey (spec §3.4).
+func (g *Game) moveToBestTile() {
+	band := g.selected()
+	if band == nil {
+		return
+	}
+	for _, candidate := range band.MigrationCandidates {
+		if !candidate.RequiresPassage {
+			g.clearMigrationPreview()
+			g.tryQueueMigration(band, candidate.TileID)
+			return
+		}
+	}
+	g.showNotice("No reachable land tile to move to this turn.")
 }
 
 // handleOverlayIntent maps modal-scene widget clicks onto the same guarded
