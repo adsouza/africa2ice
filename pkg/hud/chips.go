@@ -66,9 +66,9 @@ func (p *Panel) chipButton(band gameapi.Band, selected bool) *widget.Button {
 	}
 	width := t.px(borderPx)
 	images := &widget.ButtonImage{
-		Idle:    bordered(fill, border, width),
-		Hover:   bordered(colorButtonHover, border, width),
-		Pressed: bordered(colorButtonDown, border, width),
+		Idle:    t.bordered(fill, border, width),
+		Hover:   t.bordered(colorButtonHover, border, width),
+		Pressed: t.bordered(colorButtonDown, border, width),
 	}
 	id := band.ID
 	button := widget.NewButton(
@@ -115,7 +115,7 @@ func (p *Panel) buildChips(state State) widget.PreferredSizeLocateableWidget {
 // one selects it, and the application closes the list on selection.
 func (p *Panel) openBandList(state State) {
 	t := p.theme
-	list := t.column(3, t.insets(12, 14, 14, 12), bordered(colorRowOpen, colorGoldDeep, t.px(1)))
+	list := t.column(3, t.insets(12, 14, 14, 12), t.bordered(colorRowOpen, colorGoldDeep, t.px(1)))
 	list.AddChild(t.label("ALL BANDS · priority order", 10, colorGoldDeep))
 	for _, id := range ui.SapiensBandIDsByAttention(state.Frame.Bands) {
 		for _, band := range state.Frame.Bands {

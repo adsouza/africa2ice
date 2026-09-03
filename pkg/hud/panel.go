@@ -185,7 +185,7 @@ func (p *Panel) buildCameraButton(state State) widget.PreferredSizeLocateableWid
 // guide card, checklist, end turn, footer.
 func (p *Panel) buildPanel(state State) widget.PreferredSizeLocateableWidget {
 	t := p.theme
-	column := t.column(8, t.insets(14, panelPadding, panelPadding, 12), solid(colorPanel),
+	column := t.column(8, t.insets(14, panelPadding, panelPadding, 12), t.solid(colorPanel),
 		widget.WidgetOpts.LayoutData(p.rect(panelX, panelY, panelWidth, panelHeight)))
 	band := state.selectedBand()
 	column.AddChild(p.buildHeader(state))
@@ -208,9 +208,14 @@ func (p *Panel) buildChecklist(state State, band *gameapi.Band) widget.Preferred
 	t := p.theme
 	column := t.column(4, nil, nil, stretch())
 	column.AddChild(t.label("THIS TURN", 9.5, colorDim))
+	// Once the campaign is over there is no turn left to end, so the button
+	// is omitted rather than drawn as an empty disabled bar (spec §5.3).
+	ongoing := state.Frame.CampaignResult == gameapi.Ongoing
 	if band == nil {
 		column.AddChild(t.label("Select a band on the map or a chip above.", 10, colorText))
-		column.AddChild(p.buildEndTurn(state))
+		if ongoing {
+			column.AddChild(p.buildEndTurn(state))
+		}
 		return column
 	}
 	summaries := [ui.ChecklistRowCount]string{
@@ -240,6 +245,8 @@ func (p *Panel) buildChecklist(state State, band *gameapi.Band) widget.Preferred
 			}
 		}
 	}
-	column.AddChild(p.buildEndTurn(state))
+	if ongoing {
+		column.AddChild(p.buildEndTurn(state))
+	}
 	return column
 }

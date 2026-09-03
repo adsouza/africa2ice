@@ -71,7 +71,7 @@ type menuEntry struct {
 
 func (p *Panel) overlayFrame(heading, help string) *widget.Container {
 	t := p.theme
-	frame := t.column(10, t.insets(24, 28, 28, 20), bordered(colorPanel, colorGoldDeep, t.px(2)), widget.WidgetOpts.MinSize(t.px(overlayWidth), t.px(overlayHeight)))
+	frame := t.column(10, t.insets(24, 28, 28, 20), t.bordered(colorPanel, colorGoldDeep, t.px(2)), widget.WidgetOpts.MinSize(t.px(overlayWidth), t.px(overlayHeight)))
 	frame.AddChild(t.label(heading, 25, colorTitle))
 	if help != "" {
 		frame.AddChild(t.label(help, 11, colorDim))
@@ -99,7 +99,7 @@ func (p *Panel) storageList(state State) *widget.Container {
 		help = state.Overlay.StorageBusy
 	}
 	frame := p.overlayFrame(state.Overlay.StorageHeading, help)
-	saving := state.Overlay.StorageHeading == "Save / Delete"
+	saving := state.Overlay.StorageSaving
 	for _, row := range state.Overlay.StorageRows {
 		if row.Label == "" {
 			continue
@@ -142,7 +142,7 @@ func (p *Panel) settingsPanel(state State) *widget.Container {
 		widget.SliderOpts.Orientation(widget.DirectionHorizontal),
 		widget.SliderOpts.MinMax(0, 100),
 		widget.SliderOpts.InitialCurrent(int(state.Overlay.MasterVolume*100+0.5)),
-		widget.SliderOpts.Images(&widget.SliderTrackImage{Idle: solid(colorPanelEdge), Hover: solid(colorPanelEdge)}, t.buttonImages(colorGoldDeep)),
+		widget.SliderOpts.Images(&widget.SliderTrackImage{Idle: t.solid(colorPanelEdge), Hover: t.solid(colorPanelEdge)}, t.buttonImages(colorGoldDeep)),
 		widget.SliderOpts.FixedHandleSize(t.px(12)),
 		widget.SliderOpts.ChangedHandler(func(args *widget.SliderChangedEventArgs) {
 			p.emit(Intent{Kind: IntentSetVolume, Volume: float64(args.Current) / 100})

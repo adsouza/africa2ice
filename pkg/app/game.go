@@ -1314,18 +1314,6 @@ func (g *Game) toggleFieldNotes() {
 
 func (g *Game) setFieldNote(note render.FieldNote) { g.fieldNote = note }
 
-func (g *Game) handleGameplayHotkey(key ebiten.Key) bool {
-	switch key {
-	case fieldNotesHotkey:
-		g.toggleFieldNotes()
-	case splitBandHotkey:
-		g.splitSelectedBand()
-	default:
-		return false
-	}
-	return true
-}
-
 func (g *Game) splitSelectedBand() {
 	band := g.selected()
 	if band == nil {

@@ -62,6 +62,21 @@ func TestStorageOverlayRowsCarrySlots(t *testing.T) {
 	if len(panel.handles.deleteButtons) != 2 || !panel.handles.deleteButtons[1].GetWidget().Disabled {
 		t.Fatal("delete controls: want one per labelled row, disabled for empty slots")
 	}
+
+	// Save mode is carried as data, not inferred from the heading text.
+	saving := New()
+	saveState := testState(testFrame(1), 1)
+	saveState.Overlay = OverlayState{Scene: ui.SceneStorage, StorageHeading: "Save / Delete", StorageSaving: true}
+	saveState.Overlay.StorageRows[0] = StorageRow{Label: "Manual 1", Detail: "Turn 4 · 78,800 BP · sapiens 490", Slot: 1, Occupied: true, Writable: true}
+	saveState.Overlay.StorageRows[1] = StorageRow{Label: "Quick", Detail: "Turn 6 · 78,000 BP · sapiens 500", Slot: 99, Occupied: true}
+	saving.Update(saveState)
+	saving.handles.overlayButtons[0].Click()
+	if intents := saving.Update(saveState); len(intents) != 1 || intents[0].Kind != IntentSaveSlot || intents[0].Slot != 1 {
+		t.Fatalf("writable row click in save mode = %+v", intents)
+	}
+	if !saving.handles.overlayButtons[1].GetWidget().Disabled {
+		t.Fatal("a quick slot is writable in the save browser")
+	}
 }
 
 // TestTitleOverlayShowsHeadingAndNewCampaign covers the title overlay's

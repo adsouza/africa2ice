@@ -48,7 +48,7 @@ func (p *Panel) buildBandLine(state State, band *gameapi.Band) widget.PreferredS
 // deaths last turn, heritable variants as focus buttons, interbreeding partners.
 func (p *Panel) buildDetails(state State, band *gameapi.Band) widget.PreferredSizeLocateableWidget {
 	t := p.theme
-	column := t.column(4, t.insets(6, 10, 10, 8), solid(colorRow), stretch())
+	column := t.column(4, t.insets(6, 10, 10, 8), t.solid(colorRow), stretch())
 	food := "Food last turn: unavailable"
 	if report := band.LastFoodReport; report.Turn > 0 {
 		food = fmt.Sprintf("Turn %d food: need %.1f · ate %.1f · short %.1f (%.0f%%)", report.Turn, report.RequiredFU, report.ConsumedFU(), report.DeficitFU, report.DeficitFraction()*100)

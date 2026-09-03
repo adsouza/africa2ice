@@ -42,7 +42,11 @@ type StorageRow struct {
 
 // OverlayState describes the modal scene the panel must draw, if any.
 type OverlayState struct {
-	Scene            ui.SceneID
+	Scene ui.SceneID
+	// StorageSaving distinguishes the save browser from the load browser.
+	// It is data rather than an inference from StorageHeading, so renaming
+	// the heading cannot silently turn saves into loads.
+	StorageSaving    bool
 	StorageHeading   string
 	StorageRows      [7]StorageRow
 	StorageBusy      string

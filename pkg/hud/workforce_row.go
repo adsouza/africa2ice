@@ -39,7 +39,7 @@ func workforceTotalLabel(draft WorkforceDraft) string {
 // creates are refreshed in place by refreshWorkforce so a drag survives.
 func (p *Panel) buildWorkforceBody(state State, band *gameapi.Band) widget.PreferredSizeLocateableWidget {
 	t := p.theme
-	body := t.column(3, t.insets(6, 24, 10, 8), solid(colorRowOpen), stretch())
+	body := t.column(3, t.insets(6, 24, 10, 8), t.solid(colorRowOpen), stretch())
 	draft := state.Workforce
 	for role := gameapi.WorkforceRole(0); role < gameapi.AssignmentCount; role++ {
 		current := role
@@ -56,7 +56,7 @@ func (p *Panel) buildWorkforceBody(state State, band *gameapi.Band) widget.Prefe
 			widget.SliderOpts.Orientation(widget.DirectionHorizontal),
 			widget.SliderOpts.MinMax(0, 100),
 			widget.SliderOpts.InitialCurrent(int(draft.AllocationBP[role])/100),
-			widget.SliderOpts.Images(&widget.SliderTrackImage{Idle: solid(colorPanelEdge), Hover: solid(colorPanelEdge)}, t.buttonImages(colorGoldDeep)),
+			widget.SliderOpts.Images(&widget.SliderTrackImage{Idle: t.solid(colorPanelEdge), Hover: t.solid(colorPanelEdge)}, t.buttonImages(colorGoldDeep)),
 			widget.SliderOpts.FixedHandleSize(t.px(10)),
 			widget.SliderOpts.TrackOffset(0),
 			widget.SliderOpts.PageSizeFunc(func() int { return 5 }),

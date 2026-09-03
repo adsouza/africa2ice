@@ -44,9 +44,19 @@ var (
 // and inset the panel uses goes through px() or face(), so a viewport change
 // only needs a rebuild with a new scale.
 type theme struct {
-	source *text.GoTextFaceSource
-	scale  float64
-	faces  map[float64]*text.Face
+	source  *text.GoTextFaceSource
+	scale   float64
+	faces   map[float64]*text.Face
+	solids  map[color.RGBA]*image.NineSlice
+	borders map[borderKey]*image.NineSlice
+}
+
+// borderKey identifies one bordered nine-slice. The width is already in
+// render pixels, so a scale change produces different keys as well as
+// clearing the cache.
+type borderKey struct {
+	body, border color.RGBA
+	widthPx      int
 }
 
 func newTheme() *theme {
@@ -54,7 +64,15 @@ func newTheme() *theme {
 	if err != nil {
 		panic(err)
 	}
-	return &theme{source: source, scale: 1, faces: map[float64]*text.Face{}}
+	theme := &theme{source: source, scale: 1}
+	theme.resetCaches()
+	return theme
+}
+
+func (t *theme) resetCaches() {
+	t.faces = map[float64]*text.Face{}
+	t.solids = map[color.RGBA]*image.NineSlice{}
+	t.borders = map[borderKey]*image.NineSlice{}
 }
 
 func (t *theme) setScale(scale float64) {
@@ -63,7 +81,7 @@ func (t *theme) setScale(scale float64) {
 	}
 	if scale != t.scale {
 		t.scale = scale
-		t.faces = map[float64]*text.Face{}
+		t.resetCaches()
 	}
 }
 
@@ -84,20 +102,36 @@ func (t *theme) insets(top, left, right, bottom float64) *widget.Insets {
 	return &widget.Insets{Top: t.px(top), Left: t.px(left), Right: t.px(right), Bottom: t.px(bottom)}
 }
 
-func solid(c color.Color) *image.NineSlice { return image.NewNineSliceColor(c) }
+// solid and bordered memoize their nine-slices: a rebuild asks for the same
+// handful of backgrounds from every builder, and each miss otherwise
+// allocates a fresh image. The caches are cleared by setScale.
+func (t *theme) solid(c color.RGBA) *image.NineSlice {
+	if cached, ok := t.solids[c]; ok {
+		return cached
+	}
+	slice := image.NewNineSliceColor(c)
+	t.solids[c] = slice
+	return slice
+}
 
-func bordered(body, border color.Color, widthPx int) *image.NineSlice {
-	return image.NewBorderedNineSliceColor(body, border, max(1, widthPx))
+func (t *theme) bordered(body, border color.RGBA, widthPx int) *image.NineSlice {
+	key := borderKey{body: body, border: border, widthPx: max(1, widthPx)}
+	if cached, ok := t.borders[key]; ok {
+		return cached
+	}
+	slice := image.NewBorderedNineSliceColor(body, border, key.widthPx)
+	t.borders[key] = slice
+	return slice
 }
 
 // buttonImages is the standard clickable look; border color varies by role.
 func (t *theme) buttonImages(border color.RGBA) *widget.ButtonImage {
 	width := t.px(1)
 	return &widget.ButtonImage{
-		Idle:     bordered(colorButtonIdle, border, width),
-		Hover:    bordered(colorButtonHover, border, width),
-		Pressed:  bordered(colorButtonDown, border, width),
-		Disabled: bordered(colorRow, colorDisabled, width),
+		Idle:     t.bordered(colorButtonIdle, border, width),
+		Hover:    t.bordered(colorButtonHover, border, width),
+		Pressed:  t.bordered(colorButtonDown, border, width),
+		Disabled: t.bordered(colorRow, colorDisabled, width),
 	}
 }
 

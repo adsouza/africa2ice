@@ -60,10 +60,6 @@ func (g *Game) handleGameplayKeys() {
 		g.moveToBestTile()
 	case inpututil.IsKeyJustPressed(ebiten.KeySpace):
 		g.endTurn(true)
-	case inpututil.IsKeyJustPressed(ebiten.KeyMinus):
-		g.adjustSelectedRole(-100, shift)
-	case inpututil.IsKeyJustPressed(ebiten.KeyEqual):
-		g.adjustSelectedRole(100, shift)
 	default:
 		for index, key := range [...]ebiten.Key{ebiten.Key1, ebiten.Key2, ebiten.Key3, ebiten.Key4, ebiten.Key5, ebiten.Key6, ebiten.Key7, ebiten.Key8, ebiten.Key9} {
 			if inpututil.IsKeyJustPressed(key) {
@@ -71,7 +67,7 @@ func (g *Game) handleGameplayKeys() {
 				return
 			}
 		}
-		for _, key := range [...]ebiten.Key{ebiten.KeyArrowUp, ebiten.KeyArrowDown, ebiten.KeyArrowLeft, ebiten.KeyArrowRight, ebiten.KeyEnter} {
+		for _, key := range [...]ebiten.Key{ebiten.KeyArrowUp, ebiten.KeyArrowDown, ebiten.KeyArrowLeft, ebiten.KeyArrowRight, ebiten.KeyEnter, ebiten.KeyMinus, ebiten.KeyEqual} {
 			if inpututil.IsKeyJustPressed(key) {
 				g.handleRowKey(key, shift)
 				return
@@ -80,7 +76,8 @@ func (g *Game) handleGameplayKeys() {
 	}
 }
 
-// handleRowKey routes arrows and Enter to whichever row is open.
+// handleRowKey routes arrows, Enter, and Workforce's −/+ to whichever row is
+// open; none of them act while a different row owns the keyboard.
 func (g *Game) handleRowKey(key ebiten.Key, shift bool) {
 	switch g.openRow {
 	case ui.RowMove:
@@ -111,9 +108,9 @@ func (g *Game) handleRowKey(key ebiten.Key, shift bool) {
 			g.assignmentRole = (g.assignmentRole + gameapi.AssignmentCount - 1) % gameapi.AssignmentCount
 		case ebiten.KeyArrowDown:
 			g.assignmentRole = (g.assignmentRole + 1) % gameapi.AssignmentCount
-		case ebiten.KeyArrowLeft:
+		case ebiten.KeyArrowLeft, ebiten.KeyMinus:
 			g.adjustSelectedRole(-100, shift)
-		case ebiten.KeyArrowRight:
+		case ebiten.KeyArrowRight, ebiten.KeyEqual:
 			g.adjustSelectedRole(100, shift)
 		case ebiten.KeyEnter:
 			g.applyAssignmentDraft()

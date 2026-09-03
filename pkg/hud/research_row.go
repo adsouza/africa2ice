@@ -27,7 +27,7 @@ func missingPrerequisites(option gameapi.ResearchOption, acquired uint16) string
 // are buttons, the rest explain their state.
 func (p *Panel) buildResearchBody(_ State, band *gameapi.Band) widget.PreferredSizeLocateableWidget {
 	t := p.theme
-	body := t.column(3, t.insets(6, 24, 10, 8), solid(colorRowOpen), stretch())
+	body := t.column(3, t.insets(6, 24, 10, 8), t.solid(colorRowOpen), stretch())
 	for technology := gameapi.Tech(0); technology < gameapi.TechCount; technology++ {
 		option := band.ResearchOptions[technology]
 		progress := fmt.Sprintf("%.0f/%.0f", band.ResearchProgress[technology], option.Cost)

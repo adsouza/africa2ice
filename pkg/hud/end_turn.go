@@ -15,7 +15,7 @@ func (p *Panel) buildEndTurn(state State) widget.PreferredSizeLocateableWidget {
 	}
 	force := gate.Enabled && !gate.Soft && state.Frame != nil && ui.BandsNeedingMove(state.Frame.Bands) > 0
 	button := widget.NewButton(
-		widget.ButtonOpts.Image(&widget.ButtonImage{Idle: solid(fill), Hover: solid(colorGold), Pressed: solid(colorGoldDeep), Disabled: bordered(colorRow, colorDisabled, t.px(1))}),
+		widget.ButtonOpts.Image(&widget.ButtonImage{Idle: t.solid(fill), Hover: t.solid(colorGold), Pressed: t.solid(colorGoldDeep), Disabled: t.bordered(colorRow, colorDisabled, t.px(1))}),
 		widget.ButtonOpts.Text(gate.Label, t.face(13), &widget.ButtonTextColor{Idle: textColor, Hover: textColor, Pressed: textColor, Disabled: colorDisabled}),
 		widget.ButtonOpts.TextPadding(t.insets(8, 12, 12, 8)),
 		widget.ButtonOpts.ClickedHandler(func(*widget.ButtonClickedEventArgs) { p.emit(Intent{Kind: IntentEndTurn, Force: force}) }),

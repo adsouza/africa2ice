@@ -177,17 +177,28 @@ func TestFieldNotesAndSplitHotkeysRemainDistinct(t *testing.T) {
 		t.Fatal("Field Notes and split-band hotkeys overlap")
 	}
 
+	// Both keys reach the shipped gameplay paths, and neither disturbs what
+	// the other owns: F only moves the drawer, N only splits.
 	stub := &gameStub{frame: migrationPreviewFrame()}
 	game := New(stub)
-	if !game.handleGameplayHotkey(fieldNotesHotkey) || game.notesMode != hud.NotesHidden || stub.appliedCommand != nil {
+	game.toggleFieldNotes()
+	if game.notesMode != hud.NotesHidden || stub.appliedCommand != nil {
 		t.Fatalf("F binding = notes mode %v, command %T", game.notesMode, stub.appliedCommand)
 	}
-	if !game.handleGameplayHotkey(splitBandHotkey) {
-		t.Fatal("N binding was not handled")
-	}
+	game.splitSelectedBand()
 	command, ok := stub.appliedCommand.(gameapi.SplitBand)
 	if !ok || command.BandID != 7 || command.Destination != 2 || game.notesMode != hud.NotesHidden {
 		t.Fatalf("N binding = command %#v, Field Notes mode %v", stub.appliedCommand, game.notesMode)
+	}
+	// Neither key is row-owned, so the open row cannot steal or duplicate them.
+	for _, row := range []ui.ChecklistRow{ui.RowMove, ui.RowResearch, ui.RowWorkforce} {
+		rowGame := New(&gameStub{frame: migrationPreviewFrame()})
+		rowGame.openRow = row
+		rowGame.handleRowKey(fieldNotesHotkey, false)
+		rowGame.handleRowKey(splitBandHotkey, false)
+		if rowGame.notesMode != hud.NotesCompact || rowGame.hasMigrationPreview {
+			t.Fatalf("row %v bound F or N: notes %v, preview %t", row, rowGame.notesMode, rowGame.hasMigrationPreview)
+		}
 	}
 }
 
@@ -197,7 +208,7 @@ func TestSplitHotkeyExplainsWhenNoOrdinaryDestinationExists(t *testing.T) {
 	stub := &gameStub{frame: frame}
 	game := New(stub)
 
-	game.handleGameplayHotkey(splitBandHotkey)
+	game.splitSelectedBand()
 	if stub.appliedCommand != nil || game.notice != "This band has no eligible adjacent land tile for splitting." {
 		t.Fatalf("unavailable split = command %T, notice %q", stub.appliedCommand, game.notice)
 	}

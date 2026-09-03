@@ -1,12 +1,15 @@
 package hud
 
 import (
+	"image"
 	"strings"
 	"testing"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/adsouza/africa2ice/pkg/render"
 	"github.com/adsouza/africa2ice/pkg/ui"
+	"github.com/ebitenui/ebitenui/input"
+	"github.com/ebitenui/ebitenui/widget"
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
@@ -412,5 +415,137 @@ func TestGuideCardShowsStepProgressAndOnlyXDismisses(t *testing.T) {
 	panel.Update(state)
 	if panel.handles.guideX != nil {
 		t.Fatal("dismissed guide still rendered")
+	}
+}
+
+// TestArchaicSelectionDisablesTheMoveRowButtons covers the read-only rule for
+// a computer-controlled selection: the Move row still renders its comparison,
+// but none of its four actions may be sent (spec §4.1).
+func TestArchaicSelectionDisablesTheMoveRowButtons(t *testing.T) {
+	frame := testFrame(1)
+	frame.Bands[0].Species = gameapi.ArchaicHominin
+	frame.Bands[0].InterbreedCandidateIDs = []gameapi.BandID{2}
+	panel := New()
+	state := testState(frame, 1)
+	state.Hover = render.TileHover{TileID: 1, Visible: true}
+	panel.Update(state)
+	for name, button := range map[string]*widget.Button{
+		"Move here": panel.handles.moveHere, "Best tile": panel.handles.best,
+		"Split": panel.handles.split, "Interbreed": panel.handles.interbreed,
+	} {
+		if button == nil {
+			t.Fatalf("%s button missing", name)
+		}
+		if !button.GetWidget().Disabled {
+			t.Fatalf("%s is enabled for a computer-controlled band", name)
+		}
+	}
+	if label := panel.handles.bandDetail.Label; !strings.Contains(label, "Computer controlled") {
+		t.Fatalf("band line = %q, want it to say the band is computer controlled", label)
+	}
+}
+
+// testCursor places ebitenui's pointer at a fixed render-pixel position.
+// Everything except CursorPosition is an inert stub: ebiten's mouse-button
+// state cannot be injected from a test, so this fixture can only exercise
+// hit-testing (Panel.Hovered), never clicks. Button clicks are covered by
+// calling Button.Click directly elsewhere in this file.
+type testCursor struct{ x, y int }
+
+func (c *testCursor) Update()                                         {}
+func (c *testCursor) AfterUpdate()                                    {}
+func (c *testCursor) Draw(*ebiten.Image)                              {}
+func (c *testCursor) AfterDraw(*ebiten.Image)                         {}
+func (c *testCursor) MouseButtonPressed(ebiten.MouseButton) bool      { return false }
+func (c *testCursor) MouseButtonJustPressed(ebiten.MouseButton) bool  { return false }
+func (c *testCursor) MouseButtonJustReleased(ebiten.MouseButton) bool { return false }
+func (c *testCursor) CursorPosition() (int, int)                      { return c.x, c.y }
+func (c *testCursor) GetCursorImage(string) *ebiten.Image             { return nil }
+func (c *testCursor) GetCursorOffset(string) image.Point              { return image.Point{} }
+
+// TestChromeHitTestingFollowsThePresentationTransform is the DIP contract for
+// spec §4: ebitenui lays out and hit-tests in render pixels, so a chrome
+// widget must be hovered at its render-pixel rectangle — including the
+// letterbox offset — and the map area must never register as chrome, whatever
+// the presentation scale.
+func TestChromeHitTestingFollowsThePresentationTransform(t *testing.T) {
+	t.Cleanup(func() { input.SetCursorUpdater(nil) })
+	for _, viewport := range []render.Viewport{
+		render.NextViewport(render.Viewport{}, 1280, 720, 1),
+		render.NextViewport(render.Viewport{}, 1280*2, 900*2, 1),
+	} {
+		transform := render.FitPresentation(viewport.RenderWidthPx, viewport.RenderHeightPx)
+		panel := New()
+		state := testState(testFrame(1), 1)
+		state.Viewport, state.Transform = viewport, transform
+		screen := ebiten.NewImage(viewport.RenderWidthPx, viewport.RenderHeightPx)
+		defer screen.Deallocate()
+		// The first Update/Draw pair lays the tree out; widget rectangles are
+		// assigned during Draw, and input.UIHovered is published there too.
+		panel.Update(state)
+		panel.Draw(screen)
+		rect := panel.handles.endTurn.GetWidget().Rect
+		if rect.Empty() {
+			t.Fatalf("scale %.1f: End turn button has no rectangle", transform.Scale)
+		}
+		// The panel itself must sit at its DIP geometry mapped through the
+		// presentation transform, letterbox offset included; a cursor derived
+		// from a widget rectangle alone would follow a transform mistake
+		// instead of catching it.
+		left, top := transform.LogicalToRender(panelX, panelY)
+		want := image.Rect(int(left+0.5), int(top+0.5), int(left+0.5)+int(panelWidth*transform.Scale+0.5), int(top+0.5)+int(panelHeight*transform.Scale+0.5))
+		if got := panel.root.Children()[0].GetWidget().Rect; got != want {
+			t.Fatalf("scale %.1f: panel rect = %v, want %v", transform.Scale, got, want)
+		}
+
+		cursor := &testCursor{x: (rect.Min.X + rect.Max.X) / 2, y: (rect.Min.Y + rect.Max.Y) / 2}
+		input.SetCursorUpdater(cursor)
+		panel.Update(state)
+		panel.Draw(screen)
+		if !panel.Hovered() {
+			t.Fatalf("scale %.1f: pointer at the End turn button centre %v is not over chrome", transform.Scale, *cursor)
+		}
+
+		if transform.Scale != 1 || transform.OffsetY != 0 {
+			// Same button, addressed in DIP instead of render pixels: the
+			// chrome must not answer there, or the panel would be hit-testing
+			// in the wrong coordinate space.
+			cursor.x = int(float64(cursor.x-int(transform.OffsetX)) / transform.Scale)
+			cursor.y = int(float64(cursor.y-int(transform.OffsetY)) / transform.Scale)
+			panel.Update(state)
+			panel.Draw(screen)
+			if panel.Hovered() {
+				t.Fatalf("scale %.1f: the button's DIP centre %v registered as chrome", transform.Scale, *cursor)
+			}
+		}
+
+		mapX, mapY := transform.LogicalToRender(400, 400)
+		cursor.x, cursor.y = int(mapX), int(mapY)
+		panel.Update(state)
+		panel.Draw(screen)
+		if panel.Hovered() {
+			t.Fatalf("scale %.1f: pointer inside the map at %v registered as chrome", transform.Scale, *cursor)
+		}
+	}
+}
+
+// TestEndTurnDisappearsOnceTheCampaignIsOver covers spec §5.3: after victory,
+// extinction, or dispersal failure there is no turn left to end, so the
+// button is omitted rather than rendered as an empty disabled bar.
+func TestEndTurnDisappearsOnceTheCampaignIsOver(t *testing.T) {
+	panel := New()
+	frame := testFrame(1)
+	state := testState(frame, 1)
+	panel.Update(state)
+	if panel.handles.endTurn == nil {
+		t.Fatal("an ongoing campaign has no End turn button")
+	}
+	frame.CampaignResult = gameapi.Extinction
+	over := testState(frame, 1)
+	over.EndTurn = ui.EndTurnGate{}
+	over.Ending = ui.CampaignEndScene(frame)
+	panel.Update(over)
+	if panel.handles.endTurn != nil {
+		t.Fatal("End turn is still rendered after the campaign ended")
 	}
 }

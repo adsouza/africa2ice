@@ -111,7 +111,7 @@ func (p *Panel) buildDrawer(state State) widget.PreferredSizeLocateableWidget {
 		background, headingColor = colorCelebrate, colorGold
 		heading = "BREAKTHROUGH · " + state.Note.Topic
 	}
-	body := t.column(4, t.insets(6, 12, 12, 6), solid(background),
+	body := t.column(4, t.insets(6, 12, 12, 6), t.solid(background),
 		widget.WidgetOpts.LayoutData(p.rect(mapLeft, mapBottom-height, mapRight-mapLeft, height)))
 	body.AddChild(t.label(heading, 10, headingColor))
 	noteHeight := height - 24 - 14*float64(min(len(events), drawerEventLines)+1) - 12
@@ -121,7 +121,7 @@ func (p *Panel) buildDrawer(state State) widget.PreferredSizeLocateableWidget {
 		widget.TextAreaOpts.FontColor(colorText),
 		widget.TextAreaOpts.ProcessBBCode(true),
 		widget.TextAreaOpts.Text(noteBody(state.Note)),
-		widget.TextAreaOpts.ScrollContainerImage(&widget.ScrollContainerImage{Idle: solid(background), Mask: solid(background)}),
+		widget.TextAreaOpts.ScrollContainerImage(&widget.ScrollContainerImage{Idle: t.solid(background), Mask: t.solid(background)}),
 	)
 	body.AddChild(area)
 	body.AddChild(t.label("RECENT EVENTS", 8, headingColor))
@@ -131,7 +131,7 @@ func (p *Panel) buildDrawer(state State) widget.PreferredSizeLocateableWidget {
 	for _, event := range events {
 		kind := event.Kind
 		line := widget.NewButton(
-			widget.ButtonOpts.Image(&widget.ButtonImage{Idle: solid(background), Hover: solid(colorRowOpen), Pressed: solid(colorRow)}),
+			widget.ButtonOpts.Image(&widget.ButtonImage{Idle: t.solid(background), Hover: t.solid(colorRowOpen), Pressed: t.solid(colorRow)}),
 			widget.ButtonOpts.Text(eventLine(event), t.face(8.5), t.buttonText(colorDim)),
 			widget.ButtonOpts.TextPosition(widget.TextPositionStart, widget.TextPositionCenter),
 			widget.ButtonOpts.ClickedHandler(func(*widget.ButtonClickedEventArgs) { p.emit(Intent{Kind: IntentFocusEvent, Event: kind}) }),

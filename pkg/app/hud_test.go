@@ -158,3 +158,30 @@ func TestGuideFollowsTheTurnAndPersistsDismissal(t *testing.T) {
 		t.Fatal("Show first-turn guide did not restore the card")
 	}
 }
+
+// TestBandActionIntentsStopWhenTheCampaignEnds covers spec §5.3's other half:
+// the epilogue's chrome may still be clickable underneath the end scene, so
+// planning intents must be refused while overlay navigation keeps working.
+func TestBandActionIntentsStopWhenTheCampaignEnds(t *testing.T) {
+	frame := migrationPreviewFrame()
+	frame.CampaignResult = gameapi.Extinction
+	stub := &gameStub{frame: frame}
+	game := New(stub)
+	for _, kind := range []hud.IntentKind{
+		hud.IntentMoveTo, hud.IntentMoveToBest, hud.IntentSplit, hud.IntentInterbreed,
+		hud.IntentChooseResearch, hud.IntentAdjustRole, hud.IntentApplyWorkforce, hud.IntentEndTurn,
+	} {
+		game.handleIntents([]hud.Intent{{Kind: kind, Tile: 2, Delta: 100}})
+		if stub.appliedCommand != nil {
+			t.Fatalf("intent %v applied %#v after the campaign ended", kind, stub.appliedCommand)
+		}
+	}
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentToggleDetails}})
+	if !game.detailsOpen {
+		t.Fatal("overlay/disclosure intents stopped working after the campaign ended")
+	}
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentNewCampaign}})
+	if stub.newCampaigns != 1 {
+		t.Fatalf("New Campaign requests = %d, want 1 after the campaign ended", stub.newCampaigns)
+	}
+}

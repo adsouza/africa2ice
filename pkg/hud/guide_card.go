@@ -12,7 +12,7 @@ func (p *Panel) buildGuideCard(state State) widget.PreferredSizeLocateableWidget
 		return nil
 	}
 	t := p.theme
-	card := t.column(5, t.insets(8, 12, 12, 8), bordered(colorGuide, colorGold, t.px(1)), stretch())
+	card := t.column(5, t.insets(8, 12, 12, 8), t.bordered(colorGuide, colorGold, t.px(1)), stretch())
 	head := t.rowOf(6, stretch())
 	head.AddChild(t.label(state.Guide.Title(), 9, colorGold))
 	current, total := state.Guide.Progress()
@@ -22,7 +22,7 @@ func (p *Panel) buildGuideCard(state State) widget.PreferredSizeLocateableWidget
 		if step <= current {
 			fill = colorGold
 		}
-		bar.AddChild(widget.NewContainer(widget.ContainerOpts.BackgroundImage(solid(fill)), widget.ContainerOpts.WidgetOpts(widget.WidgetOpts.MinSize(t.px(18), t.px(4)))))
+		bar.AddChild(widget.NewContainer(widget.ContainerOpts.BackgroundImage(t.solid(fill)), widget.ContainerOpts.WidgetOpts(widget.WidgetOpts.MinSize(t.px(18), t.px(4)))))
 	}
 	head.AddChild(bar)
 	x := t.button("×", 11, colorGold, colorGold, func() { p.emit(Intent{Kind: IntentGuideDismiss}) })

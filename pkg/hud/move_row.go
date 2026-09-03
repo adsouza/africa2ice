@@ -61,7 +61,7 @@ func (p *Panel) rowHeader(row ui.ChecklistRow, done, open bool, summary string) 
 // buildMoveBody is the open Move row (spec §4.1).
 func (p *Panel) buildMoveBody(state State, band *gameapi.Band) widget.PreferredSizeLocateableWidget {
 	t := p.theme
-	body := t.column(4, t.insets(6, 24, 10, 8), solid(colorRowOpen), stretch())
+	body := t.column(4, t.insets(6, 24, 10, 8), t.solid(colorRowOpen), stretch())
 	here := ui.CurrentTileLiveability(state.Frame, band)
 	targetTile, source := ui.TargetTile(band, state.Preview, state.Hover)
 	target := ui.TileLiveability{}
@@ -94,22 +94,25 @@ func (p *Panel) buildMoveBody(state State, band *gameapi.Band) widget.PreferredS
 
 	buttons := t.rowOf(6)
 	done := ui.MoveDone(*band)
-	canMove := !done && target.Reachable && source != ui.TargetQueued
+	// A computer-controlled selection is read only: the row still shows the
+	// HERE/TARGET comparison, but none of its four actions may be sent.
+	readOnly := band.Species != gameapi.HomoSapiens
+	canMove := !done && !readOnly && target.Reachable && source != ui.TargetQueued
 	moveHere := t.button("Move here · Enter", 10.5, colorCyan, colorCyan, func() { p.emit(Intent{Kind: IntentMoveTo, Tile: targetTile}) })
 	moveHere.GetWidget().Disabled = !canMove
 	p.handles.moveHere = moveHere
 	best := t.button("Best tile · B", 10.5, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentMoveToBest}) })
-	best.GetWidget().Disabled = done || len(band.MigrationCandidates) == 0
+	best.GetWidget().Disabled = done || readOnly || len(band.MigrationCandidates) == 0
 	p.handles.best = best
 	split := t.button("Split · N", 10.5, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentSplit}) })
-	split.GetWidget().Disabled = done
+	split.GetWidget().Disabled = done || readOnly
 	p.handles.split = split
 	partner := state.InterbreedFocus
 	if partner == 0 && len(band.InterbreedCandidateIDs) > 0 {
 		partner = band.InterbreedCandidateIDs[0]
 	}
 	interbreed := t.button("Interbreed · I", 10.5, colorInterbreed, colorInterbreed, func() { p.emit(Intent{Kind: IntentInterbreed, Band: partner}) })
-	interbreed.GetWidget().Disabled = done || len(band.InterbreedCandidateIDs) == 0
+	interbreed.GetWidget().Disabled = done || readOnly || len(band.InterbreedCandidateIDs) == 0
 	p.handles.interbreed = interbreed
 	buttons.AddChild(moveHere, best, split, interbreed)
 	body.AddChild(buttons)

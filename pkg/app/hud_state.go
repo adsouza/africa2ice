@@ -57,8 +57,9 @@ func (g *Game) overlayState() hud.OverlayState {
 	if overlay.Scene != ui.SceneStorage {
 		return overlay
 	}
+	overlay.StorageSaving = g.storageMode == storageBrowserSave
 	overlay.StorageHeading = "Load / Delete"
-	if g.storageMode == storageBrowserSave {
+	if overlay.StorageSaving {
 		overlay.StorageHeading = "Save / Delete"
 	}
 	for index, slot := range storageBrowserSlots {

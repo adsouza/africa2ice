@@ -21,7 +21,6 @@ const (
 	IntentSplit
 	IntentInterbreed
 	IntentChooseResearch
-	IntentSelectRole
 	IntentAdjustRole
 	IntentApplyWorkforce
 	IntentDiscardWorkforce
@@ -31,7 +30,6 @@ const (
 	IntentCameraToggle
 	IntentFocusTrait
 	IntentFocusEvent
-	IntentScrollNotes
 	IntentOpenMenu
 	IntentBack
 	IntentContinue

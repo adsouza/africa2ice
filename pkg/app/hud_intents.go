@@ -13,7 +13,24 @@ func (g *Game) handleIntents(intents []hud.Intent) {
 	}
 }
 
+// bandActionIntent reports whether a kind asks the domain to change the
+// campaign. Every one of these is refused once the campaign is over (spec
+// §5.3); overlay navigation and IntentNewCampaign still work, so the
+// epilogue's own controls keep responding.
+func bandActionIntent(kind hud.IntentKind) bool {
+	switch kind {
+	case hud.IntentMoveTo, hud.IntentMoveToBest, hud.IntentSplit, hud.IntentInterbreed,
+		hud.IntentChooseResearch, hud.IntentAdjustRole, hud.IntentApplyWorkforce, hud.IntentEndTurn:
+		return true
+	default:
+		return false
+	}
+}
+
 func (g *Game) handleIntent(intent hud.Intent) {
+	if g.frame != nil && g.frame.CampaignResult != gameapi.Ongoing && bandActionIntent(intent.Kind) {
+		return
+	}
 	switch intent.Kind {
 	case hud.IntentSelectBand:
 		g.selectBandByID(intent.Band)
@@ -44,8 +61,6 @@ func (g *Game) handleIntent(intent hud.Intent) {
 		g.requestInterbreed()
 	case hud.IntentChooseResearch:
 		g.chooseResearchTechnology(intent.Tech)
-	case hud.IntentSelectRole:
-		g.assignmentRole = intent.Role
 	case hud.IntentAdjustRole:
 		g.assignmentRole = intent.Role
 		g.editAssignmentDraft(intent.Delta)

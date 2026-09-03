@@ -78,6 +78,22 @@ func TestArrowsBelongToTheOpenRow(t *testing.T) {
 		t.Fatal("Enter applied a draft equal to the baseline (nothing to apply)")
 	}
 
+	// − and + belong to the Workforce row exactly like Left/Right, so they
+	// step the selected role there and do nothing while another row is open.
+	game.openRow, game.rowChosen = ui.RowWorkforce, true
+	game.assignmentRole = gameapi.Foraging
+	game.handleRowKey(ebiten.KeyEqual, true)
+	game.handleRowKey(ebiten.KeyMinus, false)
+	if got := game.assignmentDraft[gameapi.Foraging]; got != 400 {
+		t.Fatalf("Shift++ then − in the Workforce row = %d BP, want 400", got)
+	}
+	game.openRow = ui.RowMove
+	game.handleRowKey(ebiten.KeyMinus, false)
+	game.handleRowKey(ebiten.KeyEqual, true)
+	if got := game.assignmentDraft[gameapi.Foraging]; got != 400 {
+		t.Fatalf("−/+ with the Move row open changed the draft to %d BP, want 400", got)
+	}
+
 	game.openRow = ui.RowResearch
 	game.researchCursor = gameapi.Firecraft
 	game.handleRowKey(ebiten.KeyArrowDown, false)
