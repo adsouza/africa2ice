@@ -166,6 +166,3 @@ func (g *Game) toggleNotesExpanded() {
 func (g *Game) toggleShortcutSheet() {
 	g.shortcutsOpen = !g.shortcutsOpen
 }
-
-// toggleCameraOverride is a stub; Task 15 fills it in.
-func (g *Game) toggleCameraOverride() {}

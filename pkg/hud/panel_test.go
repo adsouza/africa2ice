@@ -334,3 +334,22 @@ func TestEndTurnButtonReflectsTheGate(t *testing.T) {
 		t.Fatalf("armed click = %+v", intents)
 	}
 }
+
+func TestCameraButtonReflectsFocusAndEmitsToggle(t *testing.T) {
+	panel := New()
+	state := testState(testFrame(1), 1)
+	state.Camera = CameraState{FocusAvailable: true, Focused: true}
+	panel.Update(state)
+	if panel.handles.camera == nil || panel.handles.camera.Text().Label != "Overview · Z" {
+		t.Fatal("focused camera should offer Overview")
+	}
+	panel.handles.camera.Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentCameraToggle {
+		t.Fatalf("camera click = %+v", intents)
+	}
+	state.Camera = CameraState{}
+	panel.Update(state)
+	if panel.handles.camera != nil {
+		t.Fatal("camera button shown when focus is unavailable")
+	}
+}

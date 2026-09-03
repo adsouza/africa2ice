@@ -27,6 +27,14 @@ const (
 	drawerTabH      = 18.0
 )
 
+// DrawerCompactHeight and DrawerExpandedHeight are exported so pkg/app can
+// derive the map's camera-visible height (spec §6) from the same numbers the
+// drawer itself draws at, rather than duplicating them.
+const (
+	DrawerCompactHeight  = drawerCompactH
+	DrawerExpandedHeight = drawerExpandedH
+)
+
 // Panel owns the ebitenui tree for every piece of chrome. It rebuilds the tree
 // whenever the State value changes and otherwise leaves widgets untouched so
 // presses and hovers survive across ticks.
@@ -64,6 +72,7 @@ type handles struct {
 	drawerTab  *widget.Button
 	drawerMore *widget.Button
 	events     []*widget.Button
+	camera     *widget.Button
 
 	overlayButtons []*widget.Button
 	deleteButtons  []*widget.Button
@@ -144,10 +153,29 @@ func (p *Panel) rebuild(state State) {
 	}
 	p.root.AddChild(p.buildPanel(state))
 	p.root.AddChild(p.buildDrawer(state))
+	if state.Camera.FocusAvailable {
+		p.root.AddChild(p.buildCameraButton(state))
+	}
 	if ending := p.buildEndScene(state); ending != nil {
 		p.root.AddChild(ending)
 	}
 	p.buildOverlay(state)
+}
+
+// buildCameraButton is the map-corner Overview/Focus control (spec §6).
+func (p *Panel) buildCameraButton(state State) widget.PreferredSizeLocateableWidget {
+	t := p.theme
+	label := "Focus · Z"
+	if state.Camera.Focused {
+		label = "Overview · Z"
+	}
+	holder := widget.NewContainer(widget.ContainerOpts.Layout(widget.NewAnchorLayout()),
+		widget.ContainerOpts.WidgetOpts(widget.WidgetOpts.LayoutData(p.rect(mapRight-118, 80, 110, 22))))
+	button := t.button(label, 9.5, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentCameraToggle}) })
+	button.GetWidget().LayoutData = widget.AnchorLayoutData{StretchHorizontal: true, StretchVertical: true}
+	p.handles.camera = button
+	holder.AddChild(button)
+	return holder
 }
 
 // buildPanel is the full chrome column: header, chips, band line, details,

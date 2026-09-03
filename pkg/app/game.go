@@ -82,6 +82,8 @@ type Game struct {
 	notesMode              hud.NotesMode
 	shortcutsOpen          bool
 	researchCursor         gameapi.Tech
+	camera                 render.Camera
+	cameraOverride         bool
 }
 
 const (
@@ -196,6 +198,7 @@ func (g *Game) Update() error {
 	if g.viewportInitialized && !g.viewport.SupportsGameplay() {
 		return nil
 	}
+	g.stepCamera()
 	intents := g.panel.Update(g.hudState())
 	// Overlay intents are handled in every scene: the panel column's own
 	// buttons are gameplay-only, but a modal window (title/menu/storage/
@@ -315,6 +318,7 @@ func (g *Game) startUISettingsWrite(settings ui.UISettings) {
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	g.scene.SetTileHover(render.TileHover{TileID: g.hoveredTile, Visible: g.hasHoveredTile})
+	g.scene.SetCamera(g.camera, g.mapVisibleHeight())
 	displayFrame := g.displayFrame()
 	g.scene.Draw(screen, displayFrame, g.selectedBand, render.MigrationPreview{
 		BandID: g.migrationPreviewBand, TileID: g.migrationPreviewTile, Visible: g.hasMigrationPreview,
@@ -637,6 +641,45 @@ func (g *Game) selected() *gameapi.Band {
 	return nil
 }
 
+// desiredCameraMode applies spec §6: focus while the Move row is open and the
+// selected sapiens band still has its spatial action, inverted by Z.
+func (g *Game) desiredCameraMode() render.CameraMode {
+	band := g.selected()
+	auto := g.openRow == ui.RowMove && band != nil && band.Species == gameapi.HomoSapiens && !ui.MoveDone(*band)
+	if g.cameraOverride {
+		auto = !auto
+	}
+	if auto {
+		return render.CameraFocus
+	}
+	return render.CameraOverview
+}
+
+// stepCamera runs once per Update: retarget, then advance the transition.
+func (g *Game) stepCamera() {
+	g.camera.Mode = g.desiredCameraMode()
+	if band := g.selected(); band != nil {
+		g.camera.CenterTile = band.TileID
+	}
+	g.camera = g.camera.Step()
+}
+
+// mapVisibleHeight is the map area's height above the Field Notes drawer, so
+// hover/click picking and the camera geometry agree with what the drawer
+// leaves on screen (spec §6).
+func (g *Game) mapVisibleHeight() float64 {
+	switch g.notesMode {
+	case hud.NotesCompact:
+		return 626 - hud.DrawerCompactHeight
+	case hud.NotesExpanded:
+		return 626 - hud.DrawerExpandedHeight
+	default:
+		return 626
+	}
+}
+
+func (g *Game) toggleCameraOverride() { g.cameraOverride = !g.cameraOverride }
+
 func (g *Game) syncAssignmentDraft(force bool) {
 	band := g.selected()
 	g.syncInterbreedFocus(band)
@@ -809,7 +852,7 @@ func (g *Game) syncTileHover() {
 		return
 	}
 	x, y, inside := g.logicalCursorPosition()
-	tileID, ok := exploredHoverTile(g.frame, x, y, inside)
+	tileID, ok := g.exploredHoverTile(x, y, inside)
 	if !ok {
 		return
 	}
@@ -817,15 +860,15 @@ func (g *Game) syncTileHover() {
 	g.hasHoveredTile = true
 }
 
-func exploredHoverTile(frame *gameapi.Frame, x, y int, inside bool) (gameapi.TileID, bool) {
-	if frame == nil || !inside {
+// exploredHoverTile is the camera-aware, drawer-aware pick shared by hover
+// and clicks (spec §6): it reads whatever the map is currently showing, not
+// a fixed overview grid.
+func (g *Game) exploredHoverTile(x, y int, inside bool) (gameapi.TileID, bool) {
+	if g.frame == nil || !inside {
 		return 0, false
 	}
-	// Task 15 threads the app's real camera and drawer-aware visible height
-	// through here; for now this always reads the overview grid at the
-	// locked 626 px map height.
-	tileID, ok := render.MapTileAt(render.Camera{}, frame, 626, x, y)
-	if !ok || int(tileID) >= len(frame.Tiles) || !frame.Tiles[tileID].Explored {
+	tileID, ok := render.MapTileAt(g.camera, g.frame, g.mapVisibleHeight(), x, y)
+	if !ok || int(tileID) >= len(g.frame.Tiles) || !g.frame.Tiles[tileID].Explored {
 		return 0, false
 	}
 	return tileID, true
