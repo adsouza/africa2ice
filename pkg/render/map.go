@@ -59,7 +59,6 @@ type MapScene struct {
 	camera          Camera
 	visibleHeight   float64
 	guideHighlight  bool
-	lastFrame       *gameapi.Frame
 }
 
 type mapFrameKey struct {
@@ -113,7 +112,7 @@ func (scene *MapScene) Update() {}
 func (scene *MapScene) SetTileHover(hover TileHover) { scene.hover = hover }
 
 // SetCamera records the presentation camera and the map area's visible height
-// (in DIPs, above the drawer) for the next Draw and for PickTile.
+// (in DIPs, above the drawer) for the next Draw.
 func (scene *MapScene) SetCamera(camera Camera, visibleHeight float64) {
 	scene.camera = camera
 	scene.visibleHeight = visibleHeight
@@ -140,7 +139,6 @@ func (scene *MapScene) geometry(frame *gameapi.Frame) MapGeometry {
 // Draw renders the map, its overlays, and the terminal scene. Every piece of
 // interactive chrome now belongs to pkg/hud, which draws over this image.
 func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, ending EndScene, resizeRequired bool) {
-	scene.lastFrame = frame
 	if frame == nil {
 		screen.Fill(color.RGBA{R: 15, G: 22, B: 29, A: 255})
 		return
@@ -415,12 +413,6 @@ func (scene *MapScene) drawFlatTerrain(screen logicalCanvas, frame *gameapi.Fram
 			false,
 		)
 	}
-}
-
-// PickTile resolves a logical pointer position against the camera and frame
-// last passed to Draw.
-func (scene *MapScene) PickTile(x, y int) (gameapi.TileID, bool) {
-	return MapTileAt(scene.camera, scene.lastFrame, scene.effectiveVisibleHeight(), x, y)
 }
 
 func (scene *MapScene) drawMigrationPreview(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame, preview MigrationPreview) {

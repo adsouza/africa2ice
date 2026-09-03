@@ -195,7 +195,6 @@ func TestTopDownTerrainKeepsColorPickingAndMarkersOnTheSameGrid(t *testing.T) {
 	frame.Tiles[5].Biome = gameapi.MountainousHighlands
 	scene := NewMapScene()
 	scene.SetCamera(Camera{}, 626)
-	scene.lastFrame = frame
 
 	for _, test := range []struct {
 		name string
@@ -216,7 +215,7 @@ func TestTopDownTerrainKeepsColorPickingAndMarkersOnTheSameGrid(t *testing.T) {
 			if pointX != float32(mapOriginX+localX) || pointY != float32(mapOriginY+localY) {
 				t.Fatalf("tile %d marker point = (%v,%v), want (%d,%d)", test.tile.ID, pointX, pointY, mapOriginX+localX, mapOriginY+localY)
 			}
-			picked, ok := scene.PickTile(mapOriginX+localX, mapOriginY+localY)
+			picked, ok := scene.geometry(frame).TileAt(mapOriginX+localX, mapOriginY+localY)
 			wantID := gameapi.TileID(test.tile.Y*TerrainGridWidth + test.tile.X)
 			if !ok || picked != wantID {
 				t.Fatalf("tile %d pick = (%d,%t), want (%d,true)", test.tile.ID, picked, ok, wantID)
@@ -227,15 +226,13 @@ func TestTopDownTerrainKeepsColorPickingAndMarkersOnTheSameGrid(t *testing.T) {
 
 func TestTopDownTerrainPicksTheSameGridInFocus(t *testing.T) {
 	frame := cameraFrame()
-	scene := NewMapScene()
 	center := gameapi.TileID(30*TerrainGridWidth + 40)
-	scene.SetCamera(Camera{Mode: CameraFocus, CenterTile: center, Progress: 1}, 626)
-	scene.lastFrame = frame
+	camera := Camera{Mode: CameraFocus, CenterTile: center, Progress: 1}
 
 	for _, id := range []gameapi.TileID{center, center + 1, center + TerrainGridWidth} {
 		tile := frame.Tiles[id]
-		x, y := scene.geometry(frame).TilePoint(tile)
-		picked, ok := scene.PickTile(int(x), int(y))
+		x, y := CameraGeometry(camera, frame, 626).TilePoint(tile)
+		picked, ok := MapTileAt(camera, frame, 626, int(x), int(y))
 		if !ok || picked != id {
 			t.Fatalf("focused tile %d pick = (%d,%t), want (%d,true)", id, picked, ok, id)
 		}

@@ -829,7 +829,7 @@ func (g *Game) handleMapClick() {
 	if !inside {
 		return
 	}
-	tileID, ok := g.scene.PickTile(x, y)
+	tileID, ok := g.pickTile(x, y)
 	if !ok {
 		return
 	}
@@ -867,8 +867,25 @@ func (g *Game) exploredHoverTile(x, y int, inside bool) (gameapi.TileID, bool) {
 	if g.frame == nil || !inside {
 		return 0, false
 	}
+	tileID, ok := g.pickTile(x, y)
+	if !ok || !g.frame.Tiles[tileID].Explored {
+		return 0, false
+	}
+	return tileID, true
+}
+
+// pickTile resolves a logical pointer position against the live camera and
+// drawer-aware visible height (spec §6). It is the one geometry lookup
+// shared by hover (which then filters to explored tiles above) and clicks
+// (which must still reach fogged tiles so tryQueueMigration's diagnostic
+// fires) — a stale copy of the camera, refreshed only in Draw, would let a
+// click resolve a different tile than the hover highlight mid-transition.
+func (g *Game) pickTile(x, y int) (gameapi.TileID, bool) {
+	if g.frame == nil {
+		return 0, false
+	}
 	tileID, ok := render.MapTileAt(g.camera, g.frame, g.mapVisibleHeight(), x, y)
-	if !ok || int(tileID) >= len(g.frame.Tiles) || !g.frame.Tiles[tileID].Explored {
+	if !ok || int(tileID) >= len(g.frame.Tiles) {
 		return 0, false
 	}
 	return tileID, true

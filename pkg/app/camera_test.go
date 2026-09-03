@@ -51,3 +51,26 @@ func TestCameraStepsEachUpdateAndTracksTheDrawer(t *testing.T) {
 		t.Fatalf("visible height with hidden drawer = %.0f", game.mapVisibleHeight())
 	}
 }
+
+// TestClickAndHoverPickTheSameTileMidTransition guards against hover and
+// click resolving different tiles mid-transition: both must read the live
+// camera through the same pickTile, not a copy refreshed only in Draw.
+// migrationPreviewFrame's tiles carry placeholder X/Y (negative, off any
+// real grid row) since no test before this one ever fed them through the
+// camera's pixel geometry; row/column 2,0 is this test's own copy of the
+// frame, set to a real grid position so TilePoint/TileAt round-trip to the
+// migration candidate tile (2) instead of landing off the map entirely.
+func TestClickAndHoverPickTheSameTileMidTransition(t *testing.T) {
+	game := New(&gameStub{frame: migrationPreviewFrame()})
+	game.frame.Tiles[2].X, game.frame.Tiles[2].Y = 2, 0
+	game.camera = render.Camera{Mode: render.CameraFocus, CenterTile: game.frame.Bands[0].TileID, Progress: 0.4}
+	target := game.frame.Tiles[2]
+	px, py := render.CameraGeometry(game.camera, game.frame, game.mapVisibleHeight()).TilePoint(target)
+	x, y := int(px), int(py)
+
+	hoverID, hoverOK := game.exploredHoverTile(x, y, true)
+	clickID, clickOK := game.pickTile(x, y)
+	if !hoverOK || !clickOK || hoverID != 2 || clickID != 2 {
+		t.Fatalf("hover = (%d,%t), click = (%d,%t), want (2,true) both", hoverID, hoverOK, clickID, clickOK)
+	}
+}
