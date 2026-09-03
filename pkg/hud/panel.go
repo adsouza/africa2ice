@@ -25,6 +25,8 @@ const (
 	drawerExpandedH = 300.0
 	drawerTabW      = 150.0
 	drawerTabH      = 18.0
+	panelHeaderH    = 118.0
+	panelFooterH    = 62.0
 )
 
 // DrawerCompactHeight and DrawerExpandedHeight are exported so pkg/app can
@@ -55,27 +57,28 @@ type Panel struct {
 // in the package is exactly the dead code the unused linter exists to catch,
 // so it is added alongside its first use, not ahead of it.
 type handles struct {
-	chips      map[uint32]*widget.Button // keyed by gameapi.BandID
-	more       *widget.Button
-	bandList   *widget.Window
-	details    *widget.Button
-	bandDetail *widget.Text
-	traits     map[gameapi.HeritableTrait]*widget.Button
-	overlay    *widget.Window
-	rowHeader  [ui.ChecklistRowCount]*widget.Button
-	moveHere   *widget.Button
-	best       *widget.Button
-	split      *widget.Button
-	interbreed *widget.Button
-	research   [gameapi.TechCount]*widget.Button
-	workforce  workforceHandles
-	endTurn    *widget.Button
-	drawerTab  *widget.Button
-	drawerMore *widget.Button
-	events     []*widget.Button
-	camera     *widget.Button
-	guideNext  *widget.Button
-	guideX     *widget.Button
+	chips       map[uint32]*widget.Button // keyed by gameapi.BandID
+	more        *widget.Button
+	bandList    *widget.Window
+	details     *widget.Button
+	bandDetail  *widget.Text
+	detailsBody *widget.Container
+	traits      map[gameapi.HeritableTrait]*widget.Button
+	overlay     *widget.Window
+	rowHeader   [ui.ChecklistRowCount]*widget.Button
+	moveHere    *widget.Button
+	best        *widget.Button
+	split       *widget.Button
+	interbreed  *widget.Button
+	research    [gameapi.TechCount]*widget.Button
+	workforce   workforceHandles
+	endTurn     *widget.Button
+	drawerTab   *widget.Button
+	drawerMore  *widget.Button
+	events      []*widget.Button
+	camera      *widget.Button
+	guideNext   *widget.Button
+	guideX      *widget.Button
 
 	overlayButtons []*widget.Button
 	deleteButtons  []*widget.Button
@@ -181,41 +184,114 @@ func (p *Panel) buildCameraButton(state State) widget.PreferredSizeLocateableWid
 	return holder
 }
 
-// buildPanel is the full chrome column: header, chips, band line, details,
-// guide card, checklist, end turn, footer.
+// buildPanel is the panel's background plus three fixed-rect regions (spec
+// §4): a header, a scrollable middle holding chips through the checklist
+// rows, and a footer pinning End turn and the hint line to the bottom. A
+// single RowLayout column for the whole panel could exceed the 632 DIP
+// column height with the guide card and details both open, pushing End turn
+// and the footer off-screen; RowLayout itself neither shrinks nor scrolls,
+// so the middle region is a ScrollContainer instead.
 func (p *Panel) buildPanel(state State) widget.PreferredSizeLocateableWidget {
 	t := p.theme
-	column := t.column(8, t.insets(14, panelPadding, panelPadding, 12), t.solid(colorPanel),
-		widget.WidgetOpts.LayoutData(p.rect(panelX, panelY, panelWidth, panelHeight)))
+	background := widget.NewContainer(
+		widget.ContainerOpts.Layout(fixedLayout{}),
+		widget.ContainerOpts.BackgroundImage(t.solid(colorPanel)),
+		widget.ContainerOpts.WidgetOpts(widget.WidgetOpts.LayoutData(p.rect(panelX, panelY, panelWidth, panelHeight))),
+	)
 	band := state.selectedBand()
-	column.AddChild(p.buildHeader(state))
-	column.AddChild(p.buildChips(state))
-	column.AddChild(p.buildBandLine(state, band))
+
+	header := t.column(2, t.insets(14, panelPadding, panelPadding, 6), nil,
+		widget.WidgetOpts.LayoutData(p.rect(panelX, panelY, panelWidth, panelHeaderH)))
+	header.AddChild(p.buildHeader(state))
+	background.AddChild(header)
+
+	body := t.column(8, t.insets(8, panelPadding, panelPadding, 8), nil, stretch())
+	body.AddChild(p.buildChips(state))
+	body.AddChild(p.buildBandLine(state, band))
 	if state.DetailsOpen && band != nil {
-		column.AddChild(p.buildDetails(state, band))
+		body.AddChild(p.buildDetails(state, band))
 	}
 	if guide := p.buildGuideCard(state); guide != nil {
-		column.AddChild(guide)
+		body.AddChild(guide)
 	}
-	column.AddChild(p.buildChecklist(state, band))
-	column.AddChild(t.label("Space ends the turn · Tab next band · ? shortcuts", 9.5, colorDim))
-	return column
+	body.AddChild(p.buildChecklistRows(state, band))
+
+	middleHeight := panelHeight - panelHeaderH - panelFooterH
+	content := scrollContent{Container: body, widthPx: t.px(panelWidth)}
+	scroll := widget.NewScrollContainer(
+		widget.ScrollContainerOpts.Content(content),
+		widget.ScrollContainerOpts.StretchContentWidth(),
+		widget.ScrollContainerOpts.Image(&widget.ScrollContainerImage{
+			Idle: t.solid(colorPanel), Disabled: t.solid(colorPanel), Mask: t.solid(colorPanel),
+		}),
+		widget.ScrollContainerOpts.WidgetOpts(widget.WidgetOpts.LayoutData(
+			p.rect(panelX, panelY+panelHeaderH, panelWidth, middleHeight))),
+	)
+	p.wireScrollWheel(scroll, content)
+	background.AddChild(scroll)
+
+	footer := t.column(6, t.insets(8, panelPadding, panelPadding, 12), nil,
+		widget.WidgetOpts.LayoutData(p.rect(panelX, panelY+panelHeight-panelFooterH, panelWidth, panelFooterH)))
+	// Once the campaign is over there is no turn left to end, so the button
+	// is omitted rather than drawn as an empty disabled bar (spec §5.3).
+	if state.Frame.CampaignResult == gameapi.Ongoing {
+		footer.AddChild(p.buildEndTurn(state))
+	}
+	footer.AddChild(t.label("Space ends the turn · Tab next band · ? shortcuts", 9.5, colorDim))
+	background.AddChild(footer)
+
+	return background
 }
 
-// buildChecklist is the three-row Move/Research/Workforce checklist (spec
-// §5) plus the End turn button.
-func (p *Panel) buildChecklist(state State, band *gameapi.Band) widget.PreferredSizeLocateableWidget {
+// scrollContent wraps the scrollable middle's column and reports a fixed
+// width regardless of what its descendants would naturally prefer. Without
+// this, a single non-stretched wide widget anywhere in the checklist (a
+// pre-existing overflow in, say, an open row's button strip — out of scope
+// here) would inflate the whole column's measured PreferredSize, and
+// ScrollContainer's StretchContentWidth only ever grows content that measures
+// narrower than the viewport; it never shrinks content that measures wider.
+// That inflated width would then flow back down through every *stretched*
+// descendant (including buildDetails' own bounded container), widening each
+// past the panel's right edge even though its own text is correctly bounded.
+// Height still reports the column's true preferred height, so vertical
+// scrolling measures correctly; only the reported width is pinned.
+type scrollContent struct {
+	*widget.Container
+	widthPx int
+}
+
+func (c scrollContent) PreferredSize() (int, int) {
+	_, height := c.Container.PreferredSize()
+	return c.widthPx, height
+}
+
+// wireScrollWheel lets the mouse wheel move the panel's scrollable middle
+// region. There is no visible scrollbar (the panel already has a details
+// disclosure and a checklist for revealing more content), so the wheel is
+// the only way to reach content below the fold.
+func (p *Panel) wireScrollWheel(scroll *widget.ScrollContainer, content widget.PreferredSizeLocateableWidget) {
+	const wheelStepDIP = 48.0
+	scroll.GetWidget().ScrolledEvent.AddHandler(func(args interface{}) {
+		event, ok := args.(*widget.WidgetScrolledEventArgs)
+		if !ok {
+			return
+		}
+		overflow := float64(content.GetWidget().Rect.Dy() - scroll.ViewRect().Dy())
+		if overflow <= 0 {
+			return
+		}
+		scroll.ScrollTop -= event.Y * float64(p.theme.px(wheelStepDIP)) / overflow
+	})
+}
+
+// buildChecklistRows is the three-row Move/Research/Workforce checklist
+// (spec §5); End turn is built and placed separately, in the panel's footer.
+func (p *Panel) buildChecklistRows(state State, band *gameapi.Band) widget.PreferredSizeLocateableWidget {
 	t := p.theme
 	column := t.column(4, nil, nil, stretch())
 	column.AddChild(t.label("THIS TURN", 9.5, colorDim))
-	// Once the campaign is over there is no turn left to end, so the button
-	// is omitted rather than drawn as an empty disabled bar (spec §5.3).
-	ongoing := state.Frame.CampaignResult == gameapi.Ongoing
 	if band == nil {
 		column.AddChild(t.label("Select a band on the map or a chip above.", 10, colorText))
-		if ongoing {
-			column.AddChild(p.buildEndTurn(state))
-		}
 		return column
 	}
 	summaries := [ui.ChecklistRowCount]string{
@@ -244,9 +320,6 @@ func (p *Panel) buildChecklist(state State, band *gameapi.Band) widget.Preferred
 				column.AddChild(t.label("Computer controlled · allocation read only", 9.5, colorDim))
 			}
 		}
-	}
-	if ongoing {
-		column.AddChild(p.buildEndTurn(state))
 	}
 	return column
 }

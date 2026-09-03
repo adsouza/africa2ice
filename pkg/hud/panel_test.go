@@ -119,6 +119,30 @@ func TestChipRowOverflowsIntoAPlusChip(t *testing.T) {
 	}
 }
 
+// TestBandListStaysOnScreenWithManyBands covers the reviewer-found overflow:
+// openBandList sized its window at 40+16*len(bands) DIP with no scroll
+// container, so past roughly 35 bands its rows and Close button fall below
+// the 720 DIP presentation and become unreachable.
+func TestBandListStaysOnScreenWithManyBands(t *testing.T) {
+	frame := testFrame(60)
+	panel := New()
+	state := testState(frame, 1)
+	state.BandListOpen = true
+	panel.Update(state)
+	screen := ebiten.NewImage(1280, 720)
+	defer screen.Deallocate()
+	panel.Draw(screen)
+
+	if panel.handles.bandList == nil {
+		t.Fatal("band list window not shown when BandListOpen")
+	}
+	bottom := panel.handles.bandList.GetContainer().GetWidget().Rect.Max.Y
+	presentationBottom := int(state.Transform.OffsetY + render.PresentationHeight*state.Transform.Scale + 0.5)
+	if bottom > presentationBottom {
+		t.Fatalf("band list bottom = %d, want <= presentation bottom %d", bottom, presentationBottom)
+	}
+}
+
 func TestDetailsDisclosureListsTraitsAsFocusButtons(t *testing.T) {
 	panel := New()
 	state := testState(testFrame(1), 1)
@@ -138,6 +162,80 @@ func TestDetailsDisclosureListsTraitsAsFocusButtons(t *testing.T) {
 	panel.handles.traits[gameapi.PigmentationLevel].Click()
 	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentFocusTrait || intents[0].Trait != gameapi.PigmentationLevel {
 		t.Fatalf("trait click = %+v", intents)
+	}
+}
+
+// walkDescendants visits w and, if it is a container, every descendant
+// beneath it.
+func walkDescendants(w widget.PreferredSizeLocateableWidget, visit func(widget.PreferredSizeLocateableWidget)) {
+	visit(w)
+	if container, ok := w.(*widget.Container); ok {
+		for _, child := range container.Children() {
+			walkDescendants(child, visit)
+		}
+	}
+}
+
+// TestDetailsLinesStayInsideThePanel covers the reviewer-found overflow: the
+// food, deaths, stored-food, and interbreeding lines used unbounded labels
+// that spilled past the 352 DIP column (spec §4 item 4).
+func TestDetailsLinesStayInsideThePanel(t *testing.T) {
+	for _, scale := range []float64{1, 2} {
+		frame := testFrame(2)
+		frame.Bands[0].LastFoodReport = gameapi.FoodTurnReport{Turn: 12, RequiredFU: 300, DeficitFU: 12}
+		frame.Bands[0].LastOutcomeReport = gameapi.OutcomeReport{Turn: 12, StartingPopulation: 60, EndingPopulation: 60}
+		frame.Bands[0].LastMortality = gameapi.MortalityReport{Starvation: 0, Seasonal: 0.12, Chronic: 0.31, Macro: 0, Acute: 0}
+		frame.Bands[0].StoredFood = 1_234.5
+		frame.Bands[0].InterbreedCandidateIDs = []gameapi.BandID{2, 3, 4, 5, 6, 7, 8, 9}
+
+		panel := New()
+		state := testState(frame, scale)
+		state.DetailsOpen = true
+		panel.Update(state)
+		screen := ebiten.NewImage(int(1280*scale), int(720*scale))
+		panel.Draw(screen)
+		screen.Deallocate()
+
+		if panel.handles.detailsBody == nil {
+			t.Fatalf("scale %.1f: details body handle missing", scale)
+		}
+		rightEdge := image.Rectangle(panel.rect(panelX, panelY, panelWidth, panelHeight)).Max.X
+		walkDescendants(panel.handles.detailsBody, func(w widget.PreferredSizeLocateableWidget) {
+			if got := w.GetWidget().Rect.Max.X; got > rightEdge {
+				t.Fatalf("scale %.1f: widget %T right edge = %d, want <= panel right edge %d", scale, w, got, rightEdge)
+			}
+		})
+	}
+}
+
+// TestEndTurnStaysVisibleWithGuideAndDetailsOpen covers the reviewer-found
+// overflow: header + chips + band line + details + guide + three row headers
+// + an open row body + End turn + footer exceeds the 632 DIP column, and
+// RowLayout neither shrinks nor scrolls (spec §4). The middle content must
+// scroll so End turn and the footer stay inside the panel.
+func TestEndTurnStaysVisibleWithGuideAndDetailsOpen(t *testing.T) {
+	frame := testFrame(7)
+	panel := New()
+	state := testState(frame, 1)
+	state.Guide = ui.GuideState{Step: ui.GuideResearch}
+	state.DetailsOpen = true
+	state.OpenRow = ui.RowMove
+
+	panel.Update(state)
+	screen := ebiten.NewImage(1280, 720)
+	defer screen.Deallocate()
+	panel.Draw(screen)
+
+	if panel.handles.endTurn == nil {
+		t.Fatal("End turn button missing")
+	}
+	panelRect := image.Rectangle(panel.rect(panelX, panelY, panelWidth, panelHeight))
+	endTurnRect := panel.handles.endTurn.GetWidget().Rect
+	if endTurnRect.Empty() {
+		t.Fatal("End turn button has no rectangle")
+	}
+	if !endTurnRect.In(panelRect) {
+		t.Fatalf("End turn rect = %v, want fully inside panel rect %v", endTurnRect, panelRect)
 	}
 }
 

@@ -12,6 +12,18 @@ import (
 
 const maxVisibleChips = 8
 
+// Band list window geometry (spec §4 item 2). Past roughly 35 bands the
+// computed height would push rows and the Close button below the 720 DIP
+// presentation, so the window caps at bandListMaxHeight and scrolls instead.
+const (
+	bandListWidth     = 330.0
+	bandListHeaderH   = 28.0
+	bandListFooterH   = 34.0
+	bandListRowHeight = 16.0
+	bandListChromeMin = 40.0
+	bandListMaxHeight = 420.0
+)
+
 // visibleChipIDs returns at most eight band IDs in attention order, always
 // including the selected band, and the count left over for the +N chip.
 func visibleChipIDs(frame *gameapi.Frame, selected gameapi.BandID) ([]gameapi.BandID, int) {
@@ -112,24 +124,67 @@ func (p *Panel) buildChips(state State) widget.PreferredSizeLocateableWidget {
 }
 
 // openBandList shows every band in attention order as a modal list; clicking
-// one selects it, and the application closes the list on selection.
+// one selects it, and the application closes the list on selection. The
+// window height is capped and the rows scroll (spec §4 item 2): sized from
+// the count of living sapiens bands actually shown, not len(Frame.Bands),
+// which also counts archaic and extinct entries the list never lists.
 func (p *Panel) openBandList(state State) {
 	t := p.theme
-	list := t.column(3, t.insets(12, 14, 14, 12), t.bordered(colorRowOpen, colorGoldDeep, t.px(1)))
-	list.AddChild(t.label("ALL BANDS · priority order", 10, colorGoldDeep))
-	for _, id := range ui.SapiensBandIDsByAttention(state.Frame.Bands) {
+	ids := ui.SapiensBandIDsByAttention(state.Frame.Bands)
+
+	windowX, windowY := panelX-340, panelY+60
+	windowHeight := min(bandListChromeMin+bandListRowHeight*float64(len(ids)), bandListMaxHeight)
+	if minHeight := bandListHeaderH + bandListFooterH + bandListRowHeight; windowHeight < minHeight {
+		windowHeight = minHeight
+	}
+
+	body := widget.NewContainer(
+		widget.ContainerOpts.Layout(fixedLayout{}),
+		widget.ContainerOpts.BackgroundImage(t.bordered(colorRowOpen, colorGoldDeep, t.px(1))),
+	)
+
+	header := t.column(3, t.insets(12, 14, 14, 4), nil,
+		widget.WidgetOpts.LayoutData(p.rect(windowX, windowY, bandListWidth, bandListHeaderH)))
+	header.AddChild(t.label("ALL BANDS · priority order", 10, colorGoldDeep))
+	body.AddChild(header)
+
+	rows := t.column(3, t.insets(0, 14, 14, 0), nil, stretch())
+	for _, id := range ids {
 		for _, band := range state.Frame.Bands {
 			if band.ID != id {
 				continue
 			}
 			label := fmt.Sprintf("%-3s B%-3d pop %d · health %.0f%% · %s", ui.ConditionForSapiensBand(band).Marker(), band.ID, band.Population, band.Health*100, ui.MoveSummary(state.Frame, band))
 			bandID := band.ID
-			list.AddChild(t.button(label, 10, colorPanelEdge, colorText, func() { p.emit(Intent{Kind: IntentSelectBand, Band: bandID}) }))
+			rows.AddChild(t.button(label, 10, colorPanelEdge, colorText, func() { p.emit(Intent{Kind: IntentSelectBand, Band: bandID}) }))
 		}
 	}
-	list.AddChild(t.button("Close · Esc", 10, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentToggleBandList}) }))
-	rect := image.Rectangle(p.rect(panelX-340, panelY+60, 330, 40+16*float64(len(state.Frame.Bands))))
-	window := widget.NewWindow(widget.WindowOpts.Contents(list), widget.WindowOpts.Modal(), widget.WindowOpts.CloseMode(widget.NONE), widget.WindowOpts.Location(rect))
+	// rows is wrapped the same way buildPanel's scroll content is (see
+	// scrollContent's doc comment): its own natural preferred width would
+	// otherwise blow out to the widest band's summary line, and
+	// StretchContentWidth only ever grows content narrower than the
+	// viewport, never shrinks content that measures wider.
+	scrollHeight := windowHeight - bandListHeaderH - bandListFooterH
+	content := scrollContent{Container: rows, widthPx: t.px(bandListWidth)}
+	scroll := widget.NewScrollContainer(
+		widget.ScrollContainerOpts.Content(content),
+		widget.ScrollContainerOpts.StretchContentWidth(),
+		widget.ScrollContainerOpts.Image(&widget.ScrollContainerImage{
+			Idle: t.solid(colorRowOpen), Disabled: t.solid(colorRowOpen), Mask: t.solid(colorRowOpen),
+		}),
+		widget.ScrollContainerOpts.WidgetOpts(widget.WidgetOpts.LayoutData(
+			p.rect(windowX, windowY+bandListHeaderH, bandListWidth, scrollHeight))),
+	)
+	p.wireScrollWheel(scroll, content)
+	body.AddChild(scroll)
+
+	footer := t.column(0, t.insets(4, 14, 14, 12), nil,
+		widget.WidgetOpts.LayoutData(p.rect(windowX, windowY+windowHeight-bandListFooterH, bandListWidth, bandListFooterH)))
+	footer.AddChild(t.button("Close · Esc", 10, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentToggleBandList}) }))
+	body.AddChild(footer)
+
+	rect := image.Rectangle(p.rect(windowX, windowY, bandListWidth, windowHeight))
+	window := widget.NewWindow(widget.WindowOpts.Contents(body), widget.WindowOpts.Modal(), widget.WindowOpts.CloseMode(widget.NONE), widget.WindowOpts.Location(rect))
 	p.ui.AddWindow(window)
 	p.handles.bandList = window
 }

@@ -9,6 +9,11 @@ import (
 
 var traitShortNames = [gameapi.HeritableTraitCount]string{"Cold", "Altitude", "Immune", "Arid", "Pigment", "Fat"}
 
+// detailsTextWidth bounds every text line in buildDetails to the panel's
+// inner width, so the food, deaths, stored-food, and interbreeding lines
+// wrap instead of spilling past the 352 DIP column (spec §4 item 4).
+const detailsTextWidth = panelWidth - 2*panelPadding - 24
+
 // buildBandLine is the one-line band identity with the details toggle
 // (spec §4 item 3).
 func (p *Panel) buildBandLine(state State, band *gameapi.Band) widget.PreferredSizeLocateableWidget {
@@ -49,18 +54,25 @@ func (p *Panel) buildBandLine(state State, band *gameapi.Band) widget.PreferredS
 func (p *Panel) buildDetails(state State, band *gameapi.Band) widget.PreferredSizeLocateableWidget {
 	t := p.theme
 	column := t.column(4, t.insets(6, 10, 10, 8), t.solid(colorRow), stretch())
-	food := "Food last turn: unavailable"
+	p.handles.detailsBody = column
+
+	foodHeading, foodLine := "FOOD LAST TURN", "unavailable"
 	if report := band.LastFoodReport; report.Turn > 0 {
-		food = fmt.Sprintf("Turn %d food: need %.1f · ate %.1f · short %.1f (%.0f%%)", report.Turn, report.RequiredFU, report.ConsumedFU(), report.DeficitFU, report.DeficitFraction()*100)
+		foodHeading = fmt.Sprintf("FOOD LAST TURN (T%d)", report.Turn)
+		foodLine = fmt.Sprintf("need %.0f · ate %.0f · short %.0f (%.0f%%)", report.RequiredFU, report.ConsumedFU(), report.DeficitFU, report.DeficitFraction()*100)
 	}
-	column.AddChild(t.label(food, 9.5, colorText))
-	deaths := "Deaths last turn: unavailable"
+	column.AddChild(t.label(foodHeading, 8.5, colorDim))
+	column.AddChild(t.wrapped(foodLine, 9.5, colorText, detailsTextWidth))
+
+	deathsLine := "unavailable"
 	if band.LastOutcomeReport.Turn > 0 {
 		m := band.LastMortality
-		deaths = fmt.Sprintf("Deaths: starvation %.2f · seasonal %.2f · chronic %.2f · macro %.2f · acute %.2f", m.Starvation, m.Seasonal, m.Chronic, m.Macro, m.Acute)
+		deathsLine = fmt.Sprintf("starvation %.2f · seasonal %.2f · chronic %.2f · macro %.2f · acute %.2f", m.Starvation, m.Seasonal, m.Chronic, m.Macro, m.Acute)
 	}
-	column.AddChild(t.label(deaths, 9.5, colorText))
-	column.AddChild(t.label(fmt.Sprintf("Stored food %.1f FU", band.StoredFood), 9.5, colorText))
+	column.AddChild(t.label("DEATHS LAST TURN", 8.5, colorDim))
+	column.AddChild(t.wrapped(deathsLine, 9.5, colorText, detailsTextWidth))
+
+	column.AddChild(t.wrapped(fmt.Sprintf("Stored food %.1f FU", band.StoredFood), 9.5, colorText, detailsTextWidth))
 
 	column.AddChild(t.label("HERITABLE VARIANTS · click one for its Field Note · G cycles", 8.5, colorDim))
 	var tile gameapi.Tile
@@ -72,12 +84,16 @@ func (p *Panel) buildDetails(state State, band *gameapi.Band) widget.PreferredSi
 		fmt.Sprintf("moisture %.2f", tile.BaseMoisture), fmt.Sprintf("%.0f° lat", tile.Latitude), "diet",
 	}
 	grid := widget.NewContainer(
-		widget.ContainerOpts.Layout(widget.NewGridLayout(widget.GridLayoutOpts.Columns(3), widget.GridLayoutOpts.Spacing(t.px(4), t.px(4)))),
+		widget.ContainerOpts.Layout(widget.NewGridLayout(
+			widget.GridLayoutOpts.Columns(2),
+			widget.GridLayoutOpts.Spacing(t.px(4), t.px(4)),
+			widget.GridLayoutOpts.Stretch([]bool{true, true}, []bool{false, false, false}),
+		)),
 		widget.ContainerOpts.WidgetOpts(stretch()),
 	)
 	for trait := gameapi.HeritableTrait(0); trait < gameapi.HeritableTraitCount; trait++ {
 		focus := trait
-		cell := t.button(fmt.Sprintf("%s %.3f @ %s", traitShortNames[trait], band.HeritableState[trait], pressures[trait]), 8.5, colorPanelEdge, colorText,
+		cell := t.button(fmt.Sprintf("%s %.2f · %s", traitShortNames[trait], band.HeritableState[trait], pressures[trait]), 8.5, colorPanelEdge, colorText,
 			func() { p.emit(Intent{Kind: IntentFocusTrait, Trait: focus}) })
 		p.handles.traits[trait] = cell
 		grid.AddChild(cell)
@@ -92,7 +108,7 @@ func (p *Panel) buildDetails(state State, band *gameapi.Band) widget.PreferredSi
 		if band.HasInterbreedTarget {
 			partners = fmt.Sprintf("Interbreeding accepted with B%d · gene flow resolves at end of turn", band.InterbreedTargetID)
 		}
-		column.AddChild(t.wrapped(partners, 9, colorInterbreed, panelWidth-2*panelPadding-20))
+		column.AddChild(t.wrapped(partners, 9, colorInterbreed, detailsTextWidth))
 	}
 	return column
 }
