@@ -208,6 +208,36 @@ func TestDetailsLinesStayInsideThePanel(t *testing.T) {
 	}
 }
 
+// TestMoveRowButtonsFitThePanel covers a pre-existing, user-reported defect:
+// the four-button row (Move here / Best tile / Split / Interbreed) is wider
+// than the 352 DIP column, so Interbreed is cut off at the panel edge.
+func TestMoveRowButtonsFitThePanel(t *testing.T) {
+	for _, scale := range []float64{1, 2} {
+		panel := New()
+		state := testState(testFrame(1), scale)
+		panel.Update(state)
+		screen := ebiten.NewImage(int(1280*scale), int(720*scale))
+		panel.Draw(screen)
+		screen.Deallocate()
+
+		rightEdge := image.Rectangle(panel.rect(panelX, panelY, panelWidth, panelHeight)).Max.X
+		buttons := map[string]*widget.Button{
+			"Move here":  panel.handles.moveHere,
+			"Best tile":  panel.handles.best,
+			"Split":      panel.handles.split,
+			"Interbreed": panel.handles.interbreed,
+		}
+		for name, button := range buttons {
+			if button == nil {
+				t.Fatalf("scale %.1f: %s button handle is missing", scale, name)
+			}
+			if got := button.GetWidget().Rect.Max.X; got > rightEdge {
+				t.Fatalf("scale %.1f: %s button right edge = %d, want <= panel right edge %d", scale, name, got, rightEdge)
+			}
+		}
+	}
+}
+
 // TestEndTurnStaysVisibleWithGuideAndDetailsOpen covers the reviewer-found
 // overflow: header + chips + band line + details + guide + three row headers
 // + an open row body + End turn + footer exceeds the 632 DIP column, and
@@ -383,6 +413,51 @@ func TestWorkforceRowRefreshesWithoutRebuildingAndGuardsApply(t *testing.T) {
 	}
 	if label := panel.handles.rowHeader[ui.RowWorkforce].Text().Label; !strings.Contains(label, "F 35") {
 		t.Fatalf("row header did not return to the applied summary: %q", label)
+	}
+}
+
+// TestWorkforceMarkerFollowsTheSelectedRole covers the reviewer-found defect:
+// SelectedRole changes take the refresh-in-place path (Workforce is excluded
+// from the structural key), but refreshWorkforce updated only percentages and
+// totals, so the › marker stayed on the old role while Left/Right edited a
+// different one.
+func TestWorkforceMarkerFollowsTheSelectedRole(t *testing.T) {
+	panel := New()
+	frame := testFrame(1)
+	state := testState(frame, 1)
+	state.OpenRow = ui.RowWorkforce
+	panel.Update(state)
+	builds := panel.builds
+
+	state.Workforce.SelectedRole = gameapi.Toolcraft
+	panel.Update(state)
+
+	if panel.builds != builds {
+		t.Fatal("a SelectedRole-only change rebuilt the tree")
+	}
+	if label := panel.handles.workforce.roleLabels[gameapi.Toolcraft].Label; !strings.HasPrefix(label, "› ") {
+		t.Fatalf("Toolcraft label = %q, want the › marker", label)
+	}
+	if label := panel.handles.workforce.roleLabels[gameapi.Foraging].Label; strings.HasPrefix(label, "› ") {
+		t.Fatalf("Foraging label = %q, should have lost the › marker", label)
+	}
+}
+
+// TestWorkforceRowShowsWorkerCounts covers the old HUD behavior the redesign
+// dropped: WorkforceDraft.Population was carried but never shown, so a player
+// could not see how a percentage allocation translated into actual people.
+func TestWorkforceRowShowsWorkerCounts(t *testing.T) {
+	panel := New()
+	frame := testFrame(1)
+	state := testState(frame, 1)
+	state.OpenRow = ui.RowWorkforce
+	state.Workforce.Population = 60
+	state.Workforce.AllocationBP[gameapi.Foraging] = 3_500
+	panel.Update(state)
+
+	label := panel.handles.workforce.values[gameapi.Foraging].Label
+	if !strings.Contains(label, "35%") || !strings.Contains(label, "21") {
+		t.Fatalf("Foraging value label = %q, want it to contain 35%% and 21", label)
 	}
 }
 
@@ -645,5 +720,83 @@ func TestEndTurnDisappearsOnceTheCampaignIsOver(t *testing.T) {
 	panel.Update(over)
 	if panel.handles.endTurn != nil {
 		t.Fatal("End turn is still rendered after the campaign ended")
+	}
+}
+
+// TestResearchCursorRowIsMarked covers the reviewer-found defect: Up/Down
+// moved g.researchCursor but it never reached hud.State, and buildResearchBody
+// ignored its state argument, so pressing Enter committed an invisible
+// selection.
+func TestResearchCursorRowIsMarked(t *testing.T) {
+	frame := testFrame(1)
+	panel := New()
+	state := testState(frame, 1)
+	state.OpenRow = ui.RowResearch
+	state.ResearchCursor = gameapi.HaftedTools
+	panel.Update(state)
+
+	cursorLabel := panel.handles.research[gameapi.HaftedTools].Text().Label
+	if !strings.HasPrefix(cursorLabel, "› ") {
+		t.Fatalf("cursor row label = %q, want a › prefix", cursorLabel)
+	}
+	for tech := gameapi.Tech(0); tech < gameapi.TechCount; tech++ {
+		if tech == gameapi.HaftedTools {
+			continue
+		}
+		if label := panel.handles.research[tech].Text().Label; strings.HasPrefix(label, "› ") {
+			t.Fatalf("non-cursor row %v label = %q, should not carry the › prefix", tech, label)
+		}
+	}
+}
+
+// TestHoverRefreshesTargetWithoutRebuilding covers the reviewer-found defect:
+// State.Hover was part of the structural comparison, so sweeping the pointer
+// across map tiles rebuilt the whole widget tree at up to 60 Hz, discarding
+// the Field Notes drawer's TextArea (and the reader's scroll position with
+// it) on every tick.
+func TestHoverRefreshesTargetWithoutRebuilding(t *testing.T) {
+	frame := testFrame(1)
+	panel := New()
+	state := testState(frame, 1)
+	panel.Update(state)
+
+	buildsBefore := panel.builds
+	notesAreaBefore := panel.handles.notesArea
+	if notesAreaBefore == nil {
+		t.Fatal("drawer TextArea handle missing before the hover change")
+	}
+	if got := panel.handles.moveTargetHeader.Label; got != "TARGET" {
+		t.Fatalf("TARGET header before hover = %q, want plain TARGET", got)
+	}
+
+	state.Hover = render.TileHover{TileID: 1, Visible: true}
+	panel.Update(state)
+
+	if panel.builds != buildsBefore {
+		t.Fatalf("hover change rebuilt the tree: builds %d -> %d", buildsBefore, panel.builds)
+	}
+	if panel.handles.notesArea != notesAreaBefore {
+		t.Fatal("hover change replaced the drawer's TextArea, losing the reader's scroll position")
+	}
+	if got := panel.handles.moveTargetHeader.Label; got != "TARGET · hover" {
+		t.Fatalf("TARGET header while hovering = %q, want TARGET · hover", got)
+	}
+	if got := panel.handles.moveTargetValues[0].Label; got != frame.Tiles[1].Biome.String() {
+		t.Fatalf("TARGET biome cell = %q, want the hovered tile's biome %q", got, frame.Tiles[1].Biome.String())
+	}
+	if panel.handles.moveHere.GetWidget().Disabled {
+		t.Fatal("Move here should be enabled once a reachable tile is hovered")
+	}
+
+	state.Hover = render.TileHover{}
+	panel.Update(state)
+	if panel.builds != buildsBefore {
+		t.Fatalf("clearing hover rebuilt the tree: builds %d -> %d", buildsBefore, panel.builds)
+	}
+	if got := panel.handles.moveTargetHeader.Label; got != "TARGET" {
+		t.Fatalf("TARGET header after clearing hover = %q, want plain TARGET", got)
+	}
+	if panel.handles.moveHere.GetWidget().Disabled != true {
+		t.Fatal("Move here should be disabled again once there is no target")
 	}
 }

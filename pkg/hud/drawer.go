@@ -123,6 +123,7 @@ func (p *Panel) buildDrawer(state State) widget.PreferredSizeLocateableWidget {
 		widget.TextAreaOpts.Text(noteBody(state.Note)),
 		widget.TextAreaOpts.ScrollContainerImage(&widget.ScrollContainerImage{Idle: t.solid(background), Mask: t.solid(background)}),
 	)
+	p.handles.notesArea = area
 	body.AddChild(area)
 	body.AddChild(t.label("RECENT EVENTS", 8, headingColor))
 	if len(events) == 0 {

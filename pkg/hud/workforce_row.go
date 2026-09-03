@@ -9,14 +9,31 @@ import (
 )
 
 type workforceHandles struct {
-	sliders [gameapi.AssignmentCount]*widget.Slider
-	values  [gameapi.AssignmentCount]*widget.Text
-	minus   [gameapi.AssignmentCount]*widget.Button
-	plus    [gameapi.AssignmentCount]*widget.Button
-	total   *widget.Text
-	apply   *widget.Button
-	discard *widget.Button
-	header  *widget.Button
+	roleLabels [gameapi.AssignmentCount]*widget.Text
+	sliders    [gameapi.AssignmentCount]*widget.Slider
+	values     [gameapi.AssignmentCount]*widget.Text
+	minus      [gameapi.AssignmentCount]*widget.Button
+	plus       [gameapi.AssignmentCount]*widget.Button
+	total      *widget.Text
+	apply      *widget.Button
+	discard    *widget.Button
+	header     *widget.Button
+}
+
+// roleMarker is "› " for the selected role and blank padding otherwise, kept
+// the same width either way so the role name column does not jitter.
+func roleMarker(role, selected gameapi.WorkforceRole) string {
+	if role == selected {
+		return "› "
+	}
+	return "  "
+}
+
+// roleValueLabel is the percentage plus the worker count it represents,
+// truncated the same way the simulation truncates (spec: no rounding up).
+func roleValueLabel(population uint32, bp uint16) string {
+	workers := int(population) * int(bp) / 10000
+	return fmt.Sprintf("%d%% · %d", int(bp)/100, workers)
 }
 
 func workforceTotalLabel(draft WorkforceDraft) string {
@@ -44,11 +61,9 @@ func (p *Panel) buildWorkforceBody(state State, band *gameapi.Band) widget.Prefe
 	for role := gameapi.WorkforceRole(0); role < gameapi.AssignmentCount; role++ {
 		current := role
 		line := t.rowOf(6, stretch())
-		marker := "  "
-		if role == draft.SelectedRole {
-			marker = "› "
-		}
-		line.AddChild(t.label(fmt.Sprintf("%s%-14s", marker, ui.RoleShortLabel(role)), 9.5, colorText))
+		roleLabel := t.label(fmt.Sprintf("%s%-14s", roleMarker(role, draft.SelectedRole), ui.RoleShortLabel(role)), 9.5, colorText)
+		p.handles.workforce.roleLabels[role] = roleLabel
+		line.AddChild(roleLabel)
 		minus := t.button("−", 10, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentAdjustRole, Role: current, Delta: -100}) })
 		p.handles.workforce.minus[role] = minus
 		line.AddChild(minus)
@@ -73,7 +88,7 @@ func (p *Panel) buildWorkforceBody(state State, band *gameapi.Band) widget.Prefe
 		plus := t.button("+", 10, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentAdjustRole, Role: current, Delta: 100}) })
 		p.handles.workforce.plus[role] = plus
 		line.AddChild(plus)
-		value := t.label(fmt.Sprintf("%3d%%", int(draft.AllocationBP[role])/100), 9.5, colorText)
+		value := t.label(roleValueLabel(draft.Population, draft.AllocationBP[role]), 9.5, colorText)
 		p.handles.workforce.values[role] = value
 		line.AddChild(value)
 		body.AddChild(line)
@@ -131,7 +146,8 @@ func (p *Panel) refreshWorkforce(state State) {
 		if percent := int(draft.AllocationBP[role]) / 100; h.sliders[role].Current != percent {
 			h.sliders[role].Current = percent
 		}
-		h.values[role].Label = fmt.Sprintf("%3d%%", int(draft.AllocationBP[role])/100)
+		h.values[role].Label = roleValueLabel(draft.Population, draft.AllocationBP[gameapi.WorkforceRole(role)])
+		h.roleLabels[role].Label = fmt.Sprintf("%s%-14s", roleMarker(gameapi.WorkforceRole(role), draft.SelectedRole), ui.RoleShortLabel(gameapi.WorkforceRole(role)))
 	}
 	h.total.Label = workforceTotalLabel(draft)
 	if draft.Valid {

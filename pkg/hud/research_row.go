@@ -25,13 +25,17 @@ func missingPrerequisites(option gameapi.ResearchOption, acquired uint16) string
 
 // buildResearchBody lists the nine technologies (spec §4.2); available ones
 // are buttons, the rest explain their state.
-func (p *Panel) buildResearchBody(_ State, band *gameapi.Band) widget.PreferredSizeLocateableWidget {
+func (p *Panel) buildResearchBody(state State, band *gameapi.Band) widget.PreferredSizeLocateableWidget {
 	t := p.theme
 	body := t.column(3, t.insets(6, 24, 10, 8), t.solid(colorRowOpen), stretch())
 	for technology := gameapi.Tech(0); technology < gameapi.TechCount; technology++ {
 		option := band.ResearchOptions[technology]
 		progress := fmt.Sprintf("%.0f/%.0f", band.ResearchProgress[technology], option.Cost)
-		label := fmt.Sprintf("%d  %-20s %s", int(technology)+1, technology.String(), progress)
+		marker := "  "
+		if technology == state.ResearchCursor {
+			marker = "› "
+		}
+		label := fmt.Sprintf("%s%d  %-20s %s", marker, int(technology)+1, technology.String(), progress)
 		var status string
 		border, textColor := colorPanelEdge, colorText
 		switch {
@@ -45,6 +49,12 @@ func (p *Panel) buildResearchBody(_ State, band *gameapi.Band) widget.PreferredS
 			status, textColor = "computer", colorDim
 		default:
 			status, textColor = "needs "+missingPrerequisites(option, band.AcquiredTech), colorDim
+		}
+		// The cursor prefix is additive: a locked row under the cursor still
+		// reads "locked" (or whatever its status says), just in gold, rather
+		// than losing that information to a uniform highlight color.
+		if technology == state.ResearchCursor {
+			textColor = colorGold
 		}
 		tech := technology
 		button := widget.NewButton(

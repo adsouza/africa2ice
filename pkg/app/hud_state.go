@@ -16,13 +16,14 @@ func (g *Game) hudState() hud.State {
 	note := g.fieldNote
 	note.Celebration = g.breakthroughFrames > 0
 	state := hud.State{
-		Frame:        frame,
-		SelectedBand: g.selectedBand,
-		Preview:      render.MigrationPreview{BandID: g.migrationPreviewBand, TileID: g.migrationPreviewTile, Visible: g.hasMigrationPreview},
-		Hover:        render.TileHover{TileID: g.hoveredTile, Visible: g.hasHoveredTile},
-		OpenRow:      g.openRow,
-		DetailsOpen:  g.detailsOpen,
-		BandListOpen: g.bandListOpen,
+		Frame:          frame,
+		SelectedBand:   g.selectedBand,
+		Preview:        render.MigrationPreview{BandID: g.migrationPreviewBand, TileID: g.migrationPreviewTile, Visible: g.hasMigrationPreview},
+		Hover:          render.TileHover{TileID: g.hoveredTile, Visible: g.hasHoveredTile},
+		OpenRow:        g.openRow,
+		ResearchCursor: g.researchCursor,
+		DetailsOpen:    g.detailsOpen,
+		BandListOpen:   g.bandListOpen,
 		Workforce: hud.WorkforceDraft{
 			Visible: g.hasAssignmentDraft, AllocationBP: g.assignmentDraft, SelectedRole: g.assignmentRole,
 			Dirty: g.assignmentDraftDirty(), Valid: g.assignmentDraftValid(),

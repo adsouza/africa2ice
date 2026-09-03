@@ -64,6 +64,7 @@ type State struct {
 	Preview         render.MigrationPreview
 	Hover           render.TileHover
 	OpenRow         ui.ChecklistRow
+	ResearchCursor  gameapi.Tech
 	DetailsOpen     bool
 	BandListOpen    bool
 	Workforce       WorkforceDraft

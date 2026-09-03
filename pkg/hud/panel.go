@@ -4,6 +4,7 @@ import (
 	"image"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
+	"github.com/adsouza/africa2ice/pkg/render"
 	"github.com/adsouza/africa2ice/pkg/ui"
 	"github.com/ebitenui/ebitenui"
 	"github.com/ebitenui/ebitenui/input"
@@ -70,15 +71,27 @@ type handles struct {
 	best        *widget.Button
 	split       *widget.Button
 	interbreed  *widget.Button
-	research    [gameapi.TechCount]*widget.Button
-	workforce   workforceHandles
-	endTurn     *widget.Button
-	drawerTab   *widget.Button
-	drawerMore  *widget.Button
-	events      []*widget.Button
-	camera      *widget.Button
-	guideNext   *widget.Button
-	guideX      *widget.Button
+	// The TARGET column of the open Move row (moveTargetHeader,
+	// moveTargetValues, moveTargetStatus) and moveHint are refreshed in place
+	// by refreshTarget as the hover/cursor/queued target changes; nil when
+	// the Move row is not open (refreshTarget is then a no-op).
+	moveTargetHeader *widget.Text
+	moveTargetValues [8]*widget.Text
+	moveTargetStatus *widget.Text
+	moveHint         *widget.Text
+	research         [gameapi.TechCount]*widget.Button
+	workforce        workforceHandles
+	endTurn          *widget.Button
+	drawerTab        *widget.Button
+	drawerMore       *widget.Button
+	// notesArea is the Field Notes drawer's TextArea. It carries the reader's
+	// scroll position, so tests use this handle to prove a hover-driven
+	// Update did not discard and recreate it (see refreshTarget).
+	notesArea *widget.TextArea
+	events    []*widget.Button
+	camera    *widget.Button
+	guideNext *widget.Button
+	guideX    *widget.Button
 
 	overlayButtons []*widget.Button
 	deleteButtons  []*widget.Button
@@ -100,6 +113,7 @@ func (p *Panel) Update(state State) []Intent {
 	structural, lastStructural := state, p.last
 	structural.Workforce, lastStructural.Workforce = WorkforceDraft{}, WorkforceDraft{}
 	structural.Overlay.MasterVolume, lastStructural.Overlay.MasterVolume = 0, 0
+	structural.Hover, lastStructural.Hover = render.TileHover{}, render.TileHover{}
 	switch {
 	case !p.built || structural != lastStructural:
 		p.rebuild(state)
@@ -110,6 +124,12 @@ func (p *Panel) Update(state State) []Intent {
 	case state.Overlay.MasterVolume != p.last.Overlay.MasterVolume:
 		p.last = state
 		p.refreshVolume(state)
+	case state.Hover != p.last.Hover:
+		p.last = state
+		if !p.refreshTarget(state) {
+			p.rebuild(state)
+			p.built = true
+		}
 	}
 	p.ui.Update()
 	intents := p.intents
