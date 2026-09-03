@@ -821,7 +821,10 @@ func exploredHoverTile(frame *gameapi.Frame, x, y int, inside bool) (gameapi.Til
 	if frame == nil || !inside {
 		return 0, false
 	}
-	tileID, ok := render.MapTileAt(x, y)
+	// Task 15 threads the app's real camera and drawer-aware visible height
+	// through here; for now this always reads the overview grid at the
+	// locked 626 px map height.
+	tileID, ok := render.MapTileAt(render.Camera{}, frame, 626, x, y)
 	if !ok || int(tileID) >= len(frame.Tiles) || !frame.Tiles[tileID].Explored {
 		return 0, false
 	}

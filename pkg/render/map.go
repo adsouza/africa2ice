@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"image"
 	"image/color"
 	"math"
 	"strings"
@@ -55,6 +56,10 @@ type MapScene struct {
 	frameScale      float64
 	frameCached     bool
 	hover           TileHover
+	camera          Camera
+	visibleHeight   float64
+	guideHighlight  bool
+	lastFrame       *gameapi.Frame
 }
 
 type mapFrameKey struct {
@@ -65,6 +70,9 @@ type mapFrameKey struct {
 	notice         string
 	ending         EndScene
 	resizeRequired bool
+	camera         Camera
+	visibleHeight  float64
+	guideHighlight bool
 }
 
 type MigrationPreview struct {
@@ -104,9 +112,35 @@ func (scene *MapScene) Update() {}
 
 func (scene *MapScene) SetTileHover(hover TileHover) { scene.hover = hover }
 
+// SetCamera records the presentation camera and the map area's visible height
+// (in DIPs, above the drawer) for the next Draw and for PickTile.
+func (scene *MapScene) SetCamera(camera Camera, visibleHeight float64) {
+	scene.camera = camera
+	scene.visibleHeight = visibleHeight
+}
+
+// SetGuideHighlight toggles the dashed rectangle drawn around the selected
+// band's migration candidates.
+func (scene *MapScene) SetGuideHighlight(on bool) { scene.guideHighlight = on }
+
+// effectiveVisibleHeight defaults an unset visible height to the full map
+// area, so a scene that never called SetCamera behaves as it always has.
+func (scene *MapScene) effectiveVisibleHeight() float64 {
+	if scene.visibleHeight <= 0 {
+		return mapAreaHeight
+	}
+	return scene.visibleHeight
+}
+
+// geometry resolves this scene's camera against one frame's tiles.
+func (scene *MapScene) geometry(frame *gameapi.Frame) MapGeometry {
+	return CameraGeometry(scene.camera, frame, scene.effectiveVisibleHeight())
+}
+
 // Draw renders the map, its overlays, and the terminal scene. Every piece of
 // interactive chrome now belongs to pkg/hud, which draws over this image.
 func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, ending EndScene, resizeRequired bool) {
+	scene.lastFrame = frame
 	if frame == nil {
 		screen.Fill(color.RGBA{R: 15, G: 22, B: 29, A: 255})
 		return
@@ -114,6 +148,7 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 	key := mapFrameKey{
 		frame: frame, selectedBand: selectedBand, preview: preview, hover: scene.hover, notice: notice,
 		ending: ending, resizeRequired: resizeRequired,
+		camera: scene.camera, visibleHeight: scene.visibleHeight, guideHighlight: scene.guideHighlight,
 	}
 	width, height := screen.Bounds().Dx(), screen.Bounds().Dy()
 	if scene.frameCached && scene.frameKey == key && scene.frameWidth == width && scene.frameHeight == height {
@@ -156,15 +191,24 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 	grade := EpochGrade(frame.Climate.AridityIndex)
 	scene.drawTimeline(screen, frame, grade)
 	scene.drawMapLegend(screen, frame.Climate.AridityIndex)
-	scene.drawTerrain(screen, frame)
-	scene.drawReachableTiles(screen, frame, selectedBand)
+
+	geometry := scene.geometry(frame)
+	visibleHeight := float64(geometry.visibleHeight)
+	s := float64(screen.scale)
+	clip := image.Rect(round(mapOriginX*s), round(mapOriginY*s), round((mapOriginX+mapAreaWidth)*s), round((mapOriginY+visibleHeight)*s)).Intersect(screen.image.Bounds())
+	mapCanvas := logicalCanvas{image: screen.image.SubImage(clip).(*ebiten.Image), scale: screen.scale}
+
+	markerScale := geometry.Cell / mapTileSize
+	scene.drawTerrain(mapCanvas, geometry, frame)
+	scene.drawReachableTiles(mapCanvas, geometry, frame, selectedBand)
+	scene.drawGuideHighlight(mapCanvas, geometry, frame, selectedBand)
 	// The pointer's tile is tinted on the map itself now that the bottom
 	// inspector is gone; the panel reads the same hover for its detail lines.
 	if scene.hover.Visible && int(scene.hover.TileID) < len(frame.Tiles) && frame.Tiles[scene.hover.TileID].Explored {
-		x, y := scene.tilePoint(frame.Tiles[scene.hover.TileID])
-		vector.FillRect(screen, x-mapTileSize/2+0.7, y-mapTileSize/2+0.7, mapTileSize-1.8, mapTileSize-1.8, color.RGBA{R: 87, G: 211, B: 211, A: 70}, false)
+		x, y := geometry.TilePoint(frame.Tiles[scene.hover.TileID])
+		vector.FillRect(mapCanvas, x-geometry.Cell/2+0.7, y-geometry.Cell/2+0.7, geometry.Cell-1.8, geometry.Cell-1.8, color.RGBA{R: 87, G: 211, B: 211, A: 70}, false)
 	}
-	scene.drawEscarpments(screen, frame)
+	scene.drawEscarpments(mapCanvas, geometry, frame)
 	for _, passage := range frame.Passages {
 		lineColor, visible := passageColorForRender(frame, passage)
 		if !visible {
@@ -173,14 +217,14 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 		switch kind, anchor := passageOverlayForRender(frame, passage); kind {
 		case passageOverlayLine:
 			from, to := frame.Tiles[passage.From], frame.Tiles[passage.To]
-			fromX, fromY := scene.tilePoint(from)
-			toX, toY := scene.tilePoint(to)
-			vector.StrokeLine(screen, fromX, fromY, toX, toY, 2, lineColor, false)
+			fromX, fromY := geometry.TilePoint(from)
+			toX, toY := geometry.TilePoint(to)
+			vector.StrokeLine(mapCanvas, fromX, fromY, toX, toY, 2, lineColor, false)
 		case passageOverlayGlyph:
 			// A lone explored shore marks that a crossing starts here without
 			// drawing a line into fog toward the hidden far endpoint.
-			x, y := scene.tilePoint(frame.Tiles[anchor])
-			drawPassageGlyph(screen, x, y, lineColor)
+			x, y := geometry.TilePoint(frame.Tiles[anchor])
+			drawPassageGlyph(mapCanvas, x, y, markerScale, lineColor)
 		}
 	}
 	var interbreedTiles map[gameapi.TileID]bool
@@ -193,20 +237,20 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 			continue
 		}
 		tile := frame.Tiles[band.TileID]
-		centreX, centreY := scene.tilePoint(tile)
-		vector.FillCircle(screen, centreX, centreY, 3.6, marker, true)
+		centreX, centreY := geometry.TilePoint(tile)
+		vector.FillCircle(mapCanvas, centreX, centreY, 3.6*markerScale, marker, true)
 		// An archaic band the selected band can interbreed with gets its own
 		// ring, so the option is visible on the map rather than only discovered
 		// by pressing the key and hoping.
 		if band.Species == gameapi.ArchaicHominin && interbreedTiles[band.TileID] {
-			vector.StrokeCircle(screen, centreX, centreY, 6.4, 1.5, interbreedMarkerColor, true)
+			vector.StrokeCircle(mapCanvas, centreX, centreY, 6.4*markerScale, 1.5, interbreedMarkerColor, true)
 		}
 		if band.ID == selectedBand {
-			vector.StrokeCircle(screen, centreX, centreY, 5.2, 1.5, color.White, true)
+			vector.StrokeCircle(mapCanvas, centreX, centreY, 5.2*markerScale, 1.5, color.White, true)
 		}
 	}
-	scene.drawQueuedMigrations(screen, frame)
-	scene.drawMigrationPreview(screen, frame, preview)
+	scene.drawQueuedMigrations(mapCanvas, geometry, frame)
+	scene.drawMigrationPreview(mapCanvas, geometry, frame, preview)
 	scene.drawEndScene(screen, ending)
 	if notice != "" {
 		// Long diagnostics wrap and grow the box downward over the map rather
@@ -217,7 +261,76 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 	}
 }
 
-func (scene *MapScene) drawEscarpments(screen logicalCanvas, frame *gameapi.Frame) {
+// round rounds to the nearest physical pixel for SubImage clip rectangles.
+func round(value float64) int {
+	return int(math.Round(value))
+}
+
+// drawGuideHighlight strokes a dashed rectangle around the selected band's
+// migration candidates. Task 16 is the first caller to turn it on.
+func (scene *MapScene) drawGuideHighlight(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame, selectedBand gameapi.BandID) {
+	if !scene.guideHighlight {
+		return
+	}
+	band := selectedBandInFrame(frame, selectedBand)
+	if band == nil || len(band.MigrationCandidates) == 0 {
+		return
+	}
+	var minX, minY, maxX, maxY float32
+	found := false
+	for _, candidate := range band.MigrationCandidates {
+		if int(candidate.TileID) >= len(frame.Tiles) {
+			continue
+		}
+		x, y := geometry.TilePoint(frame.Tiles[candidate.TileID])
+		if !found {
+			minX, maxX, minY, maxY = x, x, y, y
+			found = true
+			continue
+		}
+		minX, maxX = min(minX, x), max(maxX, x)
+		minY, maxY = min(minY, y), max(maxY, y)
+	}
+	if !found {
+		return
+	}
+	margin := geometry.Cell
+	left, top := minX-margin, minY-margin
+	right, bottom := maxX+margin, maxY+margin
+	drawDashedRect(screen, left, top, right-left, bottom-top, color.RGBA{R: 245, G: 202, B: 92, A: 220})
+}
+
+// drawDashedRect strokes a rectangle's outline as alternating 6px-on/4px-off
+// segments so a guide highlight reads as an overlay rather than solid chrome.
+func drawDashedRect(screen logicalCanvas, x, y, width, height float32, dashColor color.Color) {
+	corners := [][4]float32{
+		{x, y, x + width, y},
+		{x + width, y, x + width, y + height},
+		{x + width, y + height, x, y + height},
+		{x, y + height, x, y},
+	}
+	for _, edge := range corners {
+		drawDashedLine(screen, edge[0], edge[1], edge[2], edge[3], dashColor)
+	}
+}
+
+func drawDashedLine(screen logicalCanvas, fromX, fromY, toX, toY float32, dashColor color.Color) {
+	const dashOn, dashOff = float32(6), float32(4)
+	dx, dy := toX-fromX, toY-fromY
+	length := float32(math.Hypot(float64(dx), float64(dy)))
+	if length <= 0 {
+		return
+	}
+	unitX, unitY := dx/length, dy/length
+	for travelled := float32(0); travelled < length; travelled += dashOn + dashOff {
+		segmentEnd := min(travelled+dashOn, length)
+		startX, startY := fromX+unitX*travelled, fromY+unitY*travelled
+		endX, endY := fromX+unitX*segmentEnd, fromY+unitY*segmentEnd
+		vector.StrokeLine(screen, startX, startY, endX, endY, 1.2, dashColor, false)
+	}
+}
+
+func (scene *MapScene) drawEscarpments(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame) {
 	for _, edge := range frame.Escarpments {
 		if int(edge.First) >= len(frame.Tiles) || int(edge.Second) >= len(frame.Tiles) {
 			continue
@@ -226,7 +339,7 @@ func (scene *MapScene) drawEscarpments(screen logicalCanvas, frame *gameapi.Fram
 		if !first.Explored || !second.Explored {
 			continue
 		}
-		fromX, fromY, toX, toY, ok := escarpmentLine(first, second)
+		fromX, fromY, toX, toY, ok := escarpmentLine(geometry, first, second)
 		if !ok {
 			continue
 		}
@@ -235,19 +348,19 @@ func (scene *MapScene) drawEscarpments(screen logicalCanvas, frame *gameapi.Fram
 	}
 }
 
-func escarpmentLine(first, second gameapi.Tile) (float32, float32, float32, float32, bool) {
+func escarpmentLine(geometry MapGeometry, first, second gameapi.Tile) (float32, float32, float32, float32, bool) {
 	dx, dy := second.X-first.X, second.Y-first.Y
 	if absRenderInt(dx)+absRenderInt(dy) != 1 {
 		return 0, 0, 0, 0, false
 	}
-	left := mapOriginX + float32(min(first.X, second.X)*mapTileSize)
-	top := mapOriginY + float32(min(first.Y, second.Y)*mapTileSize)
+	left := geometry.OriginX + float32(min(first.X, second.X))*geometry.Cell
+	top := geometry.OriginY + float32(min(first.Y, second.Y))*geometry.Cell
 	if dx != 0 {
-		x := left + mapTileSize
-		return x, top, x, top + mapTileSize, true
+		x := left + geometry.Cell
+		return x, top, x, top + geometry.Cell, true
 	}
-	y := top + mapTileSize
-	return left, y, left + mapTileSize, y, true
+	y := top + geometry.Cell
+	return left, y, left + geometry.Cell, y, true
 }
 
 func absRenderInt(value int) int {
@@ -262,7 +375,7 @@ func absRenderInt(value int) int {
 // that reveal terrain (including a successful split) advance that revision;
 // other planning-only frames can reuse it without stale exploration, biome,
 // macro-impact, or climate colors.
-func (scene *MapScene) drawTerrain(screen logicalCanvas, frame *gameapi.Frame) {
+func (scene *MapScene) drawTerrain(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame) {
 	if !scene.terrainCached || scene.terrainRevision != frame.TerrainRevision || scene.terrainAridity != frame.Climate.AridityIndex || scene.terrainScale != screen.scale {
 		if scene.terrainImage != nil {
 			scene.terrainImage.Deallocate()
@@ -278,8 +391,14 @@ func (scene *MapScene) drawTerrain(screen logicalCanvas, frame *gameapi.Frame) {
 		scene.terrainCached = true
 		scene.terrainRebuilds++
 	}
+	// The cache stays a fixed 8 px-per-tile image keyed only by revision,
+	// aridity, and physical scale; the camera's zoom is applied here, at draw
+	// time, by scaling and translating it into place.
+	cellScale := float64(geometry.Cell) / float64(mapTileSize)
 	options := &ebiten.DrawImageOptions{}
-	options.GeoM.Translate(float64(mapOriginX)*float64(screen.scale), float64(mapOriginY)*float64(screen.scale))
+	options.GeoM.Scale(cellScale, cellScale)
+	options.GeoM.Translate(float64(geometry.OriginX)*float64(screen.scale), float64(geometry.OriginY)*float64(screen.scale))
+	options.Filter = ebiten.FilterNearest
 	screen.image.DrawImage(scene.terrainImage, options)
 }
 
@@ -298,15 +417,13 @@ func (scene *MapScene) drawFlatTerrain(screen logicalCanvas, frame *gameapi.Fram
 	}
 }
 
-func (scene *MapScene) tilePoint(tile gameapi.Tile) (float32, float32) {
-	return mapOriginX + float32(tile.X*mapTileSize) + mapTileSize/2, mapOriginY + float32(tile.Y*mapTileSize) + mapTileSize/2
-}
-
+// PickTile resolves a logical pointer position against the camera and frame
+// last passed to Draw.
 func (scene *MapScene) PickTile(x, y int) (gameapi.TileID, bool) {
-	return MapTileAt(x, y)
+	return MapTileAt(scene.camera, scene.lastFrame, scene.effectiveVisibleHeight(), x, y)
 }
 
-func (scene *MapScene) drawMigrationPreview(screen logicalCanvas, frame *gameapi.Frame, preview MigrationPreview) {
+func (scene *MapScene) drawMigrationPreview(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame, preview MigrationPreview) {
 	if !preview.Visible || int(preview.TileID) >= len(frame.Tiles) {
 		return
 	}
@@ -315,13 +432,13 @@ func (scene *MapScene) drawMigrationPreview(screen logicalCanvas, frame *gameapi
 		return
 	}
 	origin, destination := frame.Tiles[band.TileID], frame.Tiles[preview.TileID]
-	fromX, fromY := scene.tilePoint(origin)
-	toX, toY := scene.tilePoint(destination)
+	fromX, fromY := geometry.TilePoint(origin)
+	toX, toY := geometry.TilePoint(destination)
 	drawMigrationArrow(screen, fromX, fromY, toX, toY, color.RGBA{R: 255, G: 74, B: 74, A: 255})
-	vector.StrokeCircle(screen, toX, toY, 4.2, 1.2, color.RGBA{R: 255, G: 126, B: 106, A: 255}, true)
+	vector.StrokeCircle(screen, toX, toY, 4.2*geometry.Cell/mapTileSize, 1.2, color.RGBA{R: 255, G: 126, B: 106, A: 255}, true)
 }
 
-func (scene *MapScene) drawQueuedMigrations(screen logicalCanvas, frame *gameapi.Frame) {
+func (scene *MapScene) drawQueuedMigrations(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame) {
 	for _, band := range frame.Bands {
 		if band.Species != gameapi.HomoSapiens || !band.HasQueuedMigration || int(band.TileID) >= len(frame.Tiles) || int(band.QueuedMigration) >= len(frame.Tiles) {
 			continue
@@ -330,8 +447,8 @@ func (scene *MapScene) drawQueuedMigrations(screen logicalCanvas, frame *gameapi
 		if !origin.Explored || !destination.Explored {
 			continue
 		}
-		fromX, fromY := scene.tilePoint(origin)
-		toX, toY := scene.tilePoint(destination)
+		fromX, fromY := geometry.TilePoint(origin)
+		toX, toY := geometry.TilePoint(destination)
 		drawMigrationArrow(screen, fromX, fromY, toX, toY, queuedMigrationColor)
 	}
 }
@@ -351,7 +468,7 @@ func drawMigrationArrow(screen logicalCanvas, fromX, fromY, toX, toY float32, ar
 	vector.StrokeLine(screen, toX, toY, baseX-perpendicularX, baseY-perpendicularY, 1.8, arrowColor, true)
 }
 
-func (scene *MapScene) drawReachableTiles(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID) {
+func (scene *MapScene) drawReachableTiles(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame, selectedBand gameapi.BandID) {
 	band := selectedBandInFrame(frame, selectedBand)
 	if band == nil || band.SpatialActionUsed {
 		return
@@ -361,12 +478,12 @@ func (scene *MapScene) drawReachableTiles(screen logicalCanvas, frame *gameapi.F
 			continue
 		}
 		tile := frame.Tiles[candidate.TileID]
-		x, y := scene.tilePoint(tile)
+		x, y := geometry.TilePoint(tile)
 		highlight := reachableTileColor(index)
-		x -= mapTileSize / 2
-		y -= mapTileSize / 2
-		vector.FillRect(screen, x+0.7, y+0.7, mapTileSize-1.8, mapTileSize-1.8, color.RGBA{R: highlight.R, G: highlight.G, B: highlight.B, A: 48}, false)
-		vector.StrokeRect(screen, x+0.7, y+0.7, mapTileSize-1.8, mapTileSize-1.8, 1.35, highlight, false)
+		x -= geometry.Cell / 2
+		y -= geometry.Cell / 2
+		vector.FillRect(screen, x+0.7, y+0.7, geometry.Cell-1.8, geometry.Cell-1.8, color.RGBA{R: highlight.R, G: highlight.G, B: highlight.B, A: 48}, false)
+		vector.StrokeRect(screen, x+0.7, y+0.7, geometry.Cell-1.8, geometry.Cell-1.8, 1.35, highlight, false)
 	}
 }
 
@@ -408,15 +525,6 @@ func reachableTileColor(candidateIndex int) color.RGBA {
 		return color.RGBA{R: 245, G: 202, B: 92, A: 255}
 	}
 	return color.RGBA{R: 87, G: 211, B: 211, A: 255}
-}
-
-func MapTileAt(x, y int) (gameapi.TileID, bool) {
-	gridX := (x - mapOriginX) / mapTileSize
-	gridY := (y - mapOriginY) / mapTileSize
-	if x < mapOriginX || y < mapOriginY || gridX < 0 || gridX >= TerrainGridWidth || gridY < 0 || gridY >= TerrainGridHeight {
-		return 0, false
-	}
-	return gameapi.TileID(gridY*96 + gridX), true
 }
 
 func (scene *MapScene) drawTimeline(screen logicalCanvas, frame *gameapi.Frame, grade GradeColors) {
@@ -599,8 +707,8 @@ func passageOverlayForRender(frame *gameapi.Frame, passage gameapi.Passage) (pas
 // drawPassageGlyph strokes a small diamond at a passage endpoint. It is
 // symmetric so it hints at nothing about the far shore's direction, and its
 // shape keeps it apart from the round band markers and selection rings.
-func drawPassageGlyph(screen logicalCanvas, x, y float32, tint color.RGBA) {
-	const half = float32(4.2)
+func drawPassageGlyph(screen logicalCanvas, x, y, markerScale float32, tint color.RGBA) {
+	half := 4.2 * markerScale
 	vector.StrokeLine(screen, x, y-half, x+half, y, 1.5, tint, true)
 	vector.StrokeLine(screen, x+half, y, x, y+half, 1.5, tint, true)
 	vector.StrokeLine(screen, x, y+half, x-half, y, 1.5, tint, true)

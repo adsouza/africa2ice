@@ -13,6 +13,7 @@ import (
 )
 
 func TestMapTileAt(t *testing.T) {
+	frame := cameraFrame()
 	tests := []struct {
 		name   string
 		x      int
@@ -30,7 +31,7 @@ func TestMapTileAt(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotID, gotOK := MapTileAt(test.x, test.y)
+			gotID, gotOK := MapTileAt(Camera{}, frame, 626, test.x, test.y)
 			if gotID != test.wantID || gotOK != test.wantOK {
 				t.Fatalf("MapTileAt(%d, %d) = (%d, %t), want (%d, %t)", test.x, test.y, gotID, gotOK, test.wantID, test.wantOK)
 			}
@@ -145,7 +146,8 @@ func TestMapSceneDrawsEscarpmentBoundaryOffscreen(t *testing.T) {
 	}
 
 	boundaryX := mapOriginX + mapTileSize
-	fromX, fromY, toX, toY, ok := escarpmentLine(frame.Tiles[0], frame.Tiles[1])
+	overview := MapGeometry{OriginX: mapOriginX, OriginY: mapOriginY, Cell: mapTileSize}
+	fromX, fromY, toX, toY, ok := escarpmentLine(overview, frame.Tiles[0], frame.Tiles[1])
 	if !ok || fromX != float32(boundaryX) || toX != float32(boundaryX) || fromY != mapOriginY || toY != mapOriginY+mapTileSize {
 		t.Fatalf("escarpment line = (%.0f,%.0f)-(%.0f,%.0f), %t", fromX, fromY, toX, toY, ok)
 	}
@@ -192,6 +194,8 @@ func TestTopDownTerrainKeepsColorPickingAndMarkersOnTheSameGrid(t *testing.T) {
 	frame := representativeRenderFrame()
 	frame.Tiles[5].Biome = gameapi.MountainousHighlands
 	scene := NewMapScene()
+	scene.SetCamera(Camera{}, 626)
+	scene.lastFrame = frame
 
 	for _, test := range []struct {
 		name string
@@ -208,7 +212,7 @@ func TestTopDownTerrainKeepsColorPickingAndMarkersOnTheSameGrid(t *testing.T) {
 			if got != test.want {
 				t.Fatalf("tile %d color = %v, want %v", test.tile.ID, got, test.want)
 			}
-			pointX, pointY := scene.tilePoint(test.tile)
+			pointX, pointY := scene.geometry(frame).TilePoint(test.tile)
 			if pointX != float32(mapOriginX+localX) || pointY != float32(mapOriginY+localY) {
 				t.Fatalf("tile %d marker point = (%v,%v), want (%d,%d)", test.tile.ID, pointX, pointY, mapOriginX+localX, mapOriginY+localY)
 			}
@@ -218,6 +222,23 @@ func TestTopDownTerrainKeepsColorPickingAndMarkersOnTheSameGrid(t *testing.T) {
 				t.Fatalf("tile %d pick = (%d,%t), want (%d,true)", test.tile.ID, picked, ok, wantID)
 			}
 		})
+	}
+}
+
+func TestTopDownTerrainPicksTheSameGridInFocus(t *testing.T) {
+	frame := cameraFrame()
+	scene := NewMapScene()
+	center := gameapi.TileID(30*TerrainGridWidth + 40)
+	scene.SetCamera(Camera{Mode: CameraFocus, CenterTile: center, Progress: 1}, 626)
+	scene.lastFrame = frame
+
+	for _, id := range []gameapi.TileID{center, center + 1, center + TerrainGridWidth} {
+		tile := frame.Tiles[id]
+		x, y := scene.geometry(frame).TilePoint(tile)
+		picked, ok := scene.PickTile(int(x), int(y))
+		if !ok || picked != id {
+			t.Fatalf("focused tile %d pick = (%d,%t), want (%d,true)", id, picked, ok, id)
+		}
 	}
 }
 
