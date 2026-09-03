@@ -319,6 +319,7 @@ func (g *Game) startUISettingsWrite(settings ui.UISettings) {
 func (g *Game) Draw(screen *ebiten.Image) {
 	g.scene.SetTileHover(render.TileHover{TileID: g.hoveredTile, Visible: g.hasHoveredTile})
 	g.scene.SetCamera(g.camera, g.mapVisibleHeight())
+	g.scene.SetGuideHighlight(g.guide.Step == ui.GuideMove && g.frame != nil && g.frame.CampaignResult == gameapi.Ongoing)
 	displayFrame := g.displayFrame()
 	g.scene.Draw(screen, displayFrame, g.selectedBand, render.MigrationPreview{
 		BandID: g.migrationPreviewBand, TileID: g.migrationPreviewTile, Visible: g.hasMigrationPreview,
@@ -1120,6 +1121,9 @@ func (g *Game) startNewCampaign() {
 	g.hasAssignmentDraft = false
 	g.syncAssignmentDraft(true)
 	g.resetDisclosure()
+	if !g.settings.GuideDismissed {
+		g.guide = ui.NewGuideState(false)
+	}
 	g.setFieldNote(ui.CampaignOverviewFieldNote())
 	g.breakthroughFrames = 0
 	g.regionalPulseFocused = false

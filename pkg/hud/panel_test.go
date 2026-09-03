@@ -353,3 +353,31 @@ func TestCameraButtonReflectsFocusAndEmitsToggle(t *testing.T) {
 		t.Fatal("camera button shown when focus is unavailable")
 	}
 }
+
+func TestGuideCardShowsStepProgressAndOnlyXDismisses(t *testing.T) {
+	panel := New()
+	state := testState(testFrame(1), 1)
+	state.Guide = ui.NewGuideState(false)
+	panel.Update(state)
+	if panel.handles.guideNext == nil || panel.handles.guideX == nil {
+		t.Fatal("guide card controls missing on a fresh campaign")
+	}
+	panel.handles.guideNext.Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentGuideNext {
+		t.Fatalf("Next = %+v", intents)
+	}
+	panel.handles.guideX.Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentGuideDismiss {
+		t.Fatalf("× = %+v", intents)
+	}
+	state.Guide = ui.GuideState{Step: ui.GuideClosing}
+	panel.Update(state)
+	if panel.handles.guideNext != nil || panel.handles.guideX == nil {
+		t.Fatal("closing card should offer only the ×")
+	}
+	state.Guide = ui.NewGuideState(true)
+	panel.Update(state)
+	if panel.handles.guideX != nil {
+		t.Fatal("dismissed guide still rendered")
+	}
+}

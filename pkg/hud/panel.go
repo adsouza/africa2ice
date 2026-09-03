@@ -73,6 +73,8 @@ type handles struct {
 	drawerMore *widget.Button
 	events     []*widget.Button
 	camera     *widget.Button
+	guideNext  *widget.Button
+	guideX     *widget.Button
 
 	overlayButtons []*widget.Button
 	deleteButtons  []*widget.Button
@@ -179,7 +181,7 @@ func (p *Panel) buildCameraButton(state State) widget.PreferredSizeLocateableWid
 }
 
 // buildPanel is the full chrome column: header, chips, band line, details,
-// guide card (Task 16 fills), checklist (Task 9), end turn (Task 9), footer.
+// guide card, checklist, end turn, footer.
 func (p *Panel) buildPanel(state State) widget.PreferredSizeLocateableWidget {
 	t := p.theme
 	column := t.column(8, t.insets(14, panelPadding, panelPadding, 12), solid(colorPanel),
@@ -198,9 +200,6 @@ func (p *Panel) buildPanel(state State) widget.PreferredSizeLocateableWidget {
 	column.AddChild(t.label("Space ends the turn · Tab next band · ? shortcuts", 9.5, colorDim))
 	return column
 }
-
-// buildGuideCard is a stub; Task 16 implements the first-turn guide overlay.
-func (p *Panel) buildGuideCard(State) widget.PreferredSizeLocateableWidget { return nil }
 
 // buildChecklist is the three-row Move/Research/Workforce checklist (spec
 // §5) plus the End turn button.

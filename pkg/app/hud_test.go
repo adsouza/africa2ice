@@ -134,3 +134,27 @@ func TestSelectionChangeResetsDisclosure(t *testing.T) {
 		t.Fatalf("after select: band %d details %t row %v chosen %t", game.selectedBand, game.detailsOpen, game.openRow, game.rowChosen)
 	}
 }
+
+func TestGuideFollowsTheTurnAndPersistsDismissal(t *testing.T) {
+	stub := &gameStub{frame: migrationPreviewFrame()}
+	game := New(stub)
+	if game.guide.Step != ui.GuideMove {
+		t.Fatalf("fresh guide = %+v", game.guide)
+	}
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentMoveTo, Tile: 2}})
+	frame := migrationPreviewFrame()
+	frame.Bands[0].HasQueuedMigration, frame.Bands[0].QueuedMigration = true, 2
+	stub.frame = frame
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentMoveTo, Tile: 2}}) // second apply returns the queued frame
+	if game.guide.Step != ui.GuideResearch {
+		t.Fatalf("guide after a queued move = %+v", game.guide)
+	}
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentGuideDismiss}})
+	if game.guide.Visible() || !game.settings.GuideDismissed {
+		t.Fatalf("dismissal not persisted: guide %+v settings %+v", game.guide, game.settings)
+	}
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentShowGuide}})
+	if game.guide.Step != ui.GuideMove || game.settings.GuideDismissed {
+		t.Fatal("Show first-turn guide did not restore the card")
+	}
+}
