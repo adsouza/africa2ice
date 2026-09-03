@@ -46,6 +46,7 @@ const (
 	IntentToggleMute
 	IntentShowGuide
 	IntentToggleBandList
+	IntentToggleShortcuts
 	IntentKindCount
 )
 

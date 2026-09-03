@@ -20,6 +20,8 @@ func (g *Game) handleIntent(intent hud.Intent) {
 		g.bandListOpen = false
 	case hud.IntentToggleBandList:
 		g.bandListOpen = !g.bandListOpen
+	case hud.IntentToggleShortcuts:
+		g.toggleShortcutSheet()
 	case hud.IntentOpenRow:
 		g.openRow, g.rowChosen = intent.Row, true
 	case hud.IntentToggleDetails:

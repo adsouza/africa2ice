@@ -69,6 +69,7 @@ type State struct {
 	NotesMode       NotesMode
 	Guide           ui.GuideState
 	Camera          CameraState
+	ShortcutsOpen   bool
 	Overlay         OverlayState
 	Ending          render.EndScene
 	Viewport        render.Viewport

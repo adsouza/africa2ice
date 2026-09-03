@@ -80,6 +80,8 @@ type Game struct {
 	endTurnArmed           bool
 	guide                  ui.GuideState
 	notesMode              hud.NotesMode
+	shortcutsOpen          bool
+	researchCursor         gameapi.Tech
 }
 
 const (
@@ -237,94 +239,10 @@ func (g *Game) Update() error {
 	if g.handleSceneInput() {
 		return nil
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyTab) {
-		if g.assignmentDraftDirty() {
-			g.showNotice("Apply or discard workforce changes")
-		} else {
-			g.clearMigrationPreview()
-			if ebiten.IsKeyPressed(ebiten.KeyShift) {
-				g.selectPreviousSapiens()
-			} else {
-				g.selectNextSapiens()
-			}
-		}
-	}
-	if inpututil.IsKeyJustPressed(fieldNotesHotkey) {
-		g.handleGameplayHotkey(fieldNotesHotkey)
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyM) {
-		g.toggleMute()
-	}
-	for _, volumeKey := range [...]struct {
-		key   ebiten.Key
-		delta float64
-	}{{key: ebiten.KeyMinus, delta: -0.1}, {key: ebiten.KeyEqual, delta: 0.1}} {
-		if inpututil.IsKeyJustPressed(volumeKey.key) {
-			g.adjustVolume(volumeKey.delta)
-			break
-		}
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyW) && g.hasAssignmentDraft {
-		g.assignmentRole = (g.assignmentRole + 1) % gameapi.AssignmentCount
-		if note, ok := ui.WorkforceRoleFieldNote(g.assignmentRole); ok {
-			g.setFieldNote(note)
-		}
-	}
-	for _, edit := range [...]struct {
-		key   ebiten.Key
-		delta int
-	}{{key: ebiten.KeyBracketLeft, delta: -100}, {key: ebiten.KeyBracketRight, delta: 100}} {
-		if inpututil.IsKeyJustPressed(edit.key) {
-			g.editAssignmentDraft(edit.delta)
-			break
-		}
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyA) {
-		g.applyAssignmentDraft()
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyD) {
-		g.discardAssignmentDraft()
-	}
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) && !g.panel.Hovered() {
 		g.handleMapClick()
 	}
-	for _, directionalKey := range [...]struct {
-		key    ebiten.Key
-		dx, dy int
-	}{
-		{key: ebiten.KeyArrowUp, dy: -1},
-		{key: ebiten.KeyArrowDown, dy: 1},
-		{key: ebiten.KeyArrowLeft, dx: -1},
-		{key: ebiten.KeyArrowRight, dx: 1},
-	} {
-		if inpututil.IsKeyJustPressed(directionalKey.key) {
-			g.handleDirectionalMigration(directionalKey.dx, directionalKey.dy)
-			break
-		}
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
-		g.confirmMigrationPreview()
-	}
-	if inpututil.IsKeyJustPressed(splitBandHotkey) {
-		g.handleGameplayHotkey(splitBandHotkey)
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyI) {
-		g.requestInterbreed()
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyJ) {
-		g.selectNextInterbreedTarget()
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyG) {
-		g.focusNextTraitNote()
-	}
-	for index, key := range [...]ebiten.Key{ebiten.Key1, ebiten.Key2, ebiten.Key3, ebiten.Key4, ebiten.Key5, ebiten.Key6, ebiten.Key7, ebiten.Key8, ebiten.Key9} {
-		if inpututil.IsKeyJustPressed(key) {
-			g.chooseResearchTechnology(gameapi.Tech(index))
-		}
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
-		g.endTurn(true)
-	}
+	g.handleGameplayKeys()
 	return nil
 }
 
@@ -1177,13 +1095,10 @@ func (g *Game) beginManualLoad(slot int) {
 func (g *Game) handleSceneInput() bool {
 	switch g.scenes.Current() {
 	case ui.SceneGameplay:
-		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) && g.hasMigrationPreview {
-			g.clearMigrationPreview()
-			g.showNotice("Migration choice cleared")
-			return true
-		}
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
-			g.dispatchBatch([]ui.Action{ui.PushSceneAction(ui.SceneMenu)})
+			if !g.escape() {
+				g.dispatchBatch([]ui.Action{ui.PushSceneAction(ui.SceneMenu)})
+			}
 			return true
 		}
 		return false
