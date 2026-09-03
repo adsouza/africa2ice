@@ -74,4 +74,11 @@ func TestGuideCopyAndProgress(t *testing.T) {
 	if !strings.Contains(GuideState{Step: GuideMove}.Body(), "gold") {
 		t.Fatal("move step copy does not mention the gold outline")
 	}
+	moveBody := GuideState{Step: GuideMove}.Body()
+	if !strings.Contains(moveBody, "Best tile") {
+		t.Fatal("move step copy does not name the Best tile button")
+	}
+	if strings.Contains(moveBody, "Move to gold tile") {
+		t.Fatal("move step copy names a control that does not exist")
+	}
 }

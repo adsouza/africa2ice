@@ -91,7 +91,7 @@ func (guide GuideState) Title() string {
 func (guide GuideState) Body() string {
 	switch guide.Step {
 	case GuideMove:
-		return "Each turn, every band may make one move. This band's reachable tiles are outlined on the map; the gold one has the best food. Click it, or click Move to gold tile below. Staying put is also fine."
+		return "Each turn, every band may make one move. This band's reachable tiles are outlined on the map; the gold one has the best food. Click it, or click Best tile below. Staying put is also fine."
 	case GuideResearch:
 		return "Pick a technology for this band to work toward. Firecraft, Hafted Tools and Plant Knowledge need nothing first. Progress accrues every turn."
 	case GuideWorkforce:
