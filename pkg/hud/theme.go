@@ -155,6 +155,18 @@ func (t *theme) label(value string, sizeDIP float64, textColor color.Color) *wid
 	return widget.NewText(widget.TextOpts.Text(value, t.face(sizeDIP), textColor))
 }
 
+// rightLabel is t.label with its text right-aligned within the widget's own
+// box via widget.TextOpts.Position — t.label always left-aligns, so a column
+// of values that must line up on a shared right edge (rather than a shared
+// left edge) needs this instead.
+func (t *theme) rightLabel(value string, sizeDIP float64, textColor color.Color, opts ...widget.WidgetOpt) *widget.Text {
+	return widget.NewText(
+		widget.TextOpts.Text(value, t.face(sizeDIP), textColor),
+		widget.TextOpts.Position(widget.TextPositionEnd, widget.TextPositionCenter),
+		widget.TextOpts.WidgetOpts(opts...),
+	)
+}
+
 // wrapped builds text that wraps at a DIP width.
 func (t *theme) wrapped(value string, sizeDIP float64, textColor color.Color, widthDIP float64) *widget.Text {
 	return widget.NewText(widget.TextOpts.Text(value, t.face(sizeDIP), textColor), widget.TextOpts.MaxWidth(float64(t.px(widthDIP))))

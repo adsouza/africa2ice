@@ -8,6 +8,16 @@ import (
 	"github.com/ebitenui/ebitenui/widget"
 )
 
+// Workforce row column widths (spec: the five sliders form one aligned
+// block). workforceLabelWidth pins every row's role-label column to the same
+// width regardless of the label's own text length; workforceValueWidth does
+// the same for the trailing percentage/worker-count column, right-aligned so
+// it forms a clean right edge.
+const (
+	workforceLabelWidth = 84.0
+	workforceValueWidth = 52.0
+)
+
 type workforceHandles struct {
 	roleLabels [gameapi.AssignmentCount]*widget.Text
 	sliders    [gameapi.AssignmentCount]*widget.Slider
@@ -60,8 +70,22 @@ func (p *Panel) buildWorkforceBody(state State, band *gameapi.Band) widget.Prefe
 	draft := state.Workforce
 	for role := gameapi.WorkforceRole(0); role < gameapi.AssignmentCount; role++ {
 		current := role
-		line := t.rowOf(6, stretch())
-		roleLabel := t.label(fmt.Sprintf("%s%-14s", roleMarker(role, draft.SelectedRole), ui.RoleShortLabel(role)), 9.5, colorText)
+		// A five-column grid, not a RowLayout: RowLayout's %-14s padding did
+		// nothing in a proportional font, so every row's −, slider, + and
+		// value started at a different x. Only the slider column (index 2)
+		// stretches, so every slider shares the same left and right edges.
+		line := widget.NewContainer(
+			widget.ContainerOpts.Layout(widget.NewGridLayout(
+				widget.GridLayoutOpts.Columns(5),
+				widget.GridLayoutOpts.Spacing(t.px(6), 0),
+				widget.GridLayoutOpts.Stretch([]bool{false, false, true, false, false}, nil),
+			)),
+			widget.ContainerOpts.WidgetOpts(stretch()),
+		)
+		roleLabel := widget.NewText(
+			widget.TextOpts.Text(roleMarker(role, draft.SelectedRole)+ui.RoleShortLabel(role), t.face(9.5), colorText),
+			widget.TextOpts.WidgetOpts(widget.WidgetOpts.MinSize(t.px(workforceLabelWidth), 0)),
+		)
 		p.handles.workforce.roleLabels[role] = roleLabel
 		line.AddChild(roleLabel)
 		minus := t.button("−", 10, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentAdjustRole, Role: current, Delta: -100}) })
@@ -81,14 +105,15 @@ func (p *Panel) buildWorkforceBody(state State, band *gameapi.Band) widget.Prefe
 					p.emit(Intent{Kind: IntentAdjustRole, Role: current, Delta: delta})
 				}
 			}),
-			widget.SliderOpts.WidgetOpts(widget.WidgetOpts.MinSize(t.px(120), t.px(12)), widget.WidgetOpts.LayoutData(widget.RowLayoutData{Stretch: true})),
+			widget.SliderOpts.WidgetOpts(widget.WidgetOpts.MinSize(t.px(120), t.px(12))),
 		)
 		p.handles.workforce.sliders[role] = slider
 		line.AddChild(slider)
 		plus := t.button("+", 10, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentAdjustRole, Role: current, Delta: 100}) })
 		p.handles.workforce.plus[role] = plus
 		line.AddChild(plus)
-		value := t.label(roleValueLabel(draft.Population, draft.AllocationBP[role]), 9.5, colorText)
+		value := t.rightLabel(roleValueLabel(draft.Population, draft.AllocationBP[role]), 9.5, colorText,
+			widget.WidgetOpts.MinSize(t.px(workforceValueWidth), 0))
 		p.handles.workforce.values[role] = value
 		line.AddChild(value)
 		body.AddChild(line)
@@ -147,7 +172,7 @@ func (p *Panel) refreshWorkforce(state State) {
 			h.sliders[role].Current = percent
 		}
 		h.values[role].Label = roleValueLabel(draft.Population, draft.AllocationBP[gameapi.WorkforceRole(role)])
-		h.roleLabels[role].Label = fmt.Sprintf("%s%-14s", roleMarker(gameapi.WorkforceRole(role), draft.SelectedRole), ui.RoleShortLabel(gameapi.WorkforceRole(role)))
+		h.roleLabels[role].Label = roleMarker(gameapi.WorkforceRole(role), draft.SelectedRole) + ui.RoleShortLabel(gameapi.WorkforceRole(role))
 	}
 	h.total.Label = workforceTotalLabel(draft)
 	if draft.Valid {

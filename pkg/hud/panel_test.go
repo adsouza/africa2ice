@@ -524,6 +524,43 @@ func TestWorkforceRowShowsWorkerCounts(t *testing.T) {
 	}
 }
 
+// TestWorkforceSlidersShareOneColumn covers the reviewer-found misalignment:
+// each row's role label was "%-14s"-padded, but that padding does nothing in
+// a proportional font, so the five role labels have different pixel widths
+// and every row's −, slider, + and value start at a different x. The row
+// must instead be a fixed-label-column grid so all five sliders share one
+// left edge and one right edge, and all five value labels share one left
+// edge.
+func TestWorkforceSlidersShareOneColumn(t *testing.T) {
+	panel := New()
+	state := testState(testFrame(1), 1)
+	state.OpenRow = ui.RowWorkforce
+	panel.Update(state)
+	screen := ebiten.NewImage(1280, 720)
+	defer screen.Deallocate()
+	panel.Draw(screen)
+
+	h := panel.handles.workforce
+	minX, maxX, valueMinX := -1, -1, -1
+	for role := range h.sliders {
+		if h.sliders[role] == nil {
+			t.Fatalf("role %d: slider handle missing", role)
+		}
+		rect := h.sliders[role].GetWidget().Rect
+		if minX == -1 {
+			minX, maxX = rect.Min.X, rect.Max.X
+		} else if rect.Min.X != minX || rect.Max.X != maxX {
+			t.Fatalf("role %d: slider rect = %v, want Min.X %d and Max.X %d to match every other role", role, rect, minX, maxX)
+		}
+		valueRect := h.values[role].GetWidget().Rect
+		if valueMinX == -1 {
+			valueMinX = valueRect.Min.X
+		} else if valueRect.Min.X != valueMinX {
+			t.Fatalf("role %d: value label Min.X = %d, want %d to match every other role", role, valueRect.Min.X, valueMinX)
+		}
+	}
+}
+
 func TestDrawerHasThreeStatesAndClickableEvents(t *testing.T) {
 	frame := testFrame(1)
 	frame.Events = []gameapi.Event{{Turn: 11, Kind: gameapi.EventMigration, Summary: "Band 1 migrated"}, {Turn: 12, Kind: gameapi.EventMigration, Summary: "Band 1 migrated again"}}
