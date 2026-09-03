@@ -114,22 +114,29 @@ func (p *Panel) Update(state State) []Intent {
 	structural.Workforce, lastStructural.Workforce = WorkforceDraft{}, WorkforceDraft{}
 	structural.Overlay.MasterVolume, lastStructural.Overlay.MasterVolume = 0, 0
 	structural.Hover, lastStructural.Hover = render.TileHover{}, render.TileHover{}
-	switch {
-	case !p.built || structural != lastStructural:
+	if !p.built || structural != lastStructural {
 		p.rebuild(state)
 		p.built = true
-	case state.Workforce != p.last.Workforce:
-		p.last = state
-		p.refreshWorkforce(state)
-	case state.Overlay.MasterVolume != p.last.Overlay.MasterVolume:
-		p.last = state
-		p.refreshVolume(state)
-	case state.Hover != p.last.Hover:
-		p.last = state
-		if !p.refreshTarget(state) {
-			p.rebuild(state)
-			p.built = true
+	} else {
+		// Each applicable refresh runs independently rather than through a
+		// mutually-exclusive switch: two of Workforce, Overlay.MasterVolume
+		// and Hover can change in the same tick, and a switch would run only
+		// the first matching case while p.last = state still absorbed every
+		// field's new value — silently dropping the other field's refresh
+		// with no way for a later tick to detect it.
+		if state.Workforce != p.last.Workforce {
+			p.refreshWorkforce(state)
 		}
+		if state.Overlay.MasterVolume != p.last.Overlay.MasterVolume {
+			p.refreshVolume(state)
+		}
+		if state.Hover != p.last.Hover {
+			if !p.refreshTarget(state) {
+				p.rebuild(state)
+				p.built = true
+			}
+		}
+		p.last = state
 	}
 	p.ui.Update()
 	intents := p.intents

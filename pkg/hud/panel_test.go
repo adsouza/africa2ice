@@ -900,3 +900,45 @@ func TestHoverRefreshesTargetWithoutRebuilding(t *testing.T) {
 		t.Fatal("Move here should be disabled again once there is no target")
 	}
 }
+
+// TestSimultaneousExcludedFieldChangesAllRefresh covers a structural defect
+// in Update's dispatch: it was one switch over mutually exclusive cases
+// (rebuild / Workforce / MasterVolume / Hover), so if two of the
+// switch-excluded fields (Workforce, Overlay.MasterVolume, Hover) changed in
+// the same tick, only the first matching case would run and p.last = state
+// would still absorb every field's new value — silently dropping the other
+// field's refresh with no way for a later tick to detect it, since p.last
+// already agrees with state.
+//
+// The Move row is opened (not the Workforce row) so the target half is
+// directly observable: with the Workforce row open instead, buildMoveBody
+// never runs and moveTargetHeader stays nil, so the TARGET-header assertion
+// below would be impossible to make. With the Move row open, the workforce
+// body (sliders, values, role labels) instead never runs and stays nil, so
+// the workforce half is asserted the other way: no panic when refreshWorkforce
+// runs against a closed row, and p.last correctly carries the new
+// SelectedRole rather than staying stale.
+func TestSimultaneousExcludedFieldChangesAllRefresh(t *testing.T) {
+	frame := testFrame(1)
+	panel := New()
+	state := testState(frame, 1)
+	panel.Update(state)
+	builds := panel.builds
+
+	state.Workforce.SelectedRole = gameapi.Toolcraft
+	state.Hover = render.TileHover{TileID: 1, Visible: true}
+	panel.Update(state)
+
+	if panel.builds != builds {
+		t.Fatalf("simultaneous Workforce and Hover changes rebuilt the tree: builds %d -> %d", builds, panel.builds)
+	}
+	if got := panel.handles.moveTargetHeader.Label; got != "TARGET · hover" {
+		t.Fatalf("TARGET header = %q, want TARGET . hover: the Hover-driven refresh was dropped because Workforce also changed this tick", got)
+	}
+	if panel.last.Workforce.SelectedRole != gameapi.Toolcraft {
+		t.Fatalf("p.last.Workforce.SelectedRole = %v, want %v: p.last went stale for the field whose refresh did not run", panel.last.Workforce.SelectedRole, gameapi.Toolcraft)
+	}
+	if panel.last.Hover != state.Hover {
+		t.Fatalf("p.last.Hover = %+v, want %+v", panel.last.Hover, state.Hover)
+	}
+}
