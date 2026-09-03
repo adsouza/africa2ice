@@ -29,6 +29,25 @@ func testFrame(bands int) *gameapi.Frame {
 	return frame
 }
 
+// testFrameWithIDs is testFrame's tile setup with caller-chosen band IDs, so
+// a test can exercise IDs that are not simply 1..N (three-digit IDs, for
+// instance).
+func testFrameWithIDs(ids []gameapi.BandID) *gameapi.Frame {
+	frame := &gameapi.Frame{CampaignResult: gameapi.Ongoing, YearBP: 76_400, Turn: 12,
+		Tiles: []gameapi.Tile{
+			{ID: 0, X: 5, Y: 5, Land: true, Explored: true, Biome: gameapi.RiverineWoodland, BaselineK: 150, EcologicalK: 145, FloraStock: 212, FloraCap: 810, WaterStock: 315, WaterCap: 500, NaturalShelter: 0.5, MovementCost: 1.2},
+			{ID: 1, X: 6, Y: 4, Land: true, Explored: true, Biome: gameapi.Savanna, BaselineK: 150, EcologicalK: 150, FloraStock: 640, FloraCap: 810, WaterStock: 480, WaterCap: 500, NaturalShelter: 0.4, MovementCost: 1.2},
+		}}
+	for _, id := range ids {
+		band := gameapi.Band{ID: id, Species: gameapi.HomoSapiens, Population: 60, Health: 1, TileID: 0,
+			AllocationBP:        [gameapi.AssignmentCount]uint16{3_500, 3_000, 1_500, 500, 1_500},
+			MigrationCandidates: []gameapi.MigrationCandidate{{TileID: 1}}}
+		band.ResearchOptions[gameapi.Firecraft] = gameapi.ResearchOption{Available: true, Cost: 80}
+		frame.Bands = append(frame.Bands, band)
+	}
+	return frame
+}
+
 func testState(frame *gameapi.Frame, scale float64) State {
 	viewport := render.NextViewport(render.Viewport{}, 1280*scale, 720*scale, 1)
 	return State{
@@ -116,6 +135,50 @@ func TestChipRowOverflowsIntoAPlusChip(t *testing.T) {
 	panel.Update(state)
 	if panel.handles.bandList == nil {
 		t.Fatal("band list window not shown when BandListOpen")
+	}
+}
+
+// TestChipGridUsesTheAvailableWidth covers the reviewer-found waste: buildChips
+// hardcoded a 4-column grid, so eight single-digit chips always wrapped to two
+// rows of four while roughly half the column's width sat empty. The column
+// count must instead come from the widest label actually being rendered —
+// and must not simply become 8, since three-digit, suffering band IDs
+// ("!! B256") are far wider than "B3" and would overflow the panel at 8
+// columns.
+func TestChipGridUsesTheAvailableWidth(t *testing.T) {
+	panel := New()
+
+	var singleDigitLabels []string
+	for _, band := range testFrame(8).Bands {
+		singleDigitLabels = append(singleDigitLabels, chipLabel(band))
+	}
+	if got := panel.chipColumns(singleDigitLabels); got != 8 {
+		t.Fatalf("single-digit chip columns = %d, want 8", got)
+	}
+
+	wideFrame := testFrameWithIDs([]gameapi.BandID{100, 101, 102, 103, 104, 105, 106, 107})
+	wideFrame.Bands[0].Health = 0.3
+	wideFrame.Bands[1].Health = 0.3
+	var wideLabels []string
+	for _, band := range wideFrame.Bands {
+		wideLabels = append(wideLabels, chipLabel(band))
+	}
+	columns := panel.chipColumns(wideLabels)
+	if columns != 4 && columns != 5 {
+		t.Fatalf("three-digit suffering chip columns = %d, want 4 or 5", columns)
+	}
+
+	state := testState(wideFrame, 1)
+	panel.Update(state)
+	screen := ebiten.NewImage(1280, 720)
+	defer screen.Deallocate()
+	panel.Draw(screen)
+
+	rightEdge := image.Rectangle(panel.rect(panelX, panelY, panelWidth, panelHeight)).Max.X
+	for id, chip := range panel.handles.chips {
+		if got := chip.GetWidget().Rect.Max.X; got > rightEdge {
+			t.Fatalf("chip %d right edge = %d, want <= panel right edge %d", id, got, rightEdge)
+		}
 	}
 }
 
