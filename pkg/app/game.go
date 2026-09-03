@@ -197,9 +197,12 @@ func (g *Game) Update() error {
 		return nil
 	}
 	intents := g.panel.Update(g.hudState())
-	if g.scenes.Current() == ui.SceneGameplay {
-		g.handleIntents(intents)
-	}
+	// Overlay intents are handled in every scene: the panel column's own
+	// buttons are gameplay-only, but a modal window (title/menu/storage/
+	// settings, or the shortcut sheet) blocks pointer input to whatever sits
+	// beneath it, so the widgets that can actually emit an intent while a
+	// non-gameplay scene is showing are exactly the overlay's own.
+	g.handleIntents(intents)
 	modifier := ebiten.IsKeyPressed(ebiten.KeyControl) || ebiten.IsKeyPressed(ebiten.KeyMeta)
 	if modifier && inpututil.IsKeyJustPressed(ebiten.KeyS) && g.scenes.Current() == ui.SceneGameplay {
 		g.beginQuickSave()

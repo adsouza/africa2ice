@@ -64,6 +64,10 @@ type handles struct {
 	drawerTab  *widget.Button
 	drawerMore *widget.Button
 	events     []*widget.Button
+
+	overlayButtons []*widget.Button
+	deleteButtons  []*widget.Button
+	newCampaign    *widget.Button
 }
 
 func New() *Panel {
@@ -205,9 +209,3 @@ func (p *Panel) buildChecklist(state State, band *gameapi.Band) widget.Preferred
 	column.AddChild(p.buildEndTurn(state))
 	return column
 }
-
-// The two builders below are temporary minimal stand-ins so the package
-// compiles and the Panel lifecycle can be exercised; later tasks replace them
-// file by file with the real chrome.
-func (p *Panel) buildEndScene(State) widget.PreferredSizeLocateableWidget { return nil }
-func (p *Panel) buildOverlay(State)                                       {}

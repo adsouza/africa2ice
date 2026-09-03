@@ -86,8 +86,69 @@ func (g *Game) handleIntent(intent hud.Intent) {
 	}
 }
 
-// handleOverlayIntent is a stub until Task 13 wires the modal scenes.
-func (g *Game) handleOverlayIntent(hud.Intent) {}
+// handleOverlayIntent maps modal-scene widget clicks onto the same guarded
+// methods the scenes' hotkeys use.
+func (g *Game) handleOverlayIntent(intent hud.Intent) {
+	switch intent.Kind {
+	case hud.IntentBack:
+		g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
+	case hud.IntentContinue:
+		g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
+	case hud.IntentNewCampaign:
+		g.startNewCampaign()
+		if g.scenes.Current() == ui.SceneTitle {
+			g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
+		}
+	case hud.IntentOpenStorage:
+		mode := storageBrowserLoad
+		if intent.Save {
+			mode = storageBrowserSave
+		}
+		g.openStorageBrowser(mode)
+	case hud.IntentOpenSettings:
+		g.dispatchBatch([]ui.Action{ui.PushSceneAction(ui.SceneSettings)})
+	case hud.IntentReturnToTitle:
+		if g.assignmentDraftDirty() {
+			g.showNotice("Apply or discard workforce changes before returning to title")
+			return
+		}
+		g.scenes.Reset()
+		g.scenes.Push(ui.SceneTitle)
+	case hud.IntentSaveSlot:
+		g.storageSelection = storageIndexForSlot(intent.Slot)
+		g.activateStorageSelection()
+	case hud.IntentLoadSlot:
+		g.storageSelection = storageIndexForSlot(intent.Slot)
+		g.activateStorageSelection()
+	case hud.IntentDeleteSlot:
+		g.storageSelection = storageIndexForSlot(intent.Slot)
+		g.deleteStorageSelection()
+	case hud.IntentSetVolume:
+		if !g.settingsLoading && intent.Volume != g.settings.MasterVolume {
+			settings := g.settings
+			settings.MasterVolume = intent.Volume
+			g.updateUISettings(settings)
+		}
+	case hud.IntentToggleMute:
+		g.toggleMute()
+	case hud.IntentShowGuide:
+		g.guide = ui.NewGuideState(false)
+		if !g.settingsLoading {
+			settings := g.settings
+			settings.GuideDismissed = false
+			g.updateUISettings(settings)
+		}
+	}
+}
+
+func storageIndexForSlot(slot int) int {
+	for index, candidate := range storageBrowserSlots {
+		if candidate == slot {
+			return index
+		}
+	}
+	return 0
+}
 
 // selectBandByID is the chip/list selection path; it applies the dirty-draft
 // guard exactly like Tab.

@@ -160,9 +160,9 @@ func (g *Game) toggleNotesExpanded() {
 	}
 }
 
-// toggleShortcutSheet flips the modal shortcut sheet (spec §8); Task 13 draws
-// it. Keyboard (Shift+/) and the panel's IntentToggleShortcuts share this one
-// path so they cannot disagree.
+// toggleShortcutSheet flips the modal shortcut sheet (spec §8), drawn by the
+// panel's overlay window. Keyboard (Shift+/) and the panel's
+// IntentToggleShortcuts share this one path so they cannot disagree.
 func (g *Game) toggleShortcutSheet() {
 	g.shortcutsOpen = !g.shortcutsOpen
 }

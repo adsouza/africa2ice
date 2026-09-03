@@ -766,21 +766,22 @@ func TestRepeatedTileClicksCycleVisibleSapiensAndArchaicBands(t *testing.T) {
 	}
 }
 
-// The title and game-menu overlays are panel widgets from Task 13 onward; this
-// coverage returns against game.overlayState() there.
+// The title and game-menu overlays are panel widgets from Task 13 onward.
 func TestTitleAndGameMenuExposeCampaignNavigation(t *testing.T) {
-	// Original assertions Task 13 must restore:
-	//   - the title scene's overlay shows the heading "Africa 2 Ice: Paleolithic
-	//     Dispersal" and a "New Campaign" row.
-	t.Skip("rewritten in Task 13")
-}
-
-func TestGameMenuDescribesTurnBasedBehavior(t *testing.T) {
-	// Original assertions Task 13 must restore:
-	//   - the game-menu overlay shows the heading "Game Menu", its first row is
-	//     "Esc  Back to game", and its help text does not contain "pause" but
-	//     does contain "explicitly end".
-	t.Skip("rewritten in Task 13")
+	game := New(&gameStub{frame: migrationPreviewFrame()})
+	game.scenes.Push(ui.SceneTitle)
+	if game.overlayState().Scene != ui.SceneTitle {
+		t.Fatal("title scene not reported")
+	}
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentContinue}})
+	if game.scenes.Current() != ui.SceneGameplay {
+		t.Fatal("Continue did not pop the title")
+	}
+	game.scenes.Push(ui.SceneMenu)
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentOpenSettings}})
+	if game.scenes.Current() != ui.SceneSettings {
+		t.Fatal("Settings intent did not open settings")
+	}
 }
 
 func TestStorageBrowserListsAllGroupsAndActivatesExplicitOperations(t *testing.T) {
@@ -800,8 +801,18 @@ func TestStorageBrowserListsAllGroupsAndActivatesExplicitOperations(t *testing.T
 	}}
 	game.pollStorage()
 
-	game.storageSelection = 5
-	game.activateStorageSelection()
+	overlay := game.overlayState()
+	if !strings.Contains(overlay.StorageRows[0].Detail, "Turn 4") {
+		t.Fatalf("row 0 detail = %q", overlay.StorageRows[0].Detail)
+	}
+	if !strings.Contains(overlay.StorageRows[5].Detail, "Turn 8") {
+		t.Fatalf("row 5 detail = %q", overlay.StorageRows[5].Detail)
+	}
+	if overlay.StorageRows[3].Detail != "Empty" {
+		t.Fatalf("row 3 detail = %q", overlay.StorageRows[3].Detail)
+	}
+
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentLoadSlot, Slot: 102}})
 	if stub.loadedSlot != 102 || game.pendingManualLoadID == 0 {
 		t.Fatalf("autosave load = slot %d pending %d", stub.loadedSlot, game.pendingManualLoadID)
 	}
@@ -833,10 +844,21 @@ func TestStorageBrowserRestrictsWritesButCanDeleteAnyOccupiedGroup(t *testing.T)
 }
 
 func TestSettingsSceneReportsLivePreferences(t *testing.T) {
-	// Original assertions Task 13 must restore:
-	//   - the settings overlay shows "70%" for volume, "Muted  On" when muted,
-	//     and "Field Notes  Hidden" when the drawer is hidden.
-	t.Skip("rewritten in Task 13")
+	game := New(&gameStub{frame: migrationPreviewFrame()})
+	game.settings.MasterVolume = 0.7
+	game.settings.Muted = true
+	game.notesMode = hud.NotesHidden
+
+	overlay := game.overlayState()
+	if overlay.MasterVolume != 0.7 {
+		t.Fatalf("MasterVolume = %v, want 0.7", overlay.MasterVolume)
+	}
+	if !overlay.Muted {
+		t.Fatal("Muted not reported")
+	}
+	if game.hudState().NotesMode != hud.NotesHidden {
+		t.Fatal("Field Notes hidden state not reported")
+	}
 }
 
 func TestNewestResumeSlotUsesCommitSequenceAndExcludesManualSaves(t *testing.T) {

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/adsouza/africa2ice/pkg/hud"
 	"github.com/adsouza/africa2ice/pkg/render"
@@ -45,9 +47,32 @@ func (g *Game) hudState() hud.State {
 	return state
 }
 
-// overlayState is a stub until Task 13 gives the modal scenes their widgets.
+// overlayState derives the modal scene's widget content from UI-local
+// storage/settings fields; it never stores anything of its own.
 func (g *Game) overlayState() hud.OverlayState {
-	return hud.OverlayState{Scene: g.scenes.Current()}
+	overlay := hud.OverlayState{Scene: g.scenes.Current(), MasterVolume: g.settings.MasterVolume, Muted: g.settings.Muted, SettingsDisabled: g.settingsLoading}
+	if overlay.Scene != ui.SceneStorage {
+		return overlay
+	}
+	overlay.StorageHeading = "Load / Delete"
+	if g.storageMode == storageBrowserSave {
+		overlay.StorageHeading = "Save / Delete"
+	}
+	for index, slot := range storageBrowserSlots {
+		row := hud.StorageRow{Label: storageSlotLabel(slot), Slot: slot, Detail: "Empty", Writable: slot >= 1 && slot <= 3}
+		if metadata, exists := g.storageMetadata(slot); exists {
+			row.Occupied = true
+			row.Detail = fmt.Sprintf("Turn %d · %d BP · sapiens %d", metadata.Turn, metadata.YearBP, metadata.SapiensPopulation)
+		}
+		overlay.StorageRows[index] = row
+	}
+	switch {
+	case g.storageListID != 0:
+		overlay.StorageBusy = "Reading save metadata…"
+	case g.storageOperationID != 0:
+		overlay.StorageBusy = "Storage operation pending…"
+	}
+	return overlay
 }
 
 // resetDisclosure returns the panel to its defaults for a new selection, a
