@@ -6930,9 +6930,9 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   in its authoritative `MigrationCandidates` list receives a cyan outline and the first-ranked
   candidate receives a gold outline. A persistent legend explains both colors, and turn-0 Field
   Notes call out the outlines explicitly. The overlay disappears after the spatial action is spent;
-  it never marks merely adjacent but currently ineligible tiles. A hovered reachable tile
-  additionally receives a filled tint and a one-line tooltip, so pointer feedback does not depend on
-  the outline color alone.
+  it never marks merely adjacent but currently ineligible tiles. Any hovered explored
+  tile — reachable or not — additionally receives a filled tint, and the Move row's TARGET column
+  names that tile's liveability, so pointer feedback does not depend on the outline color alone.
 - **Queued-migration marker:** after a sapiens migration is accepted and before the next turn
   resolves it, draw a thin red arrow from the band's current tile center to the queued destination
   center. The arrow shape and persistent “red arrow: queued” legend make the meaning non-color-only.
@@ -7157,8 +7157,12 @@ binding is not implemented. `PgUp`/`PgDn` and `Shift+Up`/`Shift+Down` change the
 | Research | `Up`/`Down` highlight a technology | choose the highlighted technology | — |
 | Workforce | `Up`/`Down` select a role | apply (same as `A`) | step the selected role ±1% (`Shift` ±5%) |
 
-**Removed from gameplay:** `W`, `[`, `]`, and the gameplay `−`/`=` master-volume shortcut. All three
-remain bound in Settings but no longer act while a campaign is in progress.
+**Removed from gameplay:** `W`, `[`, and `]` are unbound everywhere; the `−`/`=` volume keys remain
+bound only in Settings and no longer act while a campaign is in progress.
+
+**No tooltips.** The redesign drops hover tooltips entirely, on the map and in the panel alike: a
+control the player may not use is drawn disabled, and the Move row's hint line — with the tile
+comparison above it — carries the explanation a tooltip would have held.
 
 ### Campaign timeline rail
 
@@ -7297,7 +7301,7 @@ save payload, or any action queue.
 
 Presentation preferences persist locally across application sessions in a versioned `UISettings`
 record; they are intentionally absent from `SaveState`, slot metadata, campaign hashes, and
-cloud/export semantics. The current record is schema `2`, with five required JSON fields:
+cloud/export semantics. The current record is schema `2`, with six required JSON fields:
 `SchemaVersion`, `FieldNotesVisible bool`, `MasterVolume float64`, `Muted bool`,
 `GuideDismissed bool`, and `FieldNotesExpanded bool` (§11 for the audio fields' behavior).
 Desktop stores it in
@@ -7307,9 +7311,9 @@ Desktop stores it in
 Defaults are **per record, not per field**: an absent, malformed, or unsupported-schema record
 supplies all five preferences at once — Field Notes visible, `MasterVolume` `0.5`, `Muted` false,
 `GuideDismissed` false, `FieldNotesExpanded` false. A schema-2 record is accepted only when all
-five required fields are present, non-null, and have the exact JSON types above. A schema-1
+six required fields are present, non-null, and have the exact JSON types above. A schema-1
 record — `SchemaVersion`, `FieldNotesVisible`, `MasterVolume`, and `Muted` only, predating the
-first-turn guide and the drawer's compact/expanded height — is still accepted when those three
+first-turn guide and the drawer's compact/expanded height — is still accepted when those four
 original fields are present, non-null, and correctly typed; `GuideDismissed` and
 `FieldNotesExpanded` are not required for it and decode as `false`. Either accepted schema is
 normalized to the current `SchemaVersion == 2` before it reaches the caller, so a decoded
@@ -7338,9 +7342,9 @@ otherwise become idle. Thus rapid slider/toggle input is bounded and last-value-
 completion order is delayed. Failure shows one toast but does not revert the current preference;
 the next user change supplies the next retry.
 
-Until the initial read settles, presentation renders the three defaults but every preference-
-mutating control — the Field Notes visibility toggles, master-volume slider, and mute checkbox — is
-disabled with a compact “Loading preferences…” label. The completion atomically installs either the
+Until the initial read settles, presentation renders the defaults but all four preference-
+mutating Settings controls — the master-volume slider, the mute toggle, the Field Notes toggle, and
+show-first-turn-guide — are disabled under a compact “Loading preferences…” label. The completion atomically installs either the
 validated stored record or the complete default record before enabling those controls. A write can
 therefore never race the initial read or overwrite stored preferences that the player had not yet
 seen.
@@ -9343,8 +9347,9 @@ these exclusions prevent those archives from being mistaken for signed installer
   `vector` provides `DrawFilledRect` / `StrokeRect` / `DrawFilledCircle`.
 - **ebitenui v0.7.3.** Widgets lay out and hit-test in the coordinates of the image they draw to;
   the chrome therefore lays out in render pixels with sizes multiplied by the presentation scale.
-  Measured on the dependency skeleton at +169 KB Brotli over Ebitengine alone, against a 540 KB gap
-  under the live ceiling.
+  The dependency skeleton measured it at +169 KB Brotli over Ebitengine alone; the shipped release
+  build with the chrome in it is 3,263,360 B Brotli against the 3,600,000 B ceiling, leaving
+  336,640 B of slack.
 - Ebitengine's [`LayoutF`](https://pkg.go.dev/github.com/hajimehoshi/ebiten/v2@v2.9.10#LayoutFer)
   receives outside dimensions in device-independent pixels and returns the game's logical screen
   dimensions; its actual image dimensions round up. The current monitor exposes
