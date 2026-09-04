@@ -31,10 +31,11 @@ Current controls:
   unambiguous surface, and clicking any other tile explains why it is not currently reachable;
 - band chips and the selected band's line show last-turn population and health changes, and the
   details disclosure names the leading causes of any decline;
-- the Field Notes drawer sits over the lower edge of the map in three states — hidden (an edge tab
-  that still carries the newest campaign event), compact, and expanded. F hides or shows it, Shift+F
-  switches compact and expanded, the drawer tab and its ▲ more control do the same with the mouse,
-  and the wheel scrolls longer entries, whose historical context includes compact references;
+- the Field Notes drawer sits over the lower edge of the map in three states — hidden (a full-width
+  one-line bar that still carries the newest campaign event), compact, and expanded. F hides or
+  shows it, Shift+F switches compact and expanded, the drawer tab and its ▲ more control do the
+  same with the mouse, and the wheel scrolls longer entries, whose historical context includes
+  compact references;
 - Z, or the map-corner button, switches the camera between the whole-map overview and a close view
   of the selected band;
 - a first-turn guide card appears in the panel on a new campaign; Next steps through it, × dismisses
@@ -42,19 +43,22 @@ Current controls:
 - gameplay hotkeys: Space ends the turn; Tab/Shift+Tab select the next/previous band; Esc peels one
   layer (cursor, then popover, then the Game Menu); N splits a band; I interbreeds with a co-located
   archaic band and J cycles the highlighted partner; G cycles the heritable-trait Field Notes; B
-  moves to the best tile; 1–9 choose a research target; M mutes; ? opens the shortcut sheet;
-  PgUp/PgDn or Shift+Up/Shift+Down change the open checklist row; Ctrl+S (Cmd+S on macOS)
-  quick-saves; F1–F3 save Manual 1–3 and Shift+F1–F3 load them;
+  moves to the best tile; D toggles the band details disclosure; 1–9 choose a research target;
+  M mutes; ? opens the shortcut sheet; PgUp/PgDn or Shift+Up/Shift+Down change the open checklist
+  row; Ctrl+S (Cmd+S on macOS) quick-saves; F1–F3 save Manual 1–3 and Shift+F1–F3 load them;
 - arrows, Enter and −/+ belong to whichever checklist row is open: Move steers and queues the
   destination cursor, Research highlights and chooses, and Workforce picks a role, steps it by one
-  percentage point (Shift by five), and applies. A applies an exact 100% draft and D discards it;
-  changing bands, loading, or ending the turn is blocked while a draft is dirty. W, [ and ] are no
-  longer bound;
+  percentage point (Shift by five), and applies. A and D are row-owned there too — A applies an
+  exact 100% draft and D discards it instead of toggling details — so both act only while Workforce
+  is open; changing bands, loading, or ending the turn is blocked while a draft is dirty. W, [ and ]
+  are no longer bound;
 - completing a technology triggers a breakthrough toast and updates Field Notes with context, its
   game effect, and a hint;
 - Esc opens the Game Menu; S opens grouped Save/Delete slots, L opens grouped Load/Delete slots,
-  and O opens settings for sound, Field Notes, and the first-turn guide. Settings offers a
-  pointer-driven volume slider alongside its own M mute and − / + volume keys, which act there only.
+  and O opens settings for sound and the first-turn guide (Field Notes is always reachable via F/
+  Shift+F and the drawer's own controls, so the menu and Settings no longer duplicate it). Settings
+  offers a pointer-driven volume slider alongside its own M mute and − / + volume keys, which act
+  there only.
   The browser lists Manual 1–3, Quick Save, and rolling Auto 1–3 together.
 
 Victory, extinction, and turn-400 dispersal failure open a campaign epilogue with final

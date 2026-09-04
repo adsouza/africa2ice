@@ -6682,7 +6682,7 @@ serialized and never a simulation input.
   override that inverts this automatic choice and resets whenever the selection changes.
 - Transitions interpolate scale and center over 15 update ticks (250 ms at 60 TPS).
 - The camera's visible window is computed against the map area above the Field Notes drawer: the
-  map area's full `626` logical-pixel height, minus `0`, `102`, or `300` for the drawer's hidden,
+  map area's full `626` logical-pixel height, minus `20`, `102`, or `300` for the drawer's hidden,
   compact, or expanded state respectively. `tilePoint` and `MapTileAt` are camera-aware; every
   overlay and pick goes through them, so hover and click both resolve tiles through the live camera
   rather than a fixed overview grid. The 1× terrain cache is drawn scaled with nearest-neighbour
@@ -7120,8 +7120,8 @@ partners, highlights one deterministic target, uses plain `J` to cycle that high
 accept it, and makes clear that ordinary co-location exchanges no genes. Preserve passage status,
 migration ranking, established-region display, event feed, and save feedback alongside these stats.
 The Field Notes drawer gives the event feed a persistent two-event newest-first view, including turn,
-typed event kind, and bounded summary. When Field Notes is hidden, its tab retains the newest
-event so contextual history does not disappear with the explanatory prose.
+typed event kind, and bounded summary. When Field Notes is hidden, its full-width bar retains the
+newest event as clickable text so contextual history does not disappear with the explanatory prose.
 
 ### Keyboard reference
 
@@ -7141,6 +7141,7 @@ Every mouse action documented above has a keyboard alias; the two paths converge
 | `J` | Cycle the interbreed partner focus |
 | `G` | Cycle the focused heritable-trait Field Note |
 | `B` | Move to the best tile — the same method the `Best tile · B` button calls |
+| `D` | Toggle the band details disclosure — except while the Workforce row is open, where `D` is row-owned instead (Row-owned, below) |
 | `1`–`9` | Choose the numbered research target |
 | `M` | Mute/unmute |
 | `Z` | Toggle the camera override (Two-state camera, above) |
@@ -7153,13 +7154,13 @@ The Field Notes drawer's `TextArea` has no programmatic scroll setter in the bun
 library, so it scrolls with the mouse wheel only; the spec's `Shift+PgUp`/`Shift+PgDn` drawer-scroll
 binding is not implemented. `PgUp`/`PgDn` and `Shift+Up`/`Shift+Down` change the open row regardless.
 
-**Row-owned** (arrows, `Enter`, and Workforce's `−`/`+`, active only while their row is open):
+**Row-owned** (arrows, `Enter`, and Workforce's `−`/`+`/`A`/`D`, active only while their row is open):
 
 | Open row | Arrows | Enter | `−`/`+` |
 |---|---|---|---|
 | Move | steer the destination cursor | queue the cursor tile | — |
 | Research | `Up`/`Down` highlight a technology | choose the highlighted technology | — |
-| Workforce | `Up`/`Down` select a role | apply (same as `A`) | step the selected role ±1% (`Shift` ±5%) |
+| Workforce | `Up`/`Down` select a role | apply (same as `A`); `D` discards instead of toggling band details | step the selected role ±1% (`Shift` ±5%) |
 
 **Removed from gameplay:** `W`, `[`, and `]` are unbound everywhere; the `−`/`=` volume keys remain
 bound only in Settings and no longer act while a campaign is in progress.
@@ -7215,13 +7216,16 @@ future pulse is drawn and exact regional magnitude remains in the explored tile 
 ### Field Notes: context, abstraction, and hints
 
 A persistently available **Field Notes** drawer is visible by default and docked over the lower edge
-of the map area in one of three states: hidden (edge tab only), compact (102 logical px), or expanded
-(300 logical px). The chosen height is a local UI preference. It never covers the timeline rail or
-the right panel. The drawer's edge tab has hide and more/less controls; plain `F` performs the same
-action when no text-editing control has keyboard focus, and `Shift+F` toggles compact and expanded.
-Hidden, the tab reads `▲ notes · F`; when the event feed is non-empty this is followed by `  ·  ` and
-the newest event line (`T<turn> · <Kind> · <summary>`) truncated to 42 runes with an ellipsis. During
-a breakthrough the tab turns gold and its label gains a `BREAKTHROUGH · ` prefix. Text wrapping uses
+of the map area in one of three states: hidden (a full-width one-line bar, 20 logical px), compact
+(102 logical px), or expanded (300 logical px). The chosen height is a local UI preference. It never
+covers the timeline rail or the right panel. Compact and expanded keep the small edge tab with hide
+and more/less controls; plain `F` performs the same action when no text-editing control has keyboard
+focus, and `Shift+F` toggles compact and expanded. Hidden, the drawer instead spans the map's full
+width so it can show a whole event line rather than a small tab's fragment: the newest event sits
+as a clickable button on the left, truncated to whatever width remains once the right-aligned
+`▲ notes · F` control is measured and reserved, and either control reopens the drawer. During a
+breakthrough the bar's background changes and the event text gains a `BREAKTHROUGH · ` prefix.
+Text wrapping uses
 the available inner panel width rather than an artificially narrow text column; the scroll bound is
 derived from those same wrapped lines. Catalog entries contain no presentation-only line breaks: the
 renderer alone chooses line boundaries for the current layout. Below the note body the drawer lists
@@ -7346,9 +7350,11 @@ otherwise become idle. Thus rapid slider/toggle input is bounded and last-value-
 completion order is delayed. Failure shows one toast but does not revert the current preference;
 the next user change supplies the next retry.
 
-Until the initial read settles, presentation renders the defaults but all four preference-
-mutating Settings controls — the master-volume slider, the mute toggle, the Field Notes toggle, and
-show-first-turn-guide — are disabled under a compact “Loading preferences…” label. The completion atomically installs either the
+Until the initial read settles, presentation renders the defaults but all three preference-
+mutating Settings controls — the master-volume slider, the mute toggle, and show-first-turn-guide —
+are disabled under a compact “Loading preferences…” label. Field Notes visibility is no longer a
+Settings control (the drawer's own `F`/`Shift+F` and edge controls are its only toggle), so it is
+unaffected by this gate. The completion atomically installs either the
 validated stored record or the complete default record before enabling those controls. A write can
 therefore never race the initial read or overwrite stored preferences that the player had not yet
 seen.
@@ -8732,10 +8738,12 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    loaded historical feeds request none. Choice-sound fixtures cover accepted enabled discrete
    activations and reject disabled/repeated/slider/hover paths; save-sound fixtures key exactly once
    by successful manual/quick-save operation ID and keep autosave/load/delete/failure silent.
-   Implement and test Field Notes in this step: visible by default; hidden/compact (102 px)/expanded
-   (300 px) drawer states docked over the lower edge of the map area; the edge tab's `hide notes · F` and
-   `▲ more`/`▼ less` controls; `F` toggles visibility and `Shift+F` toggles compact/expanded; the
-   hidden tab retains the newest event; stable context priority for
+   Implement and test Field Notes in this step: visible by default; hidden (20 px, full-width
+   bar)/compact (102 px)/expanded (300 px) drawer states docked over the lower edge of the map area;
+   compact/expanded's edge tab with its `hide notes · F` and `▲ more`/`▼ less` controls, and
+   hidden's own full-width `▲ notes · F` control; `F` toggles visibility and `Shift+F` toggles
+   compact/expanded; the hidden bar retains the newest event as its own clickable text; stable
+   context priority for
    explicit trait/technology/passage/interbreeding focus, newly established region, current/warned
    macro context, band, region/biome, event, and campaign topics; and all
    three required text blocks, including sourced abrupt-climate, active Campanian, and no-effect Toba
@@ -9929,7 +9937,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | Top-down map area                          | origin `(20, 74)`; `864 × 626` logical pixels; `96 × 64` grid  | Locked                                          | §8    |
 | Overview cell and drawn tile extent        | `8 × 8` cell; `7.6 × 7.6` drawn                                 | Locked                                          | §8    |
 | Focus camera scale and transition          | `3×`; `15` update ticks; clamped to the map area above the drawer | Policy                                        | §8    |
-| Field Notes drawer heights                 | compact `102`, expanded `300` logical px                        | Policy                                          | §8    |
+| Field Notes drawer heights                 | hidden `20`, compact `102`, expanded `300` logical px           | Policy                                          | §8    |
 | Liveability tiers (presentation only)      | food red `< RequiredFU`, amber `< 1.5 × RequiredFU`; water red `< 0.25 cap`, amber `< 0.5 cap`; degradation amber `≥ 0.25`, red `≥ 0.5`; mortality amber `≥ 0.004`, red `≥ 0.008`; shelter amber `< 0.3`; archaic present amber | Initial | §8 |
 | UI settings schema                         | `2`: `FieldNotesVisible`, `MasterVolume`, `Muted`, `GuideDismissed`, `FieldNotesExpanded`; schema 1 decodes with the new fields false | Policy | §8 |
 | `MaxRenderScale`                           | `2.0`                                                          | Policy                                          | §8    |
