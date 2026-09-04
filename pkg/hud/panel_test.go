@@ -1572,6 +1572,9 @@ func TestShortcutSheetLinesFitTheWindow(t *testing.T) {
 func campaignControlTestFrame() *gameapi.Frame {
 	frame := testFrame(1)
 	frame.Bands[0].InterbreedCandidateIDs = []gameapi.BandID{2}
+	// Crowded enough to split, so that CampaignOver is the only thing this
+	// fixture leaves disabling the Split button (see ui.DiagnoseSplit).
+	frame.Bands[0].Stress = gameapi.SplitStressThreshold + 0.01
 	return frame
 }
 
@@ -1795,4 +1798,67 @@ func TestTargetValueAndMarkAreSeparateLabels(t *testing.T) {
 		t.Fatalf("restoring the hover rebuilt the tree: builds %d -> %d", builds, panel.builds)
 	}
 	assertSplit(t, panel, "refresh")
+}
+
+// The Split button used to be disabled only by a spent action, so a band that
+// the domain would refuse — not crowded enough, too small, nowhere adjacent to
+// settle — still offered the action and answered a click with a notice
+// (user-reported). ui.DiagnoseSplit now decides, from the same projected
+// Stress value the verification driver uses.
+func TestSplitButtonFollowsSplitEligibility(t *testing.T) {
+	build := func(t *testing.T, mutate func(*gameapi.Frame)) *Panel {
+		t.Helper()
+		frame := testFrame(1)
+		mutate(frame)
+		panel := New()
+		panel.Update(testState(frame, 1))
+		return panel
+	}
+	eligible := func(f *gameapi.Frame) {
+		f.Bands[0].Stress = gameapi.SplitStressThreshold + 0.01
+		f.Bands[0].Population = gameapi.MinSplitSourcePopulation
+	}
+	if panel := build(t, eligible); panel.handles.split.GetWidget().Disabled {
+		t.Fatal("Split is disabled for a band the domain would allow to split")
+	}
+	for name, mutate := range map[string]func(*gameapi.Frame){
+		"not crowded enough": func(f *gameapi.Frame) {
+			eligible(f)
+			f.Bands[0].Stress = gameapi.SplitStressThreshold
+		},
+		"too few people": func(f *gameapi.Frame) {
+			eligible(f)
+			f.Bands[0].Population = gameapi.MinSplitSourcePopulation - 1
+		},
+		"nowhere adjacent to settle": func(f *gameapi.Frame) {
+			eligible(f)
+			f.Bands[0].MigrationCandidates = []gameapi.MigrationCandidate{{TileID: 1, RequiresPassage: true}}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if !build(t, mutate).handles.split.GetWidget().Disabled {
+				t.Fatal("Split is offered for a band the domain would refuse")
+			}
+		})
+	}
+}
+
+// Best tile carries the same defect one button over: moveToBestTile takes the
+// first candidate that needs no passage, but the button only checked that the
+// candidate list was non-empty, so a band whose only routes are passage
+// crossings was offered the action and answered with a notice.
+func TestBestTileButtonRequiresAnOrdinaryLandCandidate(t *testing.T) {
+	build := func(candidates []gameapi.MigrationCandidate) *Panel {
+		frame := testFrame(1)
+		frame.Bands[0].MigrationCandidates = candidates
+		panel := New()
+		panel.Update(testState(frame, 1))
+		return panel
+	}
+	if !build([]gameapi.MigrationCandidate{{TileID: 1, RequiresPassage: true}}).handles.best.GetWidget().Disabled {
+		t.Fatal("Best tile is offered when every candidate requires a passage")
+	}
+	if build([]gameapi.MigrationCandidate{{TileID: 1}}).handles.best.GetWidget().Disabled {
+		t.Fatal("Best tile is disabled despite an ordinary-land candidate")
+	}
 }

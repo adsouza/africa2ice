@@ -144,11 +144,18 @@ func (p *Panel) buildMoveBody(state State, band *gameapi.Band) widget.PreferredS
 	moveHere.GetWidget().LayoutData = widget.RowLayoutData{Stretch: true}
 	p.handles.moveHere = moveHere
 	best := t.button("Best tile · B", 10.5, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentMoveToBest}) })
-	best.GetWidget().Disabled = done || readOnly || len(band.MigrationCandidates) == 0
+	// A non-empty candidate list is not enough: moveToBestTile needs one that
+	// requires no passage (user-reported, same defect as Split above).
+	best.GetWidget().Disabled = done || readOnly || !ui.HasOrdinaryLandCandidate(*band)
 	best.GetWidget().LayoutData = widget.RowLayoutData{Stretch: true}
 	p.handles.best = best
 	split := t.button("Split · N", 10.5, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentSplit}) })
-	split.GetWidget().Disabled = done || readOnly
+	// ui.DiagnoseSplit subsumes done and the species check and adds the guards
+	// the panel could not see before: crowding pressure, the minimum viable
+	// population, the band limit, and whether any adjacent land is available to
+	// settle. Without them the button was offered and the click only produced a
+	// notice (user-reported).
+	split.GetWidget().Disabled = readOnly || ui.DiagnoseSplit(state.Frame, band) != ""
 	split.GetWidget().LayoutData = widget.RowLayoutData{Stretch: true}
 	p.handles.split = split
 	partner := state.InterbreedFocus

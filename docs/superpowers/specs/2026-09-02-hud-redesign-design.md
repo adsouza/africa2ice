@@ -157,6 +157,20 @@ otherwise disabled), `Best tile · B` (first-ranked ordinary-land candidate), `S
 buttons show the `pkg/ui` migration diagnostic as a tooltip. Clicking an unreachable tile keeps
 the existing explanatory notice.
 
+Every button is disabled whenever the action it sends would be refused — a control that looks live
+and only answers with a notice is worse than a disabled one (playtest report). `Split · N` follows
+`ui.DiagnoseSplit`, which returns the `gameapi.ErrorCode` `domain.World.Split` would refuse the band
+with, in the order that command applies its guards: campaign over, computer-controlled band, spatial
+action spent, band limit, crowding pressure below `SplitStressThreshold`, no ordinary-land
+neighbour, population below `MinSplitSourcePopulation`. `Best tile · B` requires an ordinary-land
+candidate too, since a non-empty `MigrationCandidates` may hold only passage crossings.
+
+Split eligibility reads `Band.Stress`, the projected `domain.World.BandStress` value, and never
+recomputes it. `BandStress` divides by `BaselineK` times the band's technology capacity multiplier,
+which is deliberately absent from the public frame; the Capacity row's occupancy (§5.4) divides by
+`EcologicalK` instead, so the two disagree on a degraded tile and occupancy must not stand in for
+stress — doing so would disable the button for a split the command would have allowed.
+
 Three visible states: idle, cursor (white border, "Enter to move"), set (green, one-line summary,
 row collapses).
 

@@ -143,3 +143,77 @@ func TestMigrationWaterMessageAtPassageEndpointNamesTheRealGate(t *testing.T) {
 		t.Fatalf("open passage message %q does not direct the player to the far endpoint", message)
 	}
 }
+
+// splitEligibleFrame is a band that satisfies every split guard: sapiens, its
+// spatial action still open, over the stress threshold, at the minimum viable
+// population, with one ordinary-land neighbour to establish on.
+func splitEligibleFrame() *gameapi.Frame {
+	return &gameapi.Frame{CampaignResult: gameapi.Ongoing, Bands: []gameapi.Band{{
+		ID: 1, Species: gameapi.HomoSapiens, Population: gameapi.MinSplitSourcePopulation,
+		Stress:              gameapi.SplitStressThreshold + 0.01,
+		MigrationCandidates: []gameapi.MigrationCandidate{{TileID: 1}},
+	}}}
+}
+
+// DiagnoseSplit exists so the Split button can be disabled when the command
+// would refuse it: it used to look available whatever the band's state, and
+// clicking it only produced a notice (user-reported). Every reason returned
+// here is a guard domain.World.Split or splitBand actually applies, and each
+// already has player copy in errors.go.
+func TestDiagnoseSplitNamesTheGuardThatWouldRefuse(t *testing.T) {
+	if got := DiagnoseSplit(splitEligibleFrame(), &splitEligibleFrame().Bands[0]); got != "" {
+		t.Fatalf("eligible band = %q, want no blocking reason", got)
+	}
+	for name, test := range map[string]struct {
+		mutate func(*gameapi.Frame)
+		want   gameapi.ErrorCode
+	}{
+		"campaign already over": {
+			func(f *gameapi.Frame) { f.CampaignResult = gameapi.DispersalFailed },
+			gameapi.ErrCampaignComplete,
+		},
+		"computer-controlled band": {
+			func(f *gameapi.Frame) { f.Bands[0].Species = gameapi.ArchaicHominin },
+			gameapi.ErrComputerControlledBand,
+		},
+		"spatial action already spent": {
+			func(f *gameapi.Frame) { f.Bands[0].SpatialActionUsed = true },
+			gameapi.ErrSpatialActionUsed,
+		},
+		"a queued migration also spends the action": {
+			func(f *gameapi.Frame) { f.Bands[0].HasQueuedMigration = true },
+			gameapi.ErrSpatialActionUsed,
+		},
+		"stress exactly at the threshold is not over it": {
+			func(f *gameapi.Frame) { f.Bands[0].Stress = gameapi.SplitStressThreshold },
+			gameapi.ErrSplitStressTooLow,
+		},
+		"one person short of two viable bands": {
+			func(f *gameapi.Frame) { f.Bands[0].Population = gameapi.MinSplitSourcePopulation - 1 },
+			gameapi.ErrSplitPopulationTooLow,
+		},
+		"no ordinary-land neighbour": {
+			func(f *gameapi.Frame) {
+				f.Bands[0].MigrationCandidates = []gameapi.MigrationCandidate{{TileID: 1, RequiresPassage: true}}
+			},
+			gameapi.ErrSplitDestinationNotAdjacent,
+		},
+		"campaign is at the band limit": {
+			func(f *gameapi.Frame) { f.Bands = append(f.Bands, make([]gameapi.Band, gameapi.MaxBands)...) },
+			gameapi.ErrBandLimitReached,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			frame := splitEligibleFrame()
+			test.mutate(frame)
+			// The band pointer is taken after the mutation: appending to
+			// frame.Bands can reallocate its backing array.
+			if got := DiagnoseSplit(frame, &frame.Bands[0]); got != test.want {
+				t.Fatalf("DiagnoseSplit = %q, want %q", got, test.want)
+			}
+		})
+	}
+	if got := DiagnoseSplit(splitEligibleFrame(), nil); got != gameapi.ErrBandNotFound {
+		t.Fatalf("nil band = %q, want %q", got, gameapi.ErrBandNotFound)
+	}
+}

@@ -6,6 +6,7 @@ const (
 	MinEstablishedBand                Population = gameapi.MinEstablishedBand
 	MinSplitSourcePopulation          Population = gameapi.MinSplitSourcePopulation
 	SplitStressThreshold                         = gameapi.SplitStressThreshold
+	MaxBands                                     = gameapi.MaxBands
 	referenceRouteDeparturePopulation Population = gameapi.ReferenceRouteDeparturePopulation
 )
 
