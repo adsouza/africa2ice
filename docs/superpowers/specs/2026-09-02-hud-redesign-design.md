@@ -153,17 +153,35 @@ the degradation loss exactly, and a third percentage on the line does not fit th
 
 Buttons: `Move here · Enter` (cyan when the cursor or hovered tile is in `MigrationCandidates`,
 otherwise disabled), `Best tile · B` (first-ranked ordinary-land candidate), `Split · N`,
-`Interbreed · I` with a partner picker when more than one archaic band qualifies. Disabled
-buttons show the `pkg/ui` migration diagnostic as a tooltip. Clicking an unreachable tile keeps
-the existing explanatory notice.
+`Interbreed · I` with a partner picker when more than one archaic band qualifies. Clicking an
+unreachable tile keeps the existing explanatory notice.
 
-Every button is disabled whenever the action it sends would be refused — a control that looks live
-and only answers with a notice is worse than a disabled one (playtest report). `Split · N` follows
-`ui.DiagnoseSplit`, which returns the `gameapi.ErrorCode` `domain.World.Split` would refuse the band
-with, in the order that command applies its guards: campaign over, computer-controlled band, spatial
-action spent, band limit, crowding pressure below `SplitStressThreshold`, no ordinary-land
-neighbour, population below `MinSplitSourcePopulation`. `Best tile · B` requires an ordinary-land
-candidate too, since a non-empty `MigrationCandidates` may hold only passage crossings.
+Every button is disabled whenever the action it sends would be refused, and explains itself on
+hover — a control that looks live and only answers with a notice is worse than a disabled one, and
+a control that goes dead without saying why is worse than either (playtest report).
+
+`ui.DiagnoseMoveActions` is the single source of truth: it returns one explanation string per
+action, and a button is disabled **exactly when** its string is non-empty, with that same string as
+its tooltip. State and reason are one fact rather than two that can drift. Reasons reuse the copy
+in `pkg/ui/errors.go` via `ui.ErrorCodeMessage` wherever a `gameapi.ErrorCode` exists for the
+guard, and `ui.MigrationDiagnosticMessage` for an unreachable chosen tile.
+
+`Split · N` follows `ui.DiagnoseSplit`, which returns the `gameapi.ErrorCode` `domain.World.Split`
+would refuse the band with, in the order that command applies its guards: campaign over,
+computer-controlled band, spatial action spent, band limit, crowding pressure below
+`SplitStressThreshold`, no ordinary-land neighbour, population below `MinSplitSourcePopulation`.
+`Best tile · B` requires an ordinary-land candidate too, since a non-empty `MigrationCandidates`
+may hold only passage crossings.
+
+Tooltips open below their button and right-aligned to it, wrapped: the Move row sits against the
+right edge of the presentation, so ebitenui's default cursor-following tooltip would run off
+screen. **A tooltip's visibility is part of `Panel.PresentationKey`.** It appears only after the
+cursor has held still for the delay, so at that moment every other input to the key — cursor
+position, mouse buttons, `UIHovered`, `builds`, `refreshes` — is unchanged from the previous frame;
+production disables Ebitengine's automatic screen clear, so a tooltip absent from the key is a
+tooltip that never gets drawn, and one still recorded as visible after a rebuild suppresses the
+next one. Only show and hide transitions move the flag, so a tooltip left on screen does not force
+a repaint every frame.
 
 Split eligibility reads `Band.Stress`, the projected `domain.World.BandStress` value, and never
 recomputes it. `BandStress` divides by `BaselineK` times the band's technology capacity multiplier,

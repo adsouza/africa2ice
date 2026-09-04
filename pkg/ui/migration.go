@@ -260,3 +260,75 @@ func DiagnoseSplit(frame *gameapi.Frame, band *gameapi.Band) gameapi.ErrorCode {
 	}
 	return ""
 }
+
+// Copy for the Move row blocks that have no matching gameapi.ErrorCode,
+// because nothing rejects them at the command boundary: the player is stopped
+// before a command is ever built.
+const (
+	noOrdinaryLandMessage      = "No adjacent land tile is reachable this turn; only passage crossings are open."
+	noInterbreedPartnerMessage = "No archaic band shares this tile, so there is no one to interbreed with."
+	noTargetChosenMessage      = "Choose a destination first: hover or click an outlined tile, or use the arrow keys."
+)
+
+// MoveActionBlocks explains why each of the Move row's four actions cannot be
+// sent, or holds "" for one that can. A button is disabled exactly when its
+// entry is non-empty, so its enabled state and the reason it shows on hover
+// are one fact rather than two that can disagree.
+type MoveActionBlocks struct {
+	MoveHere   string
+	BestTile   string
+	Split      string
+	Interbreed string
+}
+
+// AllBlocked stops every Move action for one shared reason. pkg/hud uses it to
+// honour hud.State.CampaignOver, which is the panel's own authority on a
+// finished campaign, without duplicating the copy or the shape of this struct.
+func AllBlocked(reason string) MoveActionBlocks {
+	return MoveActionBlocks{MoveHere: reason, BestTile: reason, Split: reason, Interbreed: reason}
+}
+
+// DiagnoseMoveActions explains each of the Move row's four actions. It is the
+// only place those conditions live: pkg/hud disables a button exactly when its
+// entry is non-empty and shows that entry as the button's tooltip, so a
+// control never looks live while doing nothing, and never goes dead without
+// saying why (spec §4.1).
+func DiagnoseMoveActions(frame *gameapi.Frame, band *gameapi.Band, target TileLiveability, source TargetSource, targetTile gameapi.TileID) MoveActionBlocks {
+	if frame == nil || band == nil {
+		return MoveActionBlocks{}
+	}
+	// Three conditions stop all four actions at once. They are checked in the
+	// order the domain applies them, so the copy matches the error a command
+	// would have returned.
+	shared := ""
+	switch {
+	case frame.CampaignResult != gameapi.Ongoing:
+		shared = ErrorCodeMessage(gameapi.ErrCampaignComplete)
+	case band.Species != gameapi.HomoSapiens:
+		shared = ErrorCodeMessage(gameapi.ErrComputerControlledBand)
+	case MoveDone(*band):
+		// Covers a queued migration and a chosen interbreeding partner as well
+		// as a spent flag, which is why TargetQueued needs no branch of its
+		// own: a queued target implies MoveDone.
+		shared = ErrorCodeMessage(gameapi.ErrSpatialActionUsed)
+	}
+	if shared != "" {
+		return AllBlocked(shared)
+	}
+
+	blocks := MoveActionBlocks{Split: ErrorCodeMessage(DiagnoseSplit(frame, band))}
+	switch {
+	case source == TargetNone:
+		// Nothing has gone wrong yet, so this says what to do instead.
+		blocks.MoveHere = noTargetChosenMessage
+	case !target.Reachable:
+		blocks.MoveHere = MigrationDiagnosticMessage(DiagnoseMigration(frame, band, targetTile), band)
+	}
+	if !HasOrdinaryLandCandidate(*band) {
+		blocks.BestTile = noOrdinaryLandMessage
+	}
+	if len(band.InterbreedCandidateIDs) == 0 {
+		blocks.Interbreed = noInterbreedPartnerMessage
+	}
+	return blocks
+}

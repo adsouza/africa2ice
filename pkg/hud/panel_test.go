@@ -5,6 +5,7 @@ import (
 	"image"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/adsouza/africa2ice/pkg/render"
@@ -1860,5 +1861,151 @@ func TestBestTileButtonRequiresAnOrdinaryLandCandidate(t *testing.T) {
 	}
 	if build([]gameapi.MigrationCandidate{{TileID: 1}}).handles.best.GetWidget().Disabled {
 		t.Fatal("Best tile is disabled despite an ordinary-land candidate")
+	}
+}
+
+// Spec §4.1 asks disabled buttons to explain themselves on hover, which was
+// never built: a control went dead with no way to find out why. The reason
+// shown is the same string that disabled the button, so the two cannot
+// disagree.
+func TestMoveRowButtonsExplainWhyTheyAreDisabled(t *testing.T) {
+	frame := testFrame(1) // Stress 0, no interbreed candidate, no target chosen
+	panel := New()
+	panel.Update(testState(frame, 1))
+	band := &frame.Bands[0]
+	want := ui.DiagnoseMoveActions(frame, band, ui.TileLiveability{}, ui.TargetNone, 0)
+
+	buttons := [moveActionCount]*widget.Button{panel.handles.moveHere, panel.handles.best, panel.handles.split, panel.handles.interbreed}
+	reasons := [moveActionCount]string{want.MoveHere, want.BestTile, want.Split, want.Interbreed}
+	blocked := 0
+	for action, button := range buttons {
+		reason, tooltips := reasons[action], button.GetWidget().ToolTips
+		if reason == "" {
+			if len(tooltips) != 0 {
+				t.Fatalf("action %d is available but carries %d tooltips", action, len(tooltips))
+			}
+			if button.GetWidget().Disabled {
+				t.Fatalf("action %d is available but its button is disabled", action)
+			}
+			continue
+		}
+		blocked++
+		if !button.GetWidget().Disabled {
+			t.Fatalf("action %d is blocked (%q) but its button is live", action, reason)
+		}
+		if len(tooltips) != 1 {
+			t.Fatalf("action %d is blocked (%q) but carries %d tooltips, want 1", action, reason, len(tooltips))
+		}
+		if got := panel.handles.moveTooltips[action]; got == nil || got.Label != reason {
+			t.Fatalf("action %d tooltip = %v, want %q", action, got, reason)
+		}
+	}
+	if blocked == 0 {
+		t.Fatal("no action was blocked, so this test proves nothing")
+	}
+}
+
+// A tooltip becomes visible precisely when nothing else about the frame has
+// changed: it waits for the cursor to hold still, so at the moment it appears
+// the cursor position, button state and hover flag in PresentationKey are all
+// unchanged from the previous frame. Production disables Ebitengine's
+// automatic screen clear and repaints only when the map key or this key
+// changes, so a tooltip missing from the key is a tooltip that never gets
+// drawn — the same defect shape as the stale chrome regions found by playing.
+func TestPresentationKeyChangesWhenATooltipAppears(t *testing.T) {
+	panel, _, _, armed := showSplitTooltip(t)
+	if shown := panel.PresentationKey(); shown == armed {
+		t.Fatalf("PresentationKey is unchanged (%+v) after a tooltip appeared, so the frame would not be repainted", shown)
+	}
+}
+
+// showSplitTooltip hovers the disabled Split button until its explanation is
+// on screen, and returns the panel, its screen, and the key from the last
+// frame before the tooltip appeared. Real time has to pass: ebitenui arms the
+// tooltip with a time.AfterFunc, so nothing but the wall clock advances it.
+func showSplitTooltip(t *testing.T) (*Panel, *ebiten.Image, State, PresentationKey) {
+	t.Helper()
+	t.Cleanup(func() { input.SetCursorUpdater(nil) })
+	panel := New()
+	state := testState(testFrame(1), 1) // Stress 0: Split is disabled, so it has a tooltip
+	screen := ebiten.NewImage(1280, 720)
+	t.Cleanup(screen.Deallocate)
+	panel.Update(state)
+	panel.Draw(screen)
+	if len(panel.handles.split.GetWidget().ToolTips) != 1 {
+		t.Fatal("Split has no tooltip, so this test cannot show one")
+	}
+
+	rect := panel.handles.split.GetWidget().Rect
+	input.SetCursorUpdater(&testCursor{x: (rect.Min.X + rect.Max.X) / 2, y: (rect.Min.Y + rect.Max.Y) / 2})
+	// Two ticks to reach the armed state and start its delay timer.
+	for range 2 {
+		panel.Update(state)
+		panel.Draw(screen)
+	}
+	armed := panel.PresentationKey()
+
+	time.Sleep(tooltipDelay + 150*time.Millisecond)
+	// One tick to notice the timer expired, one for the showing state to place
+	// the tooltip and announce it.
+	for range 2 {
+		panel.Update(state)
+		panel.Draw(screen)
+	}
+	if !panel.tooltipShown {
+		t.Fatal("the tooltip never became visible")
+	}
+	return panel, screen, state, armed
+}
+
+// The Move row sits against the right edge of the presentation, so a tooltip
+// that opened at the cursor (ebitenui's default) or extended rightward would
+// run off screen. It opens below its button and right-aligned to it instead.
+func TestTooltipStaysOnScreen(t *testing.T) {
+	panel, screen, _, _ := showSplitTooltip(t)
+	label := panel.handles.moveTooltips[moveActionSplit]
+	if label == nil {
+		t.Fatal("no tooltip label handle for the disabled Split button")
+	}
+	rect := label.GetWidget().Rect
+	if rect.Empty() {
+		t.Fatal("the tooltip label was never laid out")
+	}
+	if bounds := screen.Bounds(); !rect.In(bounds) {
+		t.Fatalf("tooltip text at %v is not inside the screen %v", rect, bounds)
+	}
+}
+
+// Hiding it must repaint too: the tooltip covers map and panel pixels, and
+// with the automatic screen clear disabled they would otherwise stay behind
+// as a ghost after the pointer moved away.
+func TestPresentationKeyChangesWhenATooltipDisappears(t *testing.T) {
+	panel, screen, state, _ := showSplitTooltip(t)
+	shown := panel.PresentationKey()
+
+	// Move the pointer off the button; the tooltip hides on the next tick.
+	input.SetCursorUpdater(&testCursor{x: 1, y: 1})
+	panel.Update(state)
+	panel.Draw(screen)
+	if panel.tooltipShown {
+		t.Fatal("the tooltip is still shown after the pointer left the button")
+	}
+	if hidden := panel.PresentationKey(); hidden == shown {
+		t.Fatalf("PresentationKey is unchanged (%+v) after the tooltip disappeared, so its pixels would stay on screen", hidden)
+	}
+}
+
+// A rebuild replaces the buttons that would have reported their tooltips
+// hiding, so a visible one has to be forgotten along with them. Left set, the
+// next tooltip to appear would leave PresentationKey unchanged and never be
+// drawn — the defect TestPresentationKeyChangesWhenATooltipAppears covers,
+// returning by a different route.
+func TestRebuildForgetsAVisibleTooltip(t *testing.T) {
+	panel, screen, _, _ := showSplitTooltip(t)
+	// A different Frame pointer is a structural change, so the tree rebuilds.
+	panel.Update(testState(testFrame(2), 1))
+	panel.Draw(screen)
+	if panel.tooltipShown {
+		t.Fatal("a rebuild kept a visible tooltip that its widgets can no longer hide")
 	}
 }

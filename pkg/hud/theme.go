@@ -2,7 +2,9 @@ package hud
 
 import (
 	"bytes"
+	gimage "image"
 	"image/color"
+	"time"
 
 	"github.com/ebitenui/ebitenui/image"
 	"github.com/ebitenui/ebitenui/widget"
@@ -170,6 +172,39 @@ func (t *theme) rightLabel(value string, sizeDIP float64, textColor color.Color,
 // wrapped builds text that wraps at a DIP width.
 func (t *theme) wrapped(value string, sizeDIP float64, textColor color.Color, widthDIP float64) *widget.Text {
 	return widget.NewText(widget.TextOpts.Text(value, t.face(sizeDIP), textColor), widget.TextOpts.MaxWidth(float64(t.px(widthDIP))))
+}
+
+// tooltipWidth bounds a tooltip's wrapped text, and tooltipDelay is how long
+// the cursor must rest on a control before it explains itself. The pkg/ui copy
+// runs to a full sentence, far wider than the panel unwrapped, and the delay
+// is shorter than ebitenui's 800 ms default because these appear on dead
+// controls, where the player is already asking why.
+const (
+	tooltipWidth = 240.0
+	tooltipDelay = 350 * time.Millisecond
+)
+
+// tooltip is a hover explanation for one control. It opens below the control
+// and right-aligned to it: the Move row's buttons sit against the right edge
+// of the 1280 DIP presentation, so ebitenui's default cursor-following tooltip
+// would run off screen.
+func (t *theme) tooltip(message string) (*widget.ToolTip, *widget.Text) {
+	label := t.wrapped(message, 9, colorText, tooltipWidth)
+	content := widget.NewContainer(
+		widget.ContainerOpts.BackgroundImage(t.bordered(colorPanel, colorGold, t.px(1))),
+		widget.ContainerOpts.Layout(widget.NewAnchorLayout(widget.AnchorLayoutOpts.Padding(t.insets(6, 8, 8, 6)))),
+	)
+	content.AddChild(label)
+	return widget.NewToolTip(
+		widget.ToolTipOpts.Content(content),
+		widget.ToolTipOpts.Position(widget.TOOLTIP_POS_WIDGET),
+		widget.ToolTipOpts.Delay(tooltipDelay),
+		widget.ToolTipOpts.Offset(gimage.Point{Y: t.px(4)}),
+		widget.ToolTipOpts.AnchorOriginHorizontal(widget.TOOLTIP_ANCHOR_END),
+		widget.ToolTipOpts.ContentOriginHorizontal(widget.TOOLTIP_ANCHOR_END),
+		widget.ToolTipOpts.AnchorOriginVertical(widget.TOOLTIP_ANCHOR_END),
+		widget.ToolTipOpts.ContentOriginVertical(widget.TOOLTIP_ANCHOR_START),
+	), label
 }
 
 // column is a vertical row layout container with DIP spacing and padding.

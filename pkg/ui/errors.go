@@ -32,6 +32,15 @@ var playerErrorMessages = map[gameapi.ErrorCode]string{
 	gameapi.ErrIncompatibleSave:              "That save was created by an incompatible game version.",
 }
 
+// ErrorCodeMessage renders one public error code as player copy, or "" for a
+// code with none (including the empty code that means "no error"). The Move
+// row's buttons explain themselves from a code rather than from a returned
+// error, since they decide whether to offer an action before any command is
+// built (see DiagnoseMoveActions).
+func ErrorCodeMessage(code gameapi.ErrorCode) string {
+	return playerErrorMessages[code]
+}
+
 // ErrorMessage turns the public typed error contract into actionable player
 // copy without importing the domain. Unknown adapter errors retain their text
 // so diagnostics are not replaced by a generic failure.
@@ -41,7 +50,7 @@ func ErrorMessage(err error) string {
 	}
 	var gameError *gameapi.GameError
 	if errors.As(err, &gameError) {
-		if message, ok := playerErrorMessages[gameError.Code]; ok {
+		if message := ErrorCodeMessage(gameError.Code); message != "" {
 			return message
 		}
 	}

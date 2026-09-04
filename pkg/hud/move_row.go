@@ -44,6 +44,50 @@ func deltaMark(row ui.LiveabilityRow) (string, color.RGBA) {
 	return mark, colorRed
 }
 
+// moveAction indexes the Move row's four buttons, so the reasons pkg/ui
+// returns for them can be applied and inspected in one loop.
+type moveAction int
+
+const (
+	moveActionMoveHere moveAction = iota
+	moveActionBestTile
+	moveActionSplit
+	moveActionInterbreed
+	moveActionCount
+)
+
+// watchTooltip records when a control's hover explanation appears or
+// disappears, so PresentationKey can see it. Subscribed once per widget at
+// construction: applyMoveBlock runs again on every in-place target refresh,
+// and adding a handler there would pile them onto the same widget for as long
+// as the tree lived.
+func (p *Panel) watchTooltip(button *widget.Button) {
+	button.GetWidget().ToolTipEvent.AddHandler(func(args interface{}) {
+		if event, ok := args.(*widget.WidgetToolTipEventArgs); ok {
+			p.tooltipShown = event.Show
+		}
+	})
+}
+
+// applyMoveBlock disables a Move row button when reason is non-empty and
+// attaches that same reason as its hover explanation, or clears both when the
+// action is available. Disabled state and tooltip are set from one string
+// here, so a control can neither look live while doing nothing nor go dead
+// without saying why (spec §4.1). buildMoveBody and refreshTarget both call
+// it, which is what keeps Move here's reason current as the target changes.
+func (p *Panel) applyMoveBlock(action moveAction, button *widget.Button, reason string) {
+	widgetOf := button.GetWidget()
+	widgetOf.Disabled = reason != ""
+	if reason == "" {
+		// Cleared rather than left empty: an attached tooltip with no text
+		// still draws its bordered box on hover.
+		widgetOf.ToolTips, p.handles.moveTooltips[action] = nil, nil
+		return
+	}
+	tooltip, label := p.theme.tooltip(reason)
+	widgetOf.ToolTips, p.handles.moveTooltips[action] = []*widget.ToolTip{tooltip}, label
+}
+
 // moveGridFontDIP is the HERE / TARGET grid's text size. Named because
 // TestMoveGridValuesFitTheirColumns depends on the value cells and their
 // column being measured at the same size.
@@ -135,37 +179,42 @@ func (p *Panel) buildMoveBody(state State, band *gameapi.Band) widget.PreferredS
 	// user-reported), clipping Interbreed at the panel's right edge.
 	buttonRow1, buttonRow2 := t.rowOf(6, stretch()), t.rowOf(6, stretch())
 	done := ui.MoveDone(*band)
-	// A computer-controlled selection is read only: the row still shows the
-	// HERE/TARGET comparison, but none of its four actions may be sent.
-	readOnly := band.Species != gameapi.HomoSapiens || state.CampaignOver
-	canMove := !done && !readOnly && target.Reachable && source != ui.TargetQueued
+	// One diagnosis decides all four buttons and the reason each shows on
+	// hover. Every guard the domain applies lives in ui.DiagnoseMoveActions,
+	// including the crowding pressure, population, band-limit and
+	// ordinary-land-candidate checks the panel could not see before, when a
+	// click on an offered button only produced a notice (user-reported).
+	blocks := ui.DiagnoseMoveActions(state.Frame, band, target, source, targetTile)
+	if state.CampaignOver {
+		// State.CampaignOver is the panel's own authority on a finished
+		// campaign; it is derived from the frame, but the panel honours the
+		// field it was handed rather than reading around it.
+		blocks = ui.AllBlocked(ui.ErrorCodeMessage(gameapi.ErrCampaignComplete))
+	}
 	moveHere := t.button("Move here · Enter", 10.5, colorCyan, colorCyan, func() { p.emit(Intent{Kind: IntentMoveTo, Tile: targetTile}) })
-	moveHere.GetWidget().Disabled = !canMove
 	moveHere.GetWidget().LayoutData = widget.RowLayoutData{Stretch: true}
 	p.handles.moveHere = moveHere
+	p.watchTooltip(moveHere)
+	p.applyMoveBlock(moveActionMoveHere, moveHere, blocks.MoveHere)
 	best := t.button("Best tile · B", 10.5, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentMoveToBest}) })
-	// A non-empty candidate list is not enough: moveToBestTile needs one that
-	// requires no passage (user-reported, same defect as Split above).
-	best.GetWidget().Disabled = done || readOnly || !ui.HasOrdinaryLandCandidate(*band)
 	best.GetWidget().LayoutData = widget.RowLayoutData{Stretch: true}
 	p.handles.best = best
+	p.watchTooltip(best)
+	p.applyMoveBlock(moveActionBestTile, best, blocks.BestTile)
 	split := t.button("Split · N", 10.5, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentSplit}) })
-	// ui.DiagnoseSplit subsumes done and the species check and adds the guards
-	// the panel could not see before: crowding pressure, the minimum viable
-	// population, the band limit, and whether any adjacent land is available to
-	// settle. Without them the button was offered and the click only produced a
-	// notice (user-reported).
-	split.GetWidget().Disabled = readOnly || ui.DiagnoseSplit(state.Frame, band) != ""
 	split.GetWidget().LayoutData = widget.RowLayoutData{Stretch: true}
 	p.handles.split = split
+	p.watchTooltip(split)
+	p.applyMoveBlock(moveActionSplit, split, blocks.Split)
 	partner := state.InterbreedFocus
 	if partner == 0 && len(band.InterbreedCandidateIDs) > 0 {
 		partner = band.InterbreedCandidateIDs[0]
 	}
 	interbreed := t.button("Interbreed · I", 10.5, colorInterbreed, colorInterbreed, func() { p.emit(Intent{Kind: IntentInterbreed, Band: partner}) })
-	interbreed.GetWidget().Disabled = done || readOnly || len(band.InterbreedCandidateIDs) == 0
 	interbreed.GetWidget().LayoutData = widget.RowLayoutData{Stretch: true}
 	p.handles.interbreed = interbreed
+	p.watchTooltip(interbreed)
+	p.applyMoveBlock(moveActionInterbreed, interbreed, blocks.Interbreed)
 	buttonRow1.AddChild(moveHere, best)
 	buttonRow2.AddChild(split, interbreed)
 	body.AddChild(buttonRow1, buttonRow2)
@@ -250,10 +299,13 @@ func (p *Panel) refreshTarget(state State) bool {
 		p.handles.moveTargetStatus.Label = target.Status
 	}
 
-	done := ui.MoveDone(*band)
-	readOnly := band.Species != gameapi.HomoSapiens || state.CampaignOver
-	canMove := !done && !readOnly && target.Reachable && source != ui.TargetQueued
-	p.handles.moveHere.GetWidget().Disabled = !canMove
+	// Through the same helper buildMoveBody uses, so the refreshed button and
+	// its hover explanation stay in step with each other.
+	moveHereBlock := ui.DiagnoseMoveActions(state.Frame, band, target, source, targetTile).MoveHere
+	if state.CampaignOver {
+		moveHereBlock = ui.ErrorCodeMessage(gameapi.ErrCampaignComplete)
+	}
+	p.applyMoveBlock(moveActionMoveHere, p.handles.moveHere, moveHereBlock)
 
 	hint := "Arrows move a cursor instead of the pointer · Esc clears it · staying put is fine"
 	switch {

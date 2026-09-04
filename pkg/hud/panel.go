@@ -62,7 +62,12 @@ type Panel struct {
 	// can see appearance changes that never touch p.builds.
 	refreshes int
 	intents   []Intent
-	handles   handles
+	// tooltipShown tracks whether any watched control is currently showing its
+	// hover explanation. Maintained by watchTooltip from ebitenui's
+	// ToolTipEvent, which fires only on the show and hide transitions, so a
+	// visible tooltip does not force a repaint on every frame it stays up.
+	tooltipShown bool
+	handles      handles
 }
 
 // handles keeps pointers to widgets tests and refreshes need to reach. Later
@@ -120,6 +125,10 @@ type handles struct {
 	moveTargetCells  [8]*widget.Container
 	moveTargetStatus *widget.Text
 	moveHint         *widget.Text
+	// moveTooltips are the labels inside the Move row buttons' hover
+	// explanations, indexed by moveAction; nil for an action that is available
+	// and therefore carries no tooltip (see applyMoveBlock).
+	moveTooltips [moveActionCount]*widget.Text
 	// partnerGenetics, partnerGeneticsHeading and partnerGeneticsValues are
 	// the focused-partner block below the interbreed picker; nil unless the
 	// selected sapiens band has an open spatial action and at least one
@@ -227,6 +236,12 @@ type PresentationKey struct {
 	panelScroll float64
 	bandListTop float64
 	notesTop    float64
+	// tooltipShown is the one input here that no pointer movement implies: a
+	// tooltip waits for the cursor to hold still, so when it appears the
+	// cursor, the buttons and uiHovered are all exactly as they were on the
+	// previous frame. Without it that frame is skipped and the tooltip is
+	// never drawn (see watchTooltip).
+	tooltipShown bool
 }
 
 // PresentationKey returns a value that changes whenever anything this Panel
@@ -276,9 +291,11 @@ func (p *Panel) PresentationKey() PresentationKey {
 		mouseRight:  ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight),
 		mouseMiddle: ebiten.IsMouseButtonPressed(ebiten.MouseButtonMiddle),
 		uiHovered:   input.UIHovered,
-		panelScroll: panelScroll,
-		bandListTop: bandListTop,
-		notesTop:    notesTop,
+
+		tooltipShown: p.tooltipShown,
+		panelScroll:  panelScroll,
+		bandListTop:  bandListTop,
+		notesTop:     notesTop,
 	}
 }
 
@@ -296,6 +313,11 @@ func (p *Panel) rect(x, y, width, height float64) fixedRect {
 }
 
 func (p *Panel) rebuild(state State) {
+	// A rebuild discards the widgets that would have reported their tooltips
+	// hiding, so any visible one goes with them. Left set, the next tooltip to
+	// appear would not change PresentationKey and would never be drawn. The
+	// rebuild bumps p.builds, so this frame repaints regardless.
+	p.tooltipShown = false
 	p.builds++
 	p.last = state
 	scale := state.Transform.Scale
