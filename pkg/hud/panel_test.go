@@ -1421,6 +1421,10 @@ func TestHiddenBarControlMatchesTheBreakthroughAccent(t *testing.T) {
 // reviewer-found gap (F4): the ? shortcut sheet listed D only as the
 // Workforce row's discard, never mentioning D's global meaning (toggle band
 // details) or that A and D are row-owned instead while Workforce is open.
+// The Workforce guidance now spans two lines (fix round 1: the combined
+// line overflowed the window, see TestShortcutSheetLinesFitTheWindow), so
+// this checks for the header line and the override note independently
+// rather than assuming both live on one line.
 func TestShortcutSheetDocumentsGlobalDAndWorkforceOverride(t *testing.T) {
 	panel := New()
 	var lines []string
@@ -1430,22 +1434,49 @@ func TestShortcutSheetDocumentsGlobalDAndWorkforceOverride(t *testing.T) {
 		}
 	})
 
-	var globalDLine, workforceLine string
+	var globalDLine string
+	sawWorkforceHeader, sawWorkforceOverrideNote := false, false
 	for _, line := range lines {
 		if strings.Contains(line, "toggle band details") {
 			globalDLine = line
 		}
 		if strings.HasPrefix(line, "Workforce row:") {
-			workforceLine = line
+			sawWorkforceHeader = true
+		}
+		lower := strings.ToLower(line)
+		if strings.Contains(line, "A") && strings.Contains(line, "D") && strings.Contains(lower, "belong") {
+			sawWorkforceOverrideNote = true
 		}
 	}
 	if globalDLine == "" {
 		t.Fatalf("shortcut sheet does not document D's global meaning (toggle band details); lines = %v", lines)
 	}
-	if workforceLine == "" {
-		t.Fatal("shortcut sheet lost its Workforce row line")
+	if !sawWorkforceHeader {
+		t.Fatalf("shortcut sheet lost its Workforce row line; lines = %v", lines)
 	}
-	if !strings.Contains(workforceLine, "A") || !strings.Contains(strings.ToLower(workforceLine), "belong") {
-		t.Fatalf("Workforce row line does not mention that A and D belong to it while open: %q", workforceLine)
+	if !sawWorkforceOverrideNote {
+		t.Fatalf("shortcut sheet does not mention that A and D belong to the Workforce row while open; lines = %v", lines)
+	}
+}
+
+// TestShortcutSheetLinesFitTheWindow covers a reviewer-found Critical
+// defect: shortcutSheet's overlayFrame window is neither Dynamic nor
+// Resizeable, and its body labels carry no Stretch/MaxWidth layout data, so
+// ebitenui's RowLayout lays each line out at its own natural width — a line
+// wider than the window's usable interior spills straight past its right
+// edge. The Workforce row line this fix splits measured 897.2 DIP against a
+// 544 DIP budget before the re-lay. This measures every line the sheet
+// actually renders, with the same face shortcutSheet builds them at, against
+// the same overlayWidth/insets constants the window is built from (not a
+// duplicated literal), so it tracks any future change to either.
+func TestShortcutSheetLinesFitTheWindow(t *testing.T) {
+	panel := New()
+	face := panel.theme.face(shortcutLineFontSizeDIP)
+	for _, line := range shortcutSheetLines {
+		width, _ := text.Measure(line, *face, 0)
+		if width > overlayUsableWidthDIP {
+			t.Fatalf("shortcut sheet line measures %.1f DIP, want <= %.1f DIP (overlayWidth %.0f minus insets %.0f+%.0f): %q",
+				width, overlayUsableWidthDIP, float64(overlayWidth), float64(overlayInsetLeftDIP), float64(overlayInsetRightDIP), line)
+		}
 	}
 }

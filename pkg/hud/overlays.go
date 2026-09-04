@@ -13,6 +13,23 @@ const (
 	overlayY      = 150.0
 	overlayWidth  = 600.0
 	overlayHeight = 420.0
+	// overlayFrame's own padding (spec: the bordered frame's insets), named
+	// so TestShortcutSheetLinesFitTheWindow can derive the sheet's usable
+	// width from these constants instead of a duplicated literal.
+	overlayInsetTopDIP    = 24.0
+	overlayInsetLeftDIP   = 28.0
+	overlayInsetRightDIP  = 28.0
+	overlayInsetBottomDIP = 20.0
+	// overlayUsableWidthDIP is the width left for a line of text inside the
+	// bordered frame once its left/right padding is subtracted. A line
+	// measuring wider than this at shortcutLineFontSizeDIP spills past the
+	// window's right edge, because the window is neither Dynamic nor
+	// Resizeable and RowLayout lays text out at its full natural width.
+	overlayUsableWidthDIP = overlayWidth - overlayInsetLeftDIP - overlayInsetRightDIP
+	// shortcutLineFontSizeDIP is the font size shortcutSheet's body lines
+	// are built at; exported as a constant so the fit test measures with
+	// the exact same face the sheet itself uses.
+	shortcutLineFontSizeDIP = 11.5
 )
 
 // menuHelp is the Game Menu's help line; kept as a constant so tests can
@@ -65,7 +82,7 @@ type menuEntry struct {
 
 func (p *Panel) overlayFrame(heading, help string) *widget.Container {
 	t := p.theme
-	frame := t.column(10, t.insets(24, 28, 28, 20), t.bordered(colorPanel, colorGoldDeep, t.px(2)), widget.WidgetOpts.MinSize(t.px(overlayWidth), t.px(overlayHeight)))
+	frame := t.column(10, t.insets(overlayInsetTopDIP, overlayInsetLeftDIP, overlayInsetRightDIP, overlayInsetBottomDIP), t.bordered(colorPanel, colorGoldDeep, t.px(2)), widget.WidgetOpts.MinSize(t.px(overlayWidth), t.px(overlayHeight)))
 	frame.AddChild(t.label(heading, 25, colorTitle))
 	if help != "" {
 		frame.AddChild(t.label(help, 11, colorDim))
@@ -181,21 +198,33 @@ func (p *Panel) refreshVolume(state State) {
 	}
 }
 
+// shortcutSheetLines are the ? overlay's body lines, built at
+// shortcutLineFontSizeDIP. Exported as a package-level value (rather than a
+// local literal inside shortcutSheet) so TestShortcutSheetLinesFitTheWindow
+// can measure the exact strings the sheet renders against the exact face it
+// renders them with, without inspecting widget internals. The window is
+// neither Dynamic nor Resizeable and these labels carry no Stretch/MaxWidth
+// layout data, so RowLayout lays each one out at its full natural width —
+// every line here must fit overlayUsableWidthDIP or it spills past the
+// window's right edge.
+var shortcutSheetLines = []string{
+	"Space  end turn        Tab / Shift+Tab  next / previous band",
+	"PgUp / PgDn or Shift+Up/Down  change the open row",
+	"Move row:  arrows steer the cursor · Enter queues · Esc clears",
+	"Research row:  Up/Down highlight · Enter chooses · 1–9 direct",
+	"Workforce row:  Up/Down pick a role · Left/Right or −/+ step 1% · Shift 5%",
+	"  Enter/A apply · D discard — A and D belong to this row while it's open",
+	"N split · I interbreed · J cycle partner · G cycle trait note · B best tile",
+	"D toggle band details · F notes · Shift+F expand notes · wheel scrolls notes",
+	"Z camera · Ctrl/Cmd+S quick-save · F1–F3 save · Shift+F1–F3 load",
+	"M mute · Esc menu",
+}
+
 func (p *Panel) shortcutSheet() *widget.Container {
 	t := p.theme
 	frame := p.overlayFrame("Keyboard shortcuts", "? or Esc closes")
-	lines := []string{
-		"Space  end turn        Tab / Shift+Tab  next / previous band",
-		"PgUp / PgDn or Shift+Up/Down  change the open row",
-		"Move row:  arrows steer the cursor · Enter queues · Esc clears",
-		"Research row:  Up/Down highlight · Enter chooses · 1–9 direct",
-		"Workforce row:  Up/Down pick a role · Left/Right or −/+ step 1% · Shift 5% · Enter/A apply · D discard (A and D belong to this row while it's open, not the global D below)",
-		"N split · I interbreed · J cycle partner · G cycle trait note · B best tile · D toggle band details",
-		"F notes · Shift+F expand notes · wheel scrolls notes · Z camera",
-		"Ctrl/Cmd+S quick-save · F1–F3 save · Shift+F1–F3 load · M mute · Esc menu",
-	}
-	for _, line := range lines {
-		frame.AddChild(t.label(line, 11.5, colorText))
+	for _, line := range shortcutSheetLines {
+		frame.AddChild(t.label(line, shortcutLineFontSizeDIP, colorText))
 	}
 	frame.AddChild(t.button("Close · Esc", 12, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentToggleShortcuts}) }))
 	return frame
