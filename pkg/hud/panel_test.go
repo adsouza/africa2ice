@@ -1033,6 +1033,47 @@ func TestCameraButtonReflectsFocusAndEmitsToggle(t *testing.T) {
 	}
 }
 
+// TestEndSceneHidesTheCameraButtonAndCentersNewCampaign covers Wave H item
+// H2: the map-corner Overview/Focus button used to draw over the terminal
+// dialog, and New Campaign was centred on the screen rather than on the
+// (now off-centre) dialog. The camera button must yield while the dialog is
+// up, and New Campaign must track render.EndSceneX/Width so it recentres
+// itself if the dialog's rect ever moves again.
+func TestEndSceneHidesTheCameraButtonAndCentersNewCampaign(t *testing.T) {
+	panel := New()
+	state := testState(testFrame(1), 1)
+	state.Camera = CameraState{FocusAvailable: true}
+	state.Ending = render.EndScene{Visible: true}
+	panel.Update(state)
+	if panel.handles.camera != nil {
+		t.Fatal("camera button shown while the end scene is up")
+	}
+	if panel.handles.newCampaign == nil {
+		t.Fatal("no New Campaign button while the end scene is up")
+	}
+
+	screen := ebiten.NewImage(1280, 720)
+	panel.Draw(screen)
+
+	dialog := panel.rect(render.EndSceneX, render.EndSceneY, render.EndSceneWidth, render.EndSceneHeight)
+	dialogCentreX := (dialog.Min.X + dialog.Max.X) / 2
+	button := panel.handles.newCampaign.GetWidget().Rect
+	buttonCentreX := (button.Min.X + button.Max.X) / 2
+	if buttonCentreX != dialogCentreX {
+		t.Fatalf("New Campaign centre x = %d, want the dialog's centre %d", buttonCentreX, dialogCentreX)
+	}
+	if button.Max.X > dialog.Max.X {
+		t.Fatalf("New Campaign right edge %d spills past the dialog's right edge %d", button.Max.X, dialog.Max.X)
+	}
+
+	state.Camera = CameraState{FocusAvailable: true}
+	state.Ending = render.EndScene{}
+	panel.Update(state)
+	if panel.handles.camera == nil {
+		t.Fatal("camera button stayed hidden once the end scene closed")
+	}
+}
+
 func TestGuideCardShowsStepProgressAndOnlyXDismisses(t *testing.T) {
 	panel := New()
 	state := testState(testFrame(1), 1)
