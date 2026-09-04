@@ -239,7 +239,7 @@ func (p *Panel) buildHiddenDrawerBar(state State, events []gameapi.Event) widget
 	event.GetWidget().LayoutData = widget.RowLayoutData{Stretch: true}
 	p.handles.drawerBarEvent = event
 
-	control := t.button(hiddenBarControlLabel, 9, colorGoldDeep, colorGoldDeep, func() { open() })
+	control := t.button(hiddenBarControlLabel, 9, accent, accent, func() { open() })
 	control.GetWidget().LayoutData = widget.RowLayoutData{Position: widget.RowLayoutPositionEnd}
 	p.handles.drawerTab = control
 

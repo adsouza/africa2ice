@@ -189,8 +189,8 @@ func (p *Panel) shortcutSheet() *widget.Container {
 		"PgUp / PgDn or Shift+Up/Down  change the open row",
 		"Move row:  arrows steer the cursor · Enter queues · Esc clears",
 		"Research row:  Up/Down highlight · Enter chooses · 1–9 direct",
-		"Workforce row:  Up/Down pick a role · Left/Right or −/+ step 1% · Shift 5% · Enter/A apply · D discard",
-		"N split · I interbreed · J cycle partner · G cycle trait note · B best tile",
+		"Workforce row:  Up/Down pick a role · Left/Right or −/+ step 1% · Shift 5% · Enter/A apply · D discard (A and D belong to this row while it's open, not the global D below)",
+		"N split · I interbreed · J cycle partner · G cycle trait note · B best tile · D toggle band details",
 		"F notes · Shift+F expand notes · wheel scrolls notes · Z camera",
 		"Ctrl/Cmd+S quick-save · F1–F3 save · Shift+F1–F3 load · M mute · Esc menu",
 	}

@@ -1387,3 +1387,65 @@ func TestNotesBodyScrollsAndCountsInThePresentationKey(t *testing.T) {
 		t.Fatalf("notes body rect %v not inside drawer rect %v", bodyRect, drawerRect)
 	}
 }
+
+// TestHiddenBarControlMatchesTheBreakthroughAccent covers a reviewer-found
+// cosmetic (F4): the hidden bar's "▲ notes · F" control hardcoded
+// colorGoldDeep, so it stayed dim during a breakthrough while the bar's
+// background and event text turned gold. Both buttons must share the bar's
+// own accent. Button colors have no public getter, so this checks the
+// theme's memoized border cache instead: with a fresh theme, only the
+// colors buildHiddenDrawerBar actually asked for appear as border keys.
+func TestHiddenBarControlMatchesTheBreakthroughAccent(t *testing.T) {
+	panel := New()
+	state := State{Note: render.FieldNote{Celebration: true}}
+	panel.buildHiddenDrawerBar(state, nil)
+
+	sawGoldDeepBorder, sawGoldBorder := false, false
+	for key := range panel.theme.borders {
+		switch key.border {
+		case colorGoldDeep:
+			sawGoldDeepBorder = true
+		case colorGold:
+			sawGoldBorder = true
+		}
+	}
+	if sawGoldDeepBorder {
+		t.Fatal("hidden bar control still uses colorGoldDeep during a breakthrough; it should match the bar's own gold accent")
+	}
+	if !sawGoldBorder {
+		t.Fatal("hidden bar control does not use the breakthrough accent (colorGold)")
+	}
+}
+
+// TestShortcutSheetDocumentsGlobalDAndWorkforceOverride covers a
+// reviewer-found gap (F4): the ? shortcut sheet listed D only as the
+// Workforce row's discard, never mentioning D's global meaning (toggle band
+// details) or that A and D are row-owned instead while Workforce is open.
+func TestShortcutSheetDocumentsGlobalDAndWorkforceOverride(t *testing.T) {
+	panel := New()
+	var lines []string
+	walkDescendants(panel.shortcutSheet(), func(w widget.PreferredSizeLocateableWidget) {
+		if text, ok := w.(*widget.Text); ok {
+			lines = append(lines, text.Label)
+		}
+	})
+
+	var globalDLine, workforceLine string
+	for _, line := range lines {
+		if strings.Contains(line, "toggle band details") {
+			globalDLine = line
+		}
+		if strings.HasPrefix(line, "Workforce row:") {
+			workforceLine = line
+		}
+	}
+	if globalDLine == "" {
+		t.Fatalf("shortcut sheet does not document D's global meaning (toggle band details); lines = %v", lines)
+	}
+	if workforceLine == "" {
+		t.Fatal("shortcut sheet lost its Workforce row line")
+	}
+	if !strings.Contains(workforceLine, "A") || !strings.Contains(strings.ToLower(workforceLine), "belong") {
+		t.Fatalf("Workforce row line does not mention that A and D belong to it while open: %q", workforceLine)
+	}
+}
