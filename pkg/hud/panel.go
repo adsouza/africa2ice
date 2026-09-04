@@ -110,6 +110,14 @@ type handles struct {
 	// the Move row is not open (refreshTarget is then a no-op).
 	moveTargetHeader *widget.Text
 	moveTargetValues [8]*widget.Text
+	// moveTargetMarks are the ▲▼ labels beside moveTargetValues, split off so
+	// the mark and the value it annotates can carry different colours.
+	moveTargetMarks [8]*widget.Text
+	// moveTargetCells are the containers holding each value/mark pair. They,
+	// not the labels inside them, are the widgets the grid stretches to the
+	// column width, so they are what TestMoveGridValuesFitTheirColumns has to
+	// measure against.
+	moveTargetCells  [8]*widget.Container
 	moveTargetStatus *widget.Text
 	moveHint         *widget.Text
 	// partnerGenetics, partnerGeneticsHeading and partnerGeneticsValues are

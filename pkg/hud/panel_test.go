@@ -1666,3 +1666,133 @@ func TestCampaignOverDisablesEveryActionControl(t *testing.T) {
 		}
 	}
 }
+
+// TestMoveGridValuesFitTheirColumns guards the widened HERE / TARGET values:
+// Capacity now carries capacity, occupancy and degradation on one line, and
+// the worst case lands within a couple of DIP of the column. A widget.Text
+// reports its measured text as its PreferredSize, so comparing that with the
+// laid-out rect catches an overflow at any scale without this test needing to
+// know the font or redo the column arithmetic.
+func TestMoveGridValuesFitTheirColumns(t *testing.T) {
+	for _, scale := range []float64{1, 2} {
+		frame := testFrame(1)
+		// Worst case for every row at once: a capacity-100 target that is both
+		// half degraded and over-full, with four-digit crowding and two-digit
+		// mortality percentages.
+		frame.Tiles[1].EcologicalK, frame.Tiles[1].Degradation = 100, 0.5
+		frame.Tiles[1].FloraStock, frame.Tiles[1].FloraCap = 6_408, 8_100
+		frame.Tiles[1].WaterStock, frame.Tiles[1].WaterCap = 4_800, 5_000
+		frame.Bands[0].LastFoodReport = gameapi.FoodTurnReport{Turn: 12, RequiredFU: 300}
+		frame.Bands[0].MigrationCandidates = []gameapi.MigrationCandidate{
+			{TileID: 1, SeasonalMortalityRate: 0.0123, ChronicMortalityRate: 0.0456, CrowdingDecline: 120},
+		}
+		frame.Bands = append(frame.Bands, gameapi.Band{ID: 7, Species: gameapi.ArchaicHominin, Population: 95, TileID: 1})
+
+		panel := New()
+		state := testState(frame, scale)
+		state.Hover = render.TileHover{TileID: 1, Visible: true}
+		panel.Update(state)
+		screen := ebiten.NewImage(int(1280*scale), int(720*scale))
+		panel.Draw(screen)
+		screen.Deallocate()
+
+		// The cell container, not the labels inside it, is what the grid
+		// stretches to the column width: measuring a label against its own
+		// rect compares a number with itself and can never fail.
+		for index, cell := range panel.handles.moveTargetCells {
+			if cell == nil {
+				continue
+			}
+			wanted, _ := cell.PreferredSize()
+			if available := cell.GetWidget().Rect.Dx(); wanted > available {
+				t.Fatalf("scale %.1f: target cell %d %q%q needs %d px in a %d px column",
+					scale, index, panel.handles.moveTargetValues[index].Label, panel.handles.moveTargetMarks[index].Label, wanted, available)
+			}
+		}
+	}
+}
+
+// A ▲▼ mark earns a warning colour only when the difference it reports has
+// consequences. Between two comfortable tiles the mark stays — it still ranks
+// them — but drops to the dim colour, because colouring an inconsequential
+// difference red cried wolf (user-reported).
+func TestDeltaMarkDimsAnInconsequentialDifference(t *testing.T) {
+	if mark, got := deltaMark(ui.LiveabilityRow{Delta: 1, DeltaMaterial: true}); mark != " ▲" || got != colorGreen {
+		t.Fatalf("material improvement = %q, %v, want \" ▲\" green", mark, got)
+	}
+	if mark, got := deltaMark(ui.LiveabilityRow{Delta: -1, DeltaMaterial: true}); mark != " ▼" || got != colorRed {
+		t.Fatalf("material regression = %q, %v, want \" ▼\" red", mark, got)
+	}
+	if mark, got := deltaMark(ui.LiveabilityRow{Delta: -1}); mark != " ▼" || got != colorDim {
+		t.Fatalf("inconsequential regression = %q, %v, want \" ▼\" dim", mark, got)
+	}
+	if mark, got := deltaMark(ui.LiveabilityRow{Delta: 1}); mark != " ▲" || got != colorDim {
+		t.Fatalf("inconsequential improvement = %q, %v, want \" ▲\" dim", mark, got)
+	}
+	if mark, _ := deltaMark(ui.LiveabilityRow{}); mark != "" {
+		t.Fatalf("no difference = %q, want no mark", mark)
+	}
+}
+
+// The comparison mark lives in its own label beside the value so the two can
+// carry different colours (see moveTargetCell). buildMoveBody and
+// refreshTarget populate those labels through separate code, so both paths are
+// exercised here: a divergence would show up as a mark appended to the value's
+// own text, or as a stale mark left behind when the target changes.
+func TestTargetValueAndMarkAreSeparateLabels(t *testing.T) {
+	// Tile 1 holds more food and water than tile 0, so some rows earn a mark.
+	// Neither tile is short of anything, so those marks are inconsequential —
+	// exactly the case that must still produce a mark, just a dim one.
+	assertSplit := func(t *testing.T, panel *Panel, path string) {
+		t.Helper()
+		marks := 0
+		for index, value := range panel.handles.moveTargetValues {
+			if value == nil {
+				continue
+			}
+			if strings.ContainsAny(value.Label, "▲▼") {
+				t.Fatalf("%s: cell %d value %q carries the mark; it belongs in its own label", path, index, value.Label)
+			}
+			if mark := panel.handles.moveTargetMarks[index].Label; mark != "" {
+				if mark != " ▲" && mark != " ▼" {
+					t.Fatalf("%s: cell %d mark = %q", path, index, mark)
+				}
+				marks++
+			}
+		}
+		if marks == 0 {
+			t.Fatalf("%s: no row earned a mark, so this test proves nothing", path)
+		}
+	}
+
+	panel := New()
+	state := testState(testFrame(1), 1)
+	state.Hover = render.TileHover{TileID: 1, Visible: true}
+	panel.Update(state) // the build path: the hover is present before the first build
+	assertSplit(t, panel, "build")
+
+	// The Food row compares 640 against 212 with neither tile short: a mark,
+	// but a dim one, and the value beside it stays untouched.
+	if value, mark := panel.handles.moveTargetValues[1], panel.handles.moveTargetMarks[1]; value.Label != "640 / 810" || mark.Label != " ▲" {
+		t.Fatalf("food cell = %q + %q, want \"640 / 810\" + \" ▲\"", value.Label, mark.Label)
+	}
+
+	builds := panel.builds
+	state.Hover = render.TileHover{}
+	panel.Update(state) // the refresh path
+	if panel.builds != builds {
+		t.Fatalf("clearing the hover rebuilt the tree: builds %d -> %d", builds, panel.builds)
+	}
+	for index, mark := range panel.handles.moveTargetMarks {
+		if mark != nil && mark.Label != "" {
+			t.Fatalf("cell %d kept the mark %q after the target went away", index, mark.Label)
+		}
+	}
+
+	state.Hover = render.TileHover{TileID: 1, Visible: true}
+	panel.Update(state)
+	if panel.builds != builds {
+		t.Fatalf("restoring the hover rebuilt the tree: builds %d -> %d", builds, panel.builds)
+	}
+	assertSplit(t, panel, "refresh")
+}

@@ -131,11 +131,25 @@ Free vertical space (about 130 px after the guide is dismissed) goes to the open
 
 ### 4.1 Move row, open
 
-A HERE / TARGET comparison grid: Biome, Food, Capacity (with degradation), Water, Shelter,
-Mortality (seasonal · chronic), Route (cost multiplier, turns), Archaic presence. TARGET header
-names its source in the spec's existing precedence: `cursor`, then `queued`, then `hover`;
-otherwise reads "hover or click an outlined tile". Relative ▲▼ marks compare TARGET to HERE.
-Absolute coloring (§5.4) applies to both columns.
+A HERE / TARGET comparison grid: Biome, Food, Capacity (present capacity and the share of it in
+use), Water, Shelter, Mortality (seasonal · chronic), Route (cost multiplier, turns), Others (every
+band already on the tile, of any species). TARGET header names its source in the spec's existing
+precedence: `cursor`, then `queued`, then `hover`; otherwise reads "hover or click an outlined
+tile". Absolute coloring (§5.4) applies to both columns.
+
+Relative ▲▼ marks compare TARGET to HERE under two rules, both from playtesting:
+
+- **Displayed precision.** A mark compares the *formatted* values, so it never reports a difference
+  the player cannot see. Metrics are raw `float64` behind rounded formatters, and two stocks of
+  211.6 and 212.4 both render `212`.
+- **Materiality.** A mark is green or red only when at least one side is already amber or red under
+  §5.4. Between two tiles the band would not feel the difference between, the mark still appears —
+  it ranks them — in the dim text color rather than as a warning.
+
+The mark is a separate label from the value it annotates, so the two carry independent colors.
+
+Capacity shows `K · N% full`, and `K/baseline · N% full` once the tile is degraded — the pair states
+the degradation loss exactly, and a third percentage on the line does not fit the column.
 
 Buttons: `Move here · Enter` (cyan when the cursor or hovered tile is in `MigrationCandidates`,
 otherwise disabled), `Best tile · B` (first-ranked ordinary-land candidate), `Split · N`,
@@ -193,10 +207,25 @@ turn anyway. Campaign not `Ongoing` hides the button.
 |---|---|---|
 | Food | stock < 1.5 × band's last-turn `RequiredFU` | stock < last-turn `RequiredFU` |
 | Water | stock < 0.5 × cap | stock < 0.25 × cap |
-| Capacity | degradation ≥ 0.25 | degradation ≥ 0.5 |
+| Capacity | degradation ≥ 0.25, **or** projected occupancy ≥ `gameapi.SplitStressThreshold` | degradation ≥ 0.5, **or** projected occupancy ≥ 1.0 |
 | Mortality | seasonal + chronic ≥ 0.004 (existing danger tier) | ≥ 0.008 |
 | Shelter | natural shelter < 0.3 | — |
-| Archaic | any archaic band present | — |
+| Others | — | — |
+
+Projected occupancy is `(residents other than this band + this band's population) / EcologicalK` —
+the presentation twin of `domain.World.BandStress`, over `EcologicalK` so the ratio matches the
+capacity shown beside it. Excluding the band from the resident count lets one formula serve both
+columns: HERE adds it back to a tile it already occupies, TARGET to a tile it has yet to reach.
+
+Capacity is tiered this way, rather than on degradation alone, because a lower capacity the band
+fits several times over is not a warning (playtest report). Occupancy is also what its ▲▼ mark
+compares, so the mark tracks the quantity with consequences rather than raw capacity.
+
+Others is never tiered. A neighbouring archaic band is the precondition for interbreeding — the one
+opportunity that row exists to advertise — so coloring it amber painted an opportunity as a hazard
+(playtest report). The pressure a neighbour does create appears on Capacity, where the occupancy
+figure causing it is visible. The row names the species while every neighbour is archaic, keeping
+that cue.
 
 Values are Initial; the tiers are display interpretations and never simulation inputs.
 

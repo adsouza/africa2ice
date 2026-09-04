@@ -59,13 +59,9 @@ func TestLiveabilityRowsColorAbsoluteStateAndMarkRelativeDelta(t *testing.T) {
 	if !here.Available || !target.Available || !target.Reachable {
 		t.Fatalf("summaries = here %+v target %+v", here, target)
 	}
-	rows := LiveabilityRows(band, here, target)
-	byLabel := map[string]LiveabilityRow{}
-	for _, row := range rows {
-		byLabel[row.Label] = row
-	}
-	if len(rows) != 8 {
-		t.Fatalf("row count = %d, want 8", len(rows))
+	byLabel := rowsByLabel(band, here, target)
+	if len(byLabel) != 8 {
+		t.Fatalf("row count = %d, want 8", len(byLabel))
 	}
 	// Food 212 is below last turn's 300 FU requirement: red here, normal there, target better.
 	if food := byLabel["Food"]; food.HereTier != TierRed || food.TargetTier != TierNormal || food.Delta != 1 || food.Here != "212 / 810" {
@@ -79,8 +75,9 @@ func TestLiveabilityRowsColorAbsoluteStateAndMarkRelativeDelta(t *testing.T) {
 	if mortality := byLabel["Mortality"]; mortality.Delta != -1 || mortality.HereTier != TierNormal {
 		t.Fatalf("mortality row = %+v", mortality)
 	}
-	if archaic := byLabel["Archaic"]; archaic.TargetTier != TierAmber || archaic.Target != "1 band · pop 40" || archaic.Here != "none" {
-		t.Fatalf("archaic row = %+v", archaic)
+	// Neighbours are reported, never tiered; see TestOthersRowIsInformationalNotAWarning.
+	if others := byLabel["Others"]; others.TargetTier != TierNormal || others.Target != "1 archaic · pop 40" || others.Here != "none" {
+		t.Fatalf("others row = %+v", others)
 	}
 	if route := byLabel["Route"]; route.Target != "×1.20 · 1 turn" || route.Here != "—" {
 		t.Fatalf("route row = %+v", route)
@@ -91,14 +88,13 @@ func TestLiveabilityTiersUseTheSpecThresholds(t *testing.T) {
 	frame := liveabilityFrame()
 	band := &frame.Bands[0]
 	frame.Tiles[0].WaterStock = 120 // 0.24 of cap
-	frame.Tiles[0].Degradation = 0.3
+	// 30% degraded, so capacity is 105 of a 150 baseline: occupancy is
+	// 68/105 = 0.65, just under the crowding threshold, which leaves
+	// degradation alone to drive the amber tier.
+	frame.Tiles[0].Degradation, frame.Tiles[0].EcologicalK = 0.3, 105
 	band.SeasonalMortalityRate, band.ChronicMortalityRate = 0.005, 0.004
 	frame.Tiles[0].NaturalShelter = 0.2
-	rows := LiveabilityRows(band, CurrentTileLiveability(frame, band), TileLiveability{})
-	byLabel := map[string]LiveabilityRow{}
-	for _, row := range rows {
-		byLabel[row.Label] = row
-	}
+	byLabel := rowsByLabel(band, CurrentTileLiveability(frame, band), TileLiveability{})
 	if byLabel["Water"].HereTier != TierRed || byLabel["Capacity"].HereTier != TierAmber || byLabel["Mortality"].HereTier != TierRed || byLabel["Shelter"].HereTier != TierAmber {
 		t.Fatalf("tiers = water %v capacity %v mortality %v shelter %v", byLabel["Water"].HereTier, byLabel["Capacity"].HereTier, byLabel["Mortality"].HereTier, byLabel["Shelter"].HereTier)
 	}
@@ -128,22 +124,151 @@ func TestMortalityDeltaIgnoresCrowdingHeadcount(t *testing.T) {
 	frame.Bands[0].MigrationCandidates[0].ChronicMortalityRate = 0.0005
 	frame.Bands[0].MigrationCandidates[0].CrowdingDecline = 12
 
-	here := CurrentTileLiveability(frame, band)
-	target := TargetTileLiveability(frame, band, 1)
-	rows := LiveabilityRows(band, here, target)
-
-	byLabel := map[string]LiveabilityRow{}
-	for _, row := range rows {
-		byLabel[row.Label] = row
-	}
-
-	mortality := byLabel["Mortality"]
+	mortality := rowsByLabel(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1))["Mortality"]
 	// Delta should be +1 (better) because seasonal+chronic rates are lower, ignoring crowding
 	if mortality.Delta != 1 {
 		t.Fatalf("mortality delta = %d, want 1 (target rates are lower despite high crowding)", mortality.Delta)
 	}
 	// Target string should show crowding
-	if !strings.Contains(mortality.Target, "crowding −12") {
-		t.Fatalf("mortality target = %q, want crowding −12", mortality.Target)
+	if !strings.Contains(mortality.Target, "crowd −12") {
+		t.Fatalf("mortality target = %q, want crowd −12", mortality.Target)
+	}
+}
+
+// rowsByLabel indexes LiveabilityRows by its Label for assertions.
+func rowsByLabel(band *gameapi.Band, here, target TileLiveability) map[string]LiveabilityRow {
+	byLabel := map[string]LiveabilityRow{}
+	for _, row := range LiveabilityRows(band, here, target) {
+		byLabel[row.Label] = row
+	}
+	return byLabel
+}
+
+// A ▲▼ mark is a claim about the two numbers the player can see. Comparing raw
+// metrics behind a rounded formatter marked differences that never reach the
+// screen: 211.6 and 212.4 both render "212 / 810" yet earned a red ▼.
+func TestDeltaIgnoresDifferencesTooSmallToDisplay(t *testing.T) {
+	frame := liveabilityFrame()
+	band := &frame.Bands[0]
+	frame.Tiles[0].FloraStock, frame.Tiles[1].FloraStock = 211.6, 212.4
+	food := rowsByLabel(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1))["Food"]
+	if food.Here != food.Target {
+		t.Fatalf("fixture no longer renders both sides identically: here %q target %q", food.Here, food.Target)
+	}
+	if food.Delta != 0 {
+		t.Fatalf("food delta = %d for identical displayed values %q, want 0", food.Delta, food.Here)
+	}
+}
+
+// The Capacity tier asks whether the tile could carry this band once it
+// arrives, which is how the domain already defines crowding: World.BandStress
+// divides a tile's *total* resident population by its capacity. Tiering bare
+// degradation instead flagged a smaller-but-ample target red (user-reported).
+func TestCapacityTierMeasuresOccupancyAfterTheBandArrives(t *testing.T) {
+	frame := liveabilityFrame()
+	band := &frame.Bands[0] // population 68
+	// Tile 1 holds an archaic band of 40 and has capacity 150, so arriving
+	// makes 108/150 = 0.72 — past the 0.67 split-stress threshold — while
+	// tile 0 carries this band alone at 68/150 = 0.45.
+	capacity := rowsByLabel(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1))["Capacity"]
+	if capacity.HereTier != TierNormal || capacity.TargetTier != TierAmber {
+		t.Fatalf("capacity tiers = here %v target %v, want normal then amber: %+v", capacity.HereTier, capacity.TargetTier, capacity)
+	}
+	if capacity.Here != "150 · 45% full" || capacity.Target != "150 · 72% full" {
+		t.Fatalf("capacity values = here %q target %q", capacity.Here, capacity.Target)
+	}
+	// Occupancy drives the mark, not raw capacity: both tiles have K 150, so a
+	// comparison on EcologicalK reports no difference at all.
+	if capacity.Delta != -1 || !capacity.DeltaMaterial {
+		t.Fatalf("capacity delta = %d material %v, want -1 and material (the target would be crowded)", capacity.Delta, capacity.DeltaMaterial)
+	}
+}
+
+// The reported symptom: a target tile with lower capacity was coloured red
+// even though the band's population fitted it several times over. The mark
+// still records that the target is tighter; only the alarm goes away.
+func TestLowerCapacityTheBandComfortablyFitsIsNotAWarning(t *testing.T) {
+	frame := liveabilityFrame()
+	band := &frame.Bands[0] // population 68
+	frame.Tiles[0].EcologicalK, frame.Tiles[1].EcologicalK = 400, 200
+	capacity := rowsByLabel(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1))["Capacity"]
+	// 68/400 = 17% against (68+40)/200 = 54%: tighter, but neither side is
+	// near the 67% crowding point.
+	if capacity.HereTier != TierNormal || capacity.TargetTier != TierNormal {
+		t.Fatalf("capacity tiers = here %v target %v, want both normal: %+v", capacity.HereTier, capacity.TargetTier, capacity)
+	}
+	if capacity.Delta != -1 {
+		t.Fatalf("capacity delta = %d, want -1: the target really is tighter", capacity.Delta)
+	}
+	if capacity.DeltaMaterial {
+		t.Fatal("capacity delta is material between two tiles the band fits comfortably")
+	}
+}
+
+// A tile with less capacity than the arriving band needs is red, not amber:
+// the band cannot be carried there at all.
+func TestCapacityIsRedWhenTheBandWouldNotFit(t *testing.T) {
+	frame := liveabilityFrame()
+	band := &frame.Bands[0] // population 68, joining an archaic band of 40
+	frame.Tiles[1].EcologicalK = 100
+	capacity := rowsByLabel(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1))["Capacity"]
+	if capacity.TargetTier != TierRed {
+		t.Fatalf("capacity target tier = %v for 108 people on a capacity of 100, want red: %+v", capacity.TargetTier, capacity)
+	}
+	if capacity.Target != "100 · 108% full" {
+		t.Fatalf("capacity target = %q, want an occupancy over 100%%", capacity.Target)
+	}
+	if !capacity.DeltaMaterial {
+		t.Fatal("capacity delta onto an over-full tile is not material")
+	}
+}
+
+// An archaic neighbour is the one opportunity this row exists to advertise —
+// it is the precondition for interbreeding — so it must not be coloured as a
+// hazard (user-reported). The pressure a neighbour does create now lives on
+// Capacity, where the occupancy figure causing it is visible.
+func TestOthersRowIsInformationalNotAWarning(t *testing.T) {
+	frame := liveabilityFrame()
+	band := &frame.Bands[0]
+	others := rowsByLabel(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1))["Others"]
+	if others.HereTier != TierNormal || others.TargetTier != TierNormal {
+		t.Fatalf("others tiers = here %v target %v, want both normal: %+v", others.HereTier, others.TargetTier, others)
+	}
+	// Naming the species keeps the interbreeding cue the amber tier used to carry.
+	if others.Here != "none" || others.Target != "1 archaic · pop 40" {
+		t.Fatalf("others values = here %q target %q", others.Here, others.Target)
+	}
+}
+
+// A sapiens neighbour competes for the same food and water, so the row counts
+// every species; the band being read for never counts itself.
+func TestOthersRowCountsEverySpeciesButNotTheBandItself(t *testing.T) {
+	frame := liveabilityFrame()
+	frame.Bands = append(frame.Bands, gameapi.Band{ID: 11, Species: gameapi.HomoSapiens, Population: 25, TileID: 1})
+	band := &frame.Bands[0] // taken after the append: appending can reallocate
+	others := rowsByLabel(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1))["Others"]
+	if others.Target != "2 bands · pop 65" {
+		t.Fatalf("mixed-species others = %q, want a species-neutral count of both", others.Target)
+	}
+	if others.Here != "none" {
+		t.Fatalf("here others = %q, want none: the selected band must not count itself", others.Here)
+	}
+}
+
+// A degraded tile names both its present and its baseline capacity, in the
+// same "current / potential" idiom the Food and Water rows use. That states
+// the loss exactly, where a third percentage on the line overflowed the
+// column (TestMoveGridValuesFitTheirColumns).
+func TestDegradedCapacityNamesItsBaseline(t *testing.T) {
+	frame := liveabilityFrame()
+	band := &frame.Bands[0] // population 68
+	frame.Tiles[0].EcologicalK, frame.Tiles[0].Degradation = 75, 0.5
+	byLabel := rowsByLabel(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1))
+	if capacity := byLabel["Capacity"]; capacity.Here != "75/150 · 91% full" {
+		t.Fatalf("degraded capacity = %q, want its baseline alongside", capacity.Here)
+	}
+	// An undegraded tile stays on the short form.
+	if capacity := byLabel["Capacity"]; capacity.Target != "150 · 72% full" {
+		t.Fatalf("undegraded capacity = %q, want no baseline pair", capacity.Target)
 	}
 }

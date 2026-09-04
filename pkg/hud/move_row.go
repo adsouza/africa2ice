@@ -20,15 +20,49 @@ func tierColor(tier ui.LiveabilityTier) color.RGBA {
 	}
 }
 
-func deltaMark(delta int) (string, color.RGBA) {
+// deltaMark is the TARGET column's comparison mark and its colour. A
+// difference the band would not feel keeps the mark — it still ranks the two
+// tiles — but drops to the dim colour: colouring an inconsequential
+// difference red or green cried wolf (user-reported). Both buildMoveBody and
+// refreshTarget go through here so the two paths cannot disagree.
+func deltaMark(row ui.LiveabilityRow) (string, color.RGBA) {
+	mark := ""
 	switch {
-	case delta > 0:
-		return " ▲", colorGreen
-	case delta < 0:
-		return " ▼", colorRed
+	case row.Delta > 0:
+		mark = " ▲"
+	case row.Delta < 0:
+		mark = " ▼"
 	default:
 		return "", colorText
 	}
+	if !row.DeltaMaterial {
+		return mark, colorDim
+	}
+	if row.Delta > 0 {
+		return mark, colorGreen
+	}
+	return mark, colorRed
+}
+
+// moveGridFontDIP is the HERE / TARGET grid's text size. Named because
+// TestMoveGridValuesFitTheirColumns depends on the value cells and their
+// column being measured at the same size.
+const moveGridFontDIP = 9.5
+
+// moveTargetCell is one TARGET value and its comparison mark, as two labels in
+// a row. A widget.Text carries a single colour, so appending the mark to the
+// value forced one colour on both — a dim mark would have greyed out the value
+// beside it. buildPartnerGenetics splits its cells for the same reason.
+func (p *Panel) moveTargetCell(index int, row ui.LiveabilityRow) *widget.Container {
+	t := p.theme
+	cell := t.rowOf(0)
+	value := t.label(row.Target, moveGridFontDIP, tierColor(row.TargetTier))
+	mark, markColor := deltaMark(row)
+	markLabel := t.label(mark, moveGridFontDIP, markColor)
+	p.handles.moveTargetValues[index], p.handles.moveTargetMarks[index] = value, markLabel
+	p.handles.moveTargetCells[index] = cell
+	cell.AddChild(value, markLabel)
+	return cell
 }
 
 // rowHeader is the always-visible line of a checklist row: number badge,
@@ -84,15 +118,9 @@ func (p *Panel) buildMoveBody(state State, band *gameapi.Band) widget.PreferredS
 	p.handles.moveTargetHeader = targetHeaderLabel
 	grid.AddChild(t.label("", 9.5, colorDim), t.label("HERE", 9.5, colorGold), targetHeaderLabel)
 	for index, row := range ui.LiveabilityRows(band, here, target) {
-		mark, markColor := deltaMark(row.Delta)
-		grid.AddChild(t.label(row.Label, 9.5, colorDim))
-		grid.AddChild(t.label(row.Here, 9.5, tierColor(row.HereTier)))
-		targetLabel := t.label(row.Target+mark, 9.5, tierColor(row.TargetTier))
-		if mark != "" && row.TargetTier == ui.TierNormal {
-			targetLabel.SetColor(markColor)
-		}
-		p.handles.moveTargetValues[index] = targetLabel
-		grid.AddChild(targetLabel)
+		grid.AddChild(t.label(row.Label, moveGridFontDIP, colorDim))
+		grid.AddChild(t.label(row.Here, moveGridFontDIP, tierColor(row.HereTier)))
+		grid.AddChild(p.moveTargetCell(index, row))
 	}
 	p.handles.moveTargetStatus = nil
 	if !target.Available && source != ui.TargetNone {
@@ -204,14 +232,12 @@ func (p *Panel) refreshTarget(state State) bool {
 
 	here := ui.CurrentTileLiveability(state.Frame, band)
 	for index, row := range ui.LiveabilityRows(band, here, target) {
-		mark, markColor := deltaMark(row.Delta)
-		label := p.handles.moveTargetValues[index]
-		label.Label = row.Target + mark
-		color := tierColor(row.TargetTier)
-		if mark != "" && row.TargetTier == ui.TierNormal {
-			color = markColor
-		}
-		label.SetColor(color)
+		value, markLabel := p.handles.moveTargetValues[index], p.handles.moveTargetMarks[index]
+		value.Label = row.Target
+		value.SetColor(tierColor(row.TargetTier))
+		mark, markColor := deltaMark(row)
+		markLabel.Label = mark
+		markLabel.SetColor(markColor)
 	}
 	if p.handles.moveTargetStatus != nil {
 		p.handles.moveTargetStatus.Label = target.Status
