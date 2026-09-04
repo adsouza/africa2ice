@@ -38,6 +38,49 @@ func TestBestTileHotkeySharesTheButtonPath(t *testing.T) {
 	}
 }
 
+// TestBestTileKeepsTheMoveRowOpen covers spec §3.4's requirement that a
+// destination the game picked for the player (the Best tile button, or its B
+// hotkey via moveToBestTile) leaves the Move row open so the player can see
+// what got queued, unlike a destination the player picked themselves.
+//
+// Both setups pre-mark the band's spatial action as already having a queued
+// migration (HasQueuedMigration) without SpatialActionUsed, so
+// DiagnoseMigration still allows queuing but DefaultOpenRow already treats
+// Move as done and Research as the next undone row — this is what makes
+// advanceOpenRow's default recompute actually move away from RowMove,
+// exposing the collapse this test guards against.
+func TestBestTileKeepsTheMoveRowOpen(t *testing.T) {
+	newGame := func() (*Game, *gameStub) {
+		frame := migrationPreviewFrame()
+		frame.Bands[0].HasQueuedMigration = true
+		stub := &gameStub{frame: frame}
+		game := New(stub)
+		game.openRow = ui.RowMove
+		game.rowChosen = false
+		return game, stub
+	}
+
+	game, stub := newGame()
+	game.moveToBestTile()
+	if _, ok := stub.appliedCommand.(gameapi.QueueMigration); !ok {
+		t.Fatalf("moveToBestTile did not queue a migration: %#v", stub.appliedCommand)
+	}
+	if game.openRow != ui.RowMove || !game.rowChosen {
+		t.Fatalf("moveToBestTile left openRow=%v rowChosen=%t, want RowMove/true", game.openRow, game.rowChosen)
+	}
+
+	// Contrast: a row the player did not open via the Best tile shortcut
+	// still auto-advances exactly as it did before this change.
+	researchGame, researchStub := newGame()
+	researchGame.chooseResearchTechnology(gameapi.Firecraft)
+	if _, ok := researchStub.appliedCommand.(gameapi.ResearchTech); !ok {
+		t.Fatalf("chooseResearchTechnology did not apply a ResearchTech command: %#v", researchStub.appliedCommand)
+	}
+	if researchGame.openRow == ui.RowMove {
+		t.Fatalf("chooseResearchTechnology left the row at Move; expected it to still advance away, want %v", ui.RowResearch)
+	}
+}
+
 func TestArrowsBelongToTheOpenRow(t *testing.T) {
 	stub := &gameStub{frame: migrationPreviewFrame()}
 	game := New(stub)

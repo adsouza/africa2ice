@@ -105,7 +105,12 @@ func (g *Game) moveToBestTile() {
 	for _, candidate := range band.MigrationCandidates {
 		if !candidate.RequiresPassage {
 			g.clearMigrationPreview()
-			g.tryQueueMigration(band, candidate.TileID)
+			if g.tryQueueMigration(band, candidate.TileID) {
+				// The game chose this destination, not the player; leave the
+				// Move row open and pinned so its queued summary stays
+				// visible instead of auto-advancing to the next row.
+				g.openRow, g.rowChosen = ui.RowMove, true
+			}
 			return
 		}
 	}
