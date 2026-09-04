@@ -42,10 +42,13 @@ Current controls:
   it for good, and Settings' "Show first-turn guide" brings it back;
 - gameplay hotkeys: Space ends the turn; Tab/Shift+Tab select the next/previous band; Esc peels one
   layer (cursor, then popover, then the Game Menu); N splits a band; I interbreeds with a co-located
-  archaic band and J cycles the highlighted partner; G cycles the heritable-trait Field Notes; B
-  moves to the best tile; D toggles the band details disclosure; 1–9 choose a research target;
-  M mutes; ? opens the shortcut sheet; PgUp/PgDn or Shift+Up/Shift+Down change the open checklist
-  row; Ctrl+S (Cmd+S on macOS) quick-saves; F1–F3 save Manual 1–3 and Shift+F1–F3 load them;
+  archaic band and J cycles the highlighted partner — while the choice is live, the Move row shows
+  the focused partner's heritable traits next to the band's own; G cycles the heritable-trait Field
+  Notes; B moves to the best tile and leaves the Move row open so the chosen destination stays
+  visible; D toggles the band details disclosure; 1–9 choose a research target; M mutes; ? opens the
+  shortcut sheet (which also documents D's global meaning and its Workforce-row override); PgUp/PgDn
+  or Shift+Up/Shift+Down change the open checklist row; Ctrl+S (Cmd+S on macOS) quick-saves; F1–F3
+  save Manual 1–3 and Shift+F1–F3 load them;
 - arrows, Enter and −/+ belong to whichever checklist row is open: Move steers and queues the
   destination cursor, Research highlights and chooses, and Workforce picks a role, steps it by one
   percentage point (Shift by five), and applies. A and D are row-owned there too — A applies an

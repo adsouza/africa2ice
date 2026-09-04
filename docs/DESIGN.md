@@ -7037,10 +7037,16 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   `Move here · Enter` is enabled (cyan) only while the Move predicate is not yet done and the cursor
   or hovered tile names a reachable candidate; `Best tile · B` moves to the first-ranked ordinary-land
   candidate; `Split · N`; and `Interbreed · I`, with a partner picker when more than one archaic band
-  qualifies. All four disable once the Move predicate is done or, for Best tile/Interbreed, when no
-  candidate exists. The row has three visible states: idle (no cursor/hover/queue), cursor (a
-  destination is named but not yet confirmed), and set (a migration is already queued, the button
-  disabled, and the default-open rule moves off this row).
+  qualifies. While the choice is live, the row also names the focused partner (the picker's
+  selection when shown, defaulting to the first candidate) beneath the interbreed controls, with its
+  population and a 2×3 grid of the six heritable traits — self value then the partner's, colored
+  green/dim where the partner is higher/lower — so choosing among several candidates is not blind.
+  All four disable once the Move predicate is done or, for Best tile/Interbreed, when no candidate
+  exists. The row has three visible states: idle (no cursor/hover/queue), cursor (a destination is
+  named but not yet confirmed), and set (a migration is already queued and the button disabled). The
+  default-open rule moves off this row once set, except when `Best tile`/`B` queued the migration:
+  that destination was the game's choice, not the player's, so the row stays open and pinned instead,
+  showing the queued summary and the chosen tile's TARGET figures.
 - **Research row, open:** the nine technologies as a numbered list — name, progress/cost, and a
   state suffix: `learned` (green, acquired), `current` (gold, the active target), `available`
   (selectable), `computer` (dim, read-only for an archaic selection), or `needs <prerequisites>`
@@ -7150,9 +7156,10 @@ Every mouse action documented above has a keyboard alias; the two paths converge
 | `Ctrl`/`Cmd+S` | Quick-save |
 | `F1`–`F3` | Manual save to slot 1–3; `Shift+F1`–`Shift+F3` loads it |
 
-The Field Notes drawer's `TextArea` has no programmatic scroll setter in the bundled widget
-library, so it scrolls with the mouse wheel only; the spec's `Shift+PgUp`/`Shift+PgDn` drawer-scroll
-binding is not implemented. `PgUp`/`PgDn` and `Shift+Up`/`Shift+Down` change the open row regardless.
+The Field Notes drawer body is a wrapped `widget.Text` inside a `pkg/hud`-owned `ScrollContainer`
+(the same construction the panel's own scrollable middle uses), so it scrolls with the mouse wheel;
+the spec's `Shift+PgUp`/`Shift+PgDn` drawer-scroll binding is still not implemented. `PgUp`/`PgDn`
+and `Shift+Up`/`Shift+Down` change the open row regardless.
 
 **Row-owned** (arrows, `Enter`, and Workforce's `−`/`+`/`A`/`D`, active only while their row is open):
 
