@@ -59,6 +59,14 @@ type MapScene struct {
 	camera          Camera
 	visibleHeight   float64
 	guideHighlight  bool
+	chromeRevision  uint64
+	// Paints counts every Draw call that actually painted the screen (i.e.
+	// returned true). It exists for pkg/app's tests: unlike pkg/render's own
+	// package, pkg/app has no TestMain running inside an ebiten game loop, so
+	// (*ebiten.Image).At — the screen-sentinel technique this package's own
+	// skip test uses — panics there. Exported so it stays outside
+	// golangci-lint's unused check; production code never reads it.
+	Paints int
 }
 
 type mapFrameKey struct {
@@ -72,6 +80,7 @@ type mapFrameKey struct {
 	camera         Camera
 	visibleHeight  float64
 	guideHighlight bool
+	chromeRevision uint64
 }
 
 type MigrationPreview struct {
@@ -122,6 +131,17 @@ func (scene *MapScene) SetCamera(camera Camera, visibleHeight float64) {
 // band's migration candidates.
 func (scene *MapScene) SetGuideHighlight(on bool) { scene.guideHighlight = on }
 
+// SetChromeRevision records an opaque revision of pkg/hud's chrome for the
+// next Draw. pkg/render must not import pkg/hud, so the caller (pkg/app)
+// hashes whatever it knows changes the chrome's appearance into this
+// uint64. Including it in mapFrameKey is what makes Draw repaint when only
+// the chrome changed (details collapsing, the drawer shrinking, a settings
+// window closing) even though nothing about the map itself did — those
+// changes vacate pixels that only this scene's frame image can restore,
+// since pkg/hud draws over it and production leaves an unpainted screen
+// exactly as ebiten last left it.
+func (scene *MapScene) SetChromeRevision(revision uint64) { scene.chromeRevision = revision }
+
 // effectiveVisibleHeight defaults an unset visible height to the full map
 // area, so a scene that never called SetCamera behaves as it always has.
 func (scene *MapScene) effectiveVisibleHeight() float64 {
@@ -136,57 +156,57 @@ func (scene *MapScene) geometry(frame *gameapi.Frame) MapGeometry {
 	return CameraGeometry(scene.camera, frame, scene.effectiveVisibleHeight())
 }
 
-// Draw renders the map, its overlays, and the terminal scene. Every piece of
-// interactive chrome now belongs to pkg/hud, which draws over this image.
-// The screen is presented every tick regardless of whether the underlying
-// frame changed — pkg/hud's panel redraws every tick and, with Ebitengine's
-// automatic screen clear disabled in production, an untouched screen would
-// leave stale pixels wherever chrome shrank or closed since the last frame.
-// Only drawFrame's expensive work is worth caching, keyed on frameKey.
-func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, ending EndScene, resizeRequired bool) {
+// Draw renders the map, its overlays, and the terminal scene, returning
+// whether it painted the screen this call. Every piece of interactive
+// chrome now belongs to pkg/hud, which draws over this image — so the
+// screen must be repainted whenever the map's own key changed OR the
+// chrome changed (SetChromeRevision, folded into frameKey), and skipped
+// only when neither did. Production disables Ebitengine's automatic screen
+// clear (SetScreenClearedEveryFrame(false)) precisely so that skip is safe:
+// an idle frame does nothing, which is the performance floor (DESIGN.md
+// §8). Repainting on a chrome-only change matters because pkg/hud draws
+// over this image; when chrome shrinks or closes (details collapsing, the
+// drawer compacting, a settings window closing) the vacated region needs
+// this frame's pixels blitted back over it, and nothing else will.
+func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, ending EndScene, resizeRequired bool) bool {
 	if frame == nil {
 		screen.Fill(color.RGBA{R: 15, G: 22, B: 29, A: 255})
-		return
+		scene.Paints++
+		return true
 	}
 	key := mapFrameKey{
 		frame: frame, selectedBand: selectedBand, preview: preview, hover: scene.hover, notice: notice,
 		ending: ending, resizeRequired: resizeRequired,
 		camera: scene.camera, visibleHeight: scene.visibleHeight, guideHighlight: scene.guideHighlight,
+		chromeRevision: scene.chromeRevision,
 	}
 	width, height := screen.Bounds().Dx(), screen.Bounds().Dy()
-	var transform PresentationTransform
 	if scene.frameCached && scene.frameKey == key && scene.frameWidth == width && scene.frameHeight == height {
-		// The expensive drawFrame work is skipped on an unchanged key, but
-		// production disables Ebitengine's automatic screen clear
-		// (SetScreenClearedEveryFrame(false)), so the screen must still be
-		// repainted every tick: pkg/hud's chrome draws over this image and
-		// redraws every tick regardless, and when chrome shrinks or closes
-		// (details collapsing, the drawer compacting, a window closing) the
-		// vacated region needs this frame's pixels blitted back over it.
-		transform = FitPresentation(width, height)
-	} else {
-		if scene.frameImage != nil {
-			scene.frameImage.Deallocate()
-		}
-		transform = FitPresentation(width, height)
-		contentWidth := max(1, int(math.Ceil(PresentationWidth*transform.Scale)))
-		contentHeight := max(1, int(math.Ceil(PresentationHeight*transform.Scale)))
-		scene.frameImage = ebiten.NewImage(contentWidth, contentHeight)
-		canvas := newLogicalCanvas(scene.frameImage, transform.Scale)
-		scene.drawFrame(canvas, frame, selectedBand, preview, notice, ending)
-		if resizeRequired {
-			scene.drawResizeOverlay(canvas)
-		}
-		scene.frameKey = key
-		scene.frameWidth = width
-		scene.frameHeight = height
-		scene.frameScale = transform.Scale
-		scene.frameCached = true
+		return false
 	}
+	if scene.frameImage != nil {
+		scene.frameImage.Deallocate()
+	}
+	transform := FitPresentation(width, height)
+	contentWidth := max(1, int(math.Ceil(PresentationWidth*transform.Scale)))
+	contentHeight := max(1, int(math.Ceil(PresentationHeight*transform.Scale)))
+	scene.frameImage = ebiten.NewImage(contentWidth, contentHeight)
+	canvas := newLogicalCanvas(scene.frameImage, transform.Scale)
+	scene.drawFrame(canvas, frame, selectedBand, preview, notice, ending)
+	if resizeRequired {
+		scene.drawResizeOverlay(canvas)
+	}
+	scene.frameKey = key
+	scene.frameWidth = width
+	scene.frameHeight = height
+	scene.frameScale = transform.Scale
+	scene.frameCached = true
 	screen.Fill(color.RGBA{R: 6, G: 11, B: 15, A: 255})
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(transform.OffsetX, transform.OffsetY)
 	screen.DrawImage(scene.frameImage, op)
+	scene.Paints++
+	return true
 }
 
 func (scene *MapScene) drawResizeOverlay(screen logicalCanvas) {

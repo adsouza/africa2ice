@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"hash/maphash"
 
 	"github.com/adsouza/africa2ice/internal/adapters/logging"
 	"github.com/adsouza/africa2ice/internal/application"
@@ -13,6 +14,12 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
+
+// chromeRevisionSeed is fixed for the process's lifetime: MapScene compares
+// chrome revisions across ticks (via mapFrameKey), so hashing the same
+// PresentationKey with a different seed between calls would look like a
+// change and force a spurious repaint.
+var chromeRevisionSeed = maphash.MakeSeed()
 
 const (
 	LogicalWidth                  = 1280
@@ -320,18 +327,32 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.scene.SetTileHover(render.TileHover{TileID: g.hoveredTile, Visible: g.hasHoveredTile})
 	g.scene.SetCamera(g.camera, g.mapVisibleHeight())
 	g.scene.SetGuideHighlight(g.guide.Step == ui.GuideMove && g.frame != nil && g.frame.CampaignResult == gameapi.Ongoing)
+	// The chrome (pkg/hud) draws over this image and can change what it
+	// looks like — a rebuild, or an in-place refresh — without any of the
+	// fields above changing, so pkg/render's cache key must see it too:
+	// hash the panel's PresentationKey into the opaque revision MapScene
+	// accepts (pkg/render must not import pkg/hud) and fold it into the
+	// map's own key. That is what makes the map repaint when only the
+	// chrome changed (details collapsing, the drawer shrinking, a settings
+	// window closing) even though the map itself did not.
+	g.scene.SetChromeRevision(maphash.Comparable(chromeRevisionSeed, g.panel.PresentationKey()))
 	displayFrame := g.displayFrame()
-	g.scene.Draw(screen, displayFrame, g.selectedBand, render.MigrationPreview{
+	painted := g.scene.Draw(screen, displayFrame, g.selectedBand, render.MigrationPreview{
 		BandID: g.migrationPreviewBand, TileID: g.migrationPreviewTile, Visible: g.hasMigrationPreview,
 	}, g.notice, ui.CampaignEndScene(displayFrame), g.viewportInitialized && !g.viewport.SupportsGameplay())
-	// The chrome now draws over the map image rather than into it, so the
-	// too-small overlay can only stay the topmost thing if the panel yields.
-	if !g.viewportInitialized || g.viewport.SupportsGameplay() {
+	// The chrome draws over the map image rather than into it, so the two
+	// layers must always paint together and never separately: painting the
+	// panel alone over a stale map (or vice versa) leaves stale pixels
+	// exactly like the bug this replaces. The too-small overlay can only
+	// stay the topmost thing if the panel yields.
+	if painted && (!g.viewportInitialized || g.viewport.SupportsGameplay()) {
 		g.panel.Draw(screen)
 	}
 	// Browser readiness means the first frame is visible and input is accepted.
 	// IndexedDB discovery may still be resolving on earlier draws; announcing
 	// readiness there lets the first gesture disappear into the startup guard.
+	// This must still run on a skipped frame: readiness is about whether a
+	// frame has ever been shown, not whether this particular tick painted.
 	if !g.firstDrawDone && !g.startupRestorePending {
 		g.firstDrawDone = true
 		if g.onFirstDraw != nil {

@@ -1206,3 +1206,81 @@ func TestSimultaneousExcludedFieldChangesAllRefresh(t *testing.T) {
 		t.Fatalf("p.last.Hover = %+v, want %+v", panel.last.Hover, state.Hover)
 	}
 }
+
+// TestPresentationKeyChangesWithRebuildsAndRefreshes covers pkg/app's use of
+// PresentationKey to decide whether the map needs to repaint chrome it
+// otherwise wouldn't know changed: a rebuild (a structural State change) and
+// each in-place refresh path (Workforce, Hover) must all change the key, and
+// two identical Update calls with no cursor movement must not.
+func TestPresentationKeyChangesWithRebuildsAndRefreshes(t *testing.T) {
+	panel := New()
+	frame := testFrame(1)
+	state := testState(frame, 1) // OpenRow: ui.RowMove
+	panel.Update(state)
+	key := panel.PresentationKey()
+
+	panel.Update(state)
+	if panel.PresentationKey() != key {
+		t.Fatal("PresentationKey changed across two identical Update calls with no cursor movement")
+	}
+
+	state.OpenRow = ui.RowResearch
+	panel.Update(state)
+	if panel.PresentationKey() == key {
+		t.Fatal("PresentationKey did not change after a rebuild (OpenRow changed)")
+	}
+
+	state.OpenRow = ui.RowMove
+	panel.Update(state)
+	key = panel.PresentationKey()
+
+	state.Workforce.SelectedRole = gameapi.Toolcraft
+	panel.Update(state)
+	if panel.PresentationKey() == key {
+		t.Fatal("PresentationKey did not change after a Workforce.SelectedRole-only refresh")
+	}
+	key = panel.PresentationKey()
+
+	state.Hover = render.TileHover{TileID: 1, Visible: true}
+	panel.Update(state)
+	if panel.PresentationKey() == key {
+		t.Fatal("PresentationKey did not change after a Hover-only refresh")
+	}
+}
+
+// TestPresentationKeyChangesWithWheelScroll covers a gap none of
+// PresentationKey's other fields close: wireScrollWheel mutates a
+// *widget.ScrollContainer's ScrollTop directly from the mouse wheel
+// (pkg/hud/panel.go, pkg/hud/chips.go), with no other observable side
+// effect — not a rebuild, not one of the three refresh paths, and no change
+// to the cursor position, mouse buttons, or input.UIHovered. Without reading
+// ScrollTop directly, a wheel-scroll-only tick would report the same key as
+// the tick before it, and the map would wrongly skip repainting over newly
+// scrolled chrome.
+func TestPresentationKeyChangesWithWheelScroll(t *testing.T) {
+	panel := New()
+	state := testState(testFrame(40), 1)
+	panel.Update(state)
+	if panel.handles.panelMiddle == nil {
+		t.Fatal("panel's scroll container handle missing")
+	}
+
+	key := panel.PresentationKey()
+	panel.handles.panelMiddle.ScrollTop = 0.5
+	if panel.PresentationKey() == key {
+		t.Fatal("PresentationKey did not change when the panel's own ScrollTop changed")
+	}
+
+	panel.handles.panelMiddle.ScrollTop = 0
+	state.BandListOpen = true
+	panel.Update(state)
+	if panel.handles.bandListScroll == nil {
+		t.Fatal("band list scroll container handle missing once the list is open")
+	}
+
+	key = panel.PresentationKey()
+	panel.handles.bandListScroll.ScrollTop = 0.5
+	if panel.PresentationKey() == key {
+		t.Fatal("PresentationKey did not change when the band list's own ScrollTop changed")
+	}
+}

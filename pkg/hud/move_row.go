@@ -189,6 +189,7 @@ func (p *Panel) refreshTarget(state State) bool {
 	if statusRow := !target.Available && source != ui.TargetNone; statusRow != (p.handles.moveTargetStatus != nil) {
 		return false
 	}
+	p.refreshes++
 
 	targetHeader := "TARGET"
 	if source != ui.TargetNone {

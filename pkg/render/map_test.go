@@ -190,7 +190,16 @@ func TestMapSceneCachesTerrainByTerrainRevisionAndAridity(t *testing.T) {
 	}
 }
 
-func TestDrawRepaintsTheScreenEvenWhenTheFrameIsCached(t *testing.T) {
+// TestDrawSkipsOnlyWhenNeitherFrameNorChromeChanged covers the performance
+// floor (DESIGN.md §8): production disables Ebitengine's automatic screen
+// clear, so an idle frame must do nothing. It also covers the bug that an
+// always-repaint fix was papering over: when only the chrome (pkg/hud's
+// panel) changed — details collapsing, the drawer shrinking, a settings
+// window closing — the map's own key is unchanged, but the vacated chrome
+// pixels still need this frame's pixels blitted back over them. Both must
+// hold: skip when neither the frame key nor the chrome revision changed;
+// repaint when either did.
+func TestDrawSkipsOnlyWhenNeitherFrameNorChromeChanged(t *testing.T) {
 	frame := representativeRenderFrame()
 	screen := ebiten.NewImage(1280, 720)
 	defer screen.Deallocate()
@@ -199,10 +208,19 @@ func TestDrawRepaintsTheScreenEvenWhenTheFrameIsCached(t *testing.T) {
 	scene.Draw(screen, frame, 7, MigrationPreview{}, "", EndScene{}, false)
 
 	screen.Fill(color.RGBA{R: 255, G: 0, B: 255, A: 255})
-	scene.Draw(screen, frame, 7, MigrationPreview{}, "", EndScene{}, false)
+	if painted := scene.Draw(screen, frame, 7, MigrationPreview{}, "", EndScene{}, false); painted {
+		t.Fatal("Draw repainted on an unchanged key; idle frames must be skipped")
+	}
+	if got := screen.At(2, 2); got != (color.RGBA{R: 255, G: 0, B: 255, A: 255}) {
+		t.Fatalf("screen.At(2,2) = %v, want the untouched magenta fill from a skipped Draw", got)
+	}
 
+	scene.SetChromeRevision(1)
+	if painted := scene.Draw(screen, frame, 7, MigrationPreview{}, "", EndScene{}, false); !painted {
+		t.Fatal("Draw skipped after a chrome-only change; the vacated chrome pixels would stay stale")
+	}
 	if got := screen.At(2, 2); got == (color.RGBA{R: 255, G: 0, B: 255, A: 255}) {
-		t.Fatalf("screen.At(2,2) = %v, want the cached frame repainted over the stale magenta fill", got)
+		t.Fatalf("screen.At(2,2) = %v, want the magenta repainted over after a chrome-only change", got)
 	}
 }
 

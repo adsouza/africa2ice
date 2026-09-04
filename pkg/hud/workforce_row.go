@@ -158,6 +158,7 @@ func refreshWorkforceHeader(header *widget.Button, draft WorkforceDraft) {
 // refreshWorkforce updates the row's dynamic parts from the draft without
 // recreating widgets.
 func (p *Panel) refreshWorkforce(state State) {
+	p.refreshes++
 	h := &p.handles.workforce
 	draft := state.Workforce
 	if h.total == nil {

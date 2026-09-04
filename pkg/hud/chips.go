@@ -270,6 +270,7 @@ func (p *Panel) openBandList(state State) {
 			p.rect(windowX, windowY+bandListHeaderH, bandListWidth, scrollHeight))),
 	)
 	p.wireScrollWheel(scroll, content)
+	p.handles.bandListScroll = scroll
 	body.AddChild(scroll)
 
 	footer := t.column(0, t.insets(4, 14, 14, 12), nil,

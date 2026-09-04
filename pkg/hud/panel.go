@@ -51,14 +51,18 @@ const (
 // whenever the State value changes and otherwise leaves widgets untouched so
 // presses and hovers survive across ticks.
 type Panel struct {
-	ui      *ebitenui.UI
-	theme   *theme
-	root    *widget.Container
-	last    State
-	built   bool
-	builds  int
-	intents []Intent
-	handles handles
+	ui     *ebitenui.UI
+	theme  *theme
+	root   *widget.Container
+	last   State
+	built  bool
+	builds int
+	// refreshes counts in-place widget writes made outside a rebuild
+	// (refreshWorkforce, refreshVolume, refreshTarget), so PresentationKey
+	// can see appearance changes that never touch p.builds.
+	refreshes int
+	intents   []Intent
+	handles   handles
 }
 
 // handles keeps pointers to widgets tests and refreshes need to reach. Later
@@ -70,7 +74,12 @@ type handles struct {
 	chips    map[uint32]*widget.Button // keyed by gameapi.BandID
 	more     *widget.Button
 	bandList *widget.Window
-	details  *widget.Button
+	// bandListScroll is the band list window's own scroll container, kept
+	// so PresentationKey can see its ScrollTop: the mouse wheel mutates it
+	// directly (wireScrollWheel) without touching p.builds, p.refreshes, or
+	// any of PresentationKey's other fields.
+	bandListScroll *widget.ScrollContainer
+	details        *widget.Button
 	// headerContent, macroWarning and panelMiddle let TestHeaderRegionFitsItsContent
 	// measure the header region against its own content instead of the old
 	// fixed constant: headerContent is buildHeader's returned column (its
@@ -172,6 +181,77 @@ func (p *Panel) Draw(screen *ebiten.Image) { p.ui.Draw(screen) }
 // Hovered reports whether the pointer is over any chrome widget, so map input
 // can yield. Valid after Update.
 func (p *Panel) Hovered() bool { return input.UIHovered }
+
+// PresentationKey is a comparable snapshot of everything that can change what
+// this Panel draws. pkg/app hashes it into an opaque uint64 (pkg/render must
+// not learn about pkg/hud or ebitenui) and feeds it to the map scene as its
+// chrome revision, so a chrome-only appearance change still forces a repaint
+// even though the map's own frame key is unchanged.
+type PresentationKey struct {
+	builds      int
+	refreshes   int
+	cursorX     int
+	cursorY     int
+	mouseLeft   bool
+	mouseRight  bool
+	mouseMiddle bool
+	uiHovered   bool
+	panelScroll float64
+	bandListTop float64
+}
+
+// PresentationKey returns a value that changes whenever anything this Panel
+// draws could look different this tick:
+//   - p.builds, bumped by every structural rebuild;
+//   - p.refreshes, bumped by every in-place refresh that actually writes to
+//     a widget (refreshWorkforce, refreshVolume, refreshTarget) — these
+//     mutate widgets Update's structural comparison deliberately excludes;
+//   - the cursor position and mouse button state, which drive ebitenui's
+//     hover and pressed visuals without going through Update at all;
+//   - input.UIHovered, ebitenui's own hover flag;
+//   - the panel's own scroll offset (panelMiddle.ScrollTop) and the band
+//     list window's scroll offset (bandListScroll.ScrollTop, 0 when the
+//     window is closed) — wireScrollWheel mutates a *widget.ScrollContainer's
+//     ScrollTop directly from the mouse wheel, with no other side effect any
+//     of the fields above would catch, so a scroll-only tick would otherwise
+//     report the same key as the tick before it and the map would skip
+//     repainting over the newly-scrolled chrome. (Opening or closing the
+//     band list window is itself a rebuild, already covered by p.builds.)
+//
+// This set is complete for the current widget set except one gap this
+// implementation cannot close: the Field Notes drawer's *widget.TextArea
+// (p.handles.notesArea) also scrolls on the mouse wheel, but ebitenui v0.7.3
+// keeps that scroll position on an unexported inner ScrollContainer with no
+// public accessor, so it cannot be read here. A wheel-scroll-only change to
+// the notes drawer can therefore still be skipped incorrectly; closing this
+// needs either an upstream accessor or replacing TextArea's built-in scroll
+// with one pkg/hud owns directly. A widget added later with animation of
+// its own that none of these fields already track (a spinner, a blinking
+// caret, a hover-delayed tooltip) must extend this key too, or that
+// animation will not repaint on an otherwise-idle frame.
+func (p *Panel) PresentationKey() PresentationKey {
+	x, y := ebiten.CursorPosition()
+	var panelScroll float64
+	if p.handles.panelMiddle != nil {
+		panelScroll = p.handles.panelMiddle.ScrollTop
+	}
+	var bandListTop float64
+	if p.handles.bandListScroll != nil {
+		bandListTop = p.handles.bandListScroll.ScrollTop
+	}
+	return PresentationKey{
+		builds:      p.builds,
+		refreshes:   p.refreshes,
+		cursorX:     x,
+		cursorY:     y,
+		mouseLeft:   ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft),
+		mouseRight:  ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight),
+		mouseMiddle: ebiten.IsMouseButtonPressed(ebiten.MouseButtonMiddle),
+		uiHovered:   input.UIHovered,
+		panelScroll: panelScroll,
+		bandListTop: bandListTop,
+	}
+}
 
 func (p *Panel) emit(intent Intent) { p.intents = append(p.intents, intent) }
 

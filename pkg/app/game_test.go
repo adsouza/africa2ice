@@ -10,6 +10,7 @@ import (
 	gameaudio "github.com/adsouza/africa2ice/pkg/audio"
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/adsouza/africa2ice/pkg/hud"
+	"github.com/adsouza/africa2ice/pkg/render"
 	"github.com/adsouza/africa2ice/pkg/ui"
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -993,6 +994,50 @@ func migrationPreviewFrame() *gameapi.Frame {
 			Population:          120,
 			MigrationCandidates: []gameapi.MigrationCandidate{{TileID: 2}},
 		}},
+	}
+}
+
+// TestDrawPaintsChromeAndMapTogether covers the fix for CI's web performance
+// gate (DESIGN.md §8): production disables Ebitengine's automatic screen
+// clear, so an idle frame must paint nothing. pkg/render's own skip test
+// proves the map's cache key behaves correctly using a screen-sentinel
+// ((*ebiten.Image).At), which needs a TestMain running inside an ebiten game
+// loop (see pkg/render/main_test.go) — pkg/app has no such TestMain, and
+// ebiten.Game.Draw has no return value to observe directly, so this test
+// instead reads render.MapScene.Paints, a counter MapScene exports solely
+// for tests like this one to see whether Draw actually painted.
+//
+// Two consecutive Draw calls with nothing changed since the one Update that
+// built the panel must not paint again; toggling detailsOpen (which rebuilds
+// the panel, changing pkg/hud's PresentationKey) and running another
+// Update/Draw must paint both layers together.
+func TestDrawPaintsChromeAndMapTogether(t *testing.T) {
+	game := New(&gameStub{frame: migrationPreviewFrame()})
+	screen := ebiten.NewImage(1280, 720)
+	defer screen.Deallocate()
+
+	// Settle the camera transition first: without this, g.stepCamera (run
+	// from Game.Update) would keep changing the map's own frame key on its
+	// own for a few ticks regardless of the chrome, which would let this
+	// test pass by coincidence instead of by exercising the chrome-revision
+	// wiring it targets.
+	for i := 0; i < render.CameraTransitionTicks+2; i++ {
+		game.Update()
+	}
+	game.Draw(screen)
+	paints := game.scene.Paints
+
+	game.Update()
+	game.Draw(screen)
+	if game.scene.Paints != paints {
+		t.Fatalf("scene.Paints = %d, want %d unchanged: an unchanged Draw must skip (idle-frame floor)", game.scene.Paints, paints)
+	}
+
+	game.toggleDetails()
+	game.Update()
+	game.Draw(screen)
+	if game.scene.Paints == paints {
+		t.Fatalf("scene.Paints = %d, want it to advance: toggling detailsOpen changed the chrome and both layers must repaint", game.scene.Paints)
 	}
 }
 

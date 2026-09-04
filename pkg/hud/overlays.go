@@ -170,6 +170,7 @@ func (p *Panel) settingsPanel(state State) *widget.Container {
 // *Slider instance) survives a mid-drag ChangedHandler round trip through
 // the application and back into State.Overlay.MasterVolume.
 func (p *Panel) refreshVolume(state State) {
+	p.refreshes++
 	if p.handles.volumeSlider != nil {
 		if current := int(state.Overlay.MasterVolume*100 + 0.5); p.handles.volumeSlider.Current != current {
 			p.handles.volumeSlider.Current = current
