@@ -204,3 +204,28 @@ func TestBandActionIntentsStopWhenTheCampaignEnds(t *testing.T) {
 		t.Fatalf("New Campaign requests = %d, want 1 after the campaign ended", stub.newCampaigns)
 	}
 }
+
+// TestTitleSuppressesTheEndScene covers Wave H item H3: quitting with the
+// terminal dialog up and restarting used to show the title window stacked on
+// top of it, reading as two competing dialogs. The title is the
+// application's front door, so it takes precedence; the dialog reappears as
+// soon as the player leaves the title with Continue.
+func TestTitleSuppressesTheEndScene(t *testing.T) {
+	frame := migrationPreviewFrame()
+	frame.CampaignResult = gameapi.DispersalFailed
+	game := New(&gameStub{frame: frame})
+
+	if !game.hudState().Ending.Visible {
+		t.Fatal("a terminal campaign should show the end scene by default")
+	}
+
+	game.scenes.Push(ui.SceneTitle)
+	if game.hudState().Ending.Visible {
+		t.Fatal("the end scene stayed visible under the title")
+	}
+
+	game.scenes.Pop()
+	if !game.hudState().Ending.Visible {
+		t.Fatal("the end scene did not reappear once the title was left")
+	}
+}

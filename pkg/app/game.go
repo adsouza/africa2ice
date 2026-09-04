@@ -339,7 +339,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	displayFrame := g.displayFrame()
 	painted := g.scene.Draw(screen, displayFrame, g.selectedBand, render.MigrationPreview{
 		BandID: g.migrationPreviewBand, TileID: g.migrationPreviewTile, Visible: g.hasMigrationPreview,
-	}, g.notice, ui.CampaignEndScene(displayFrame), g.viewportInitialized && !g.viewport.SupportsGameplay())
+	}, g.notice, g.endScene(displayFrame), g.viewportInitialized && !g.viewport.SupportsGameplay())
 	// The chrome draws over the map image rather than into it, so the two
 	// layers must always paint together and never separately: painting the
 	// panel alone over a stale map (or vice versa) leaves stale pixels
@@ -584,6 +584,21 @@ func (g *Game) displayFrame() *gameapi.Frame {
 		return g.profileDisplayFrame
 	}
 	return g.frame
+}
+
+// endScene is the terminal presentation, suppressed while the title is up:
+// the title is the application's front door, and a finished campaign behind
+// it reads as two competing dialogs rather than one. Game.Draw and
+// hudState() both call this instead of ui.CampaignEndScene directly, so the
+// render layer and the chrome always agree. The dialog reappears as soon as
+// the player leaves the title with Continue; the menu, storage and settings
+// scenes are modal windows the player opened deliberately over a visible
+// dialog, ordinary layering that is left alone.
+func (g *Game) endScene(frame *gameapi.Frame) render.EndScene {
+	if g.scenes.Current() == ui.SceneTitle {
+		return render.EndScene{}
+	}
+	return ui.CampaignEndScene(frame)
 }
 
 // SetFramePublishedCallback installs the opt-in semantic browser-test

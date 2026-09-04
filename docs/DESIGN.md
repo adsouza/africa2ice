@@ -5671,8 +5671,14 @@ Once a terminal result is set, `AdvanceTurn()` rejects further turns, the result
 `pkg/app` opens `end_scene.go` by reading `Frame.CampaignResult`; the UI never infers a result from
 turn or population. The modal end scene names the outcome, exact turn/date, final sapiens and
 archaic populations and band counts, all established campaign destinations, and the corresponding
-one/two-to-four/five-destination breadth label. It blocks every planning command while leaving
-Ctrl/Cmd+S available for preserving the final state. A prominent **New Campaign** button and the
+one/two-to-four/five-destination breadth label. Its panel is confined to the top-down map area and
+centred on that area's own centre, rather than the screen, so it never runs under the right-hand
+chrome column. The map-corner Overview/Focus camera toggle is hidden for as long as the dialog is up,
+since the two would otherwise overlap. It blocks every planning command while leaving
+Ctrl/Cmd+S available for preserving the final state. Reopening a session that quit with the dialog
+showing lands on the title scene first; the title takes precedence and suppresses the end scene
+underneath it, so the player sees one dialog rather than two stacked on top of each other, and the
+end scene reappears as soon as Continue leaves the title. A prominent **New Campaign** button and the
 terminal-only `N` shortcut invoke the application `NewCampaign` use case. That use case replaces the
 aggregate with a turn-0 world using the next deterministic seed derived from the completed world's
 seed, resets `WorldRevision` to `1`, advances the long-lived `TerrainRevision`, and leaves existing
@@ -6679,7 +6685,9 @@ serialized and never a simulation input.
 - Focus is requested when the Move row is open and the selected sapiens band's spatial action is
   still available. It follows selection changes and returns to Overview when the row closes or the
   action is consumed. `Z` and a map-corner `Overview · Z` / `Focus · Z` button toggle a per-selection
-  override that inverts this automatic choice and resets whenever the selection changes.
+  override that inverts this automatic choice and resets whenever the selection changes. The button
+  itself is omitted while the campaign-terminal end scene is showing, so it never draws over that
+  dialog.
 - Transitions interpolate scale and center over 15 update ticks (250 ms at 60 TPS).
 - The camera's visible window is computed against the map area above the Field Notes drawer: the
   map area's full `626` logical-pixel height, minus `20`, `102`, or `300` for the drawer's hidden,
@@ -9945,6 +9953,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | Native release trigger and payload         | Annotated SemVer tag; three unsigned portable OS/architecture archives + `SHA256SUMS` | Locked                 | §12   |
 | Top-down map area                          | origin `(20, 74)`; `864 × 626` logical pixels; `96 × 64` grid  | Locked                                          | §8    |
 | Overview cell and drawn tile extent        | `8 × 8` cell; `7.6 × 7.6` drawn                                 | Locked                                          | §8    |
+| Terminal end-scene dialog rect             | origin `(60, 70)`; `784 × 508` logical pixels; centred on the top-down map area | Policy                          | §8    |
 | Focus camera scale and transition          | `3×`; `15` update ticks; clamped to the map area above the drawer | Policy                                        | §8    |
 | Field Notes drawer heights                 | hidden `20`, compact `102`, expanded `300` logical px           | Policy                                          | §8    |
 | Liveability tiers (presentation only)      | food red `< RequiredFU`, amber `< 1.5 × RequiredFU`; water red `< 0.25 cap`, amber `< 0.5 cap`; degradation amber `≥ 0.25`, red `≥ 0.5`; mortality amber `≥ 0.004`, red `≥ 0.008`; shelter amber `< 0.3`; archaic present amber | Initial | §8 |
