@@ -22,6 +22,7 @@ const (
 	mapLeft         = 20.0
 	mapRight        = 884.0
 	mapBottom       = 700.0
+	drawerHiddenH   = 20.0
 	drawerCompactH  = 102.0
 	drawerExpandedH = 300.0
 	drawerTabW      = 150.0
@@ -30,10 +31,12 @@ const (
 	panelFooterH    = 62.0
 )
 
-// DrawerCompactHeight and DrawerExpandedHeight are exported so pkg/app can
-// derive the map's camera-visible height (spec §6) from the same numbers the
-// drawer itself draws at, rather than duplicating them.
+// DrawerHiddenHeight, DrawerCompactHeight and DrawerExpandedHeight are
+// exported so pkg/app can derive the map's camera-visible height (spec §6)
+// from the same numbers the drawer itself draws at, rather than duplicating
+// them.
 const (
+	DrawerHiddenHeight   = drawerHiddenH
 	DrawerCompactHeight  = drawerCompactH
 	DrawerExpandedHeight = drawerExpandedH
 )
@@ -84,6 +87,11 @@ type handles struct {
 	endTurn          *widget.Button
 	drawerTab        *widget.Button
 	drawerMore       *widget.Button
+	// drawerBar and drawerBarEvent are the hidden-mode full-width bar and its
+	// left-hand clickable event text; nil in compact/expanded mode, where the
+	// edge tab (drawerTab/drawerMore above) is what tests and refreshes reach.
+	drawerBar      *widget.Container
+	drawerBarEvent *widget.Button
 	// notesArea is the Field Notes drawer's TextArea. It carries the reader's
 	// scroll position, so tests use this handle to prove a hover-driven
 	// Update did not discard and recreate it (see refreshTarget).

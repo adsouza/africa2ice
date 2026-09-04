@@ -7,6 +7,7 @@ import (
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/adsouza/africa2ice/pkg/render"
 	"github.com/ebitenui/ebitenui/widget"
+	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
 const drawerEventLines = 2
@@ -32,16 +33,27 @@ func eventLine(event gameapi.Event) string {
 	return fmt.Sprintf("T%d · %s · %s", event.Turn, event.Kind, event.Summary)
 }
 
-// truncateRunes returns value unchanged when it has at most limit runes, and
-// otherwise the first limit-1 runes plus an ellipsis. The hidden drawer tab
-// sits in a fixed-width RowLayout that neither wraps nor clips, so a long
-// event summary must be shortened before it reaches the button label.
-func truncateRunes(value string, limit int) string {
-	runes := []rune(value)
-	if len(runes) <= limit {
+// truncateToWidth returns value unchanged when it already fits maxWidthPx
+// against face, and otherwise the longest rune prefix (plus an ellipsis)
+// that does. The hidden drawer bar spans the full map width and its event
+// text shares that width with the notes control, so the cap has to reflect
+// actual glyph widths rather than a fixed rune count that was only ever
+// correct for one control layout.
+func truncateToWidth(value string, maxWidthPx float64, face *text.Face) string {
+	if maxWidthPx <= 0 {
+		return ""
+	}
+	if width, _ := text.Measure(value, *face, 0); width <= maxWidthPx {
 		return value
 	}
-	return string(runes[:limit-1]) + "…"
+	runes := []rune(value)
+	for n := len(runes) - 1; n > 0; n-- {
+		candidate := string(runes[:n]) + "…"
+		if width, _ := text.Measure(candidate, *face, 0); width <= maxWidthPx {
+			return candidate
+		}
+	}
+	return "…"
 }
 
 // newestEvents returns up to limit events, newest first.
@@ -53,7 +65,9 @@ func newestEvents(events []gameapi.Event, limit int) []gameapi.Event {
 	return result
 }
 
-// drawerHeight is the drawer's DIP height for a mode; hidden is the tab only.
+// drawerHeight is the drawer's DIP height for a mode; hidden is the
+// full-width bar rather than nothing, so the camera and tile picking still
+// leave room for it (spec §6).
 func drawerHeight(mode NotesMode) float64 {
 	switch mode {
 	case NotesCompact:
@@ -61,35 +75,23 @@ func drawerHeight(mode NotesMode) float64 {
 	case NotesExpanded:
 		return drawerExpandedH
 	default:
-		return 0
+		return drawerHiddenH
 	}
 }
 
 // buildDrawer places the Field Notes drawer over the bottom of the map
-// (spec §4) with its edge tab, or just the tab when hidden.
+// (spec §4) with its edge tab, or the full-width hidden bar in its place
+// when hidden.
 func (p *Panel) buildDrawer(state State) widget.PreferredSizeLocateableWidget {
 	t := p.theme
+	events := newestEvents(state.Frame.Events, drawerEventLines)
+	if state.NotesMode == NotesHidden {
+		return p.buildHiddenDrawerBar(state, events)
+	}
 	height := drawerHeight(state.NotesMode)
 	root := widget.NewContainer(widget.ContainerOpts.Layout(fixedLayout{}),
 		widget.ContainerOpts.WidgetOpts(widget.WidgetOpts.LayoutData(p.rect(mapLeft, mapBottom-height-drawerTabH, mapRight-mapLeft, height+drawerTabH))))
 	tabRow := t.rowOf(4, widget.WidgetOpts.LayoutData(p.rect(mapRight-2*drawerTabW-8, mapBottom-height-drawerTabH, 2*drawerTabW, drawerTabH)))
-	events := newestEvents(state.Frame.Events, drawerEventLines)
-	if state.NotesMode == NotesHidden {
-		border, textColor := colorGoldDeep, colorGoldDeep
-		label := "▲ notes · F"
-		if state.Note.Celebration {
-			border, textColor = colorGold, colorGold
-			label = "BREAKTHROUGH · " + label
-		}
-		if len(events) > 0 {
-			label += "  ·  " + truncateRunes(eventLine(events[0]), 42)
-		}
-		tab := t.button(label, 9, border, textColor, func() { p.emit(Intent{Kind: IntentSetNotesMode, Notes: NotesCompact}) })
-		p.handles.drawerTab = tab
-		tabRow.AddChild(tab)
-		root.AddChild(tabRow)
-		return root
-	}
 	moreLabel, moreMode := "▲ more", NotesExpanded
 	if state.NotesMode == NotesExpanded {
 		moreLabel, moreMode = "▼ less", NotesCompact
@@ -143,4 +145,83 @@ func (p *Panel) buildDrawer(state State) widget.PreferredSizeLocateableWidget {
 	}
 	root.AddChild(body)
 	return root
+}
+
+// hiddenBarControlLabel is the always-present right-hand control on the
+// hidden drawer bar. Unlike the old edge tab it never carries the event or
+// the BREAKTHROUGH marker — both now belong to the event button on the left
+// — so its width is fixed and known up front, which is what
+// hiddenBarEventBudgetPx below subtracts from the full map width.
+const hiddenBarControlLabel = "▲ notes · F"
+
+// hiddenBarPaddingDIP and hiddenBarSpacingDIP size the bar's own RowLayout,
+// so the event-text width budget can subtract them precisely instead of
+// guessing at a generous constant.
+const (
+	hiddenBarPaddingDIP = 8.0
+	hiddenBarSpacingDIP = 8.0
+)
+
+// buildHiddenDrawerBar is the hidden-mode replacement for the small
+// right-aligned edge tab: a full-width single-line bar sharing the drawer's
+// left edge, so it can show a whole event line rather than a 42-rune
+// fragment. The newest event sits on the left as its own button (clicking
+// anywhere on the bar reopens the drawer, so the event text has to be
+// clickable too, not a label); the notes control stays on the right.
+func (p *Panel) buildHiddenDrawerBar(state State, events []gameapi.Event) widget.PreferredSizeLocateableWidget {
+	t := p.theme
+	background, accent := colorDrawer, colorGoldDeep
+	if state.Note.Celebration {
+		background, accent = colorCelebrate, colorGold
+	}
+	open := func() { p.emit(Intent{Kind: IntentSetNotesMode, Notes: NotesCompact}) }
+
+	bar := widget.NewContainer(
+		widget.ContainerOpts.Layout(widget.NewRowLayout(
+			widget.RowLayoutOpts.Direction(widget.DirectionHorizontal),
+			widget.RowLayoutOpts.Spacing(t.px(hiddenBarSpacingDIP)),
+			widget.RowLayoutOpts.Padding(t.insets(2, hiddenBarPaddingDIP, hiddenBarPaddingDIP, 2)),
+		)),
+		widget.ContainerOpts.BackgroundImage(t.solid(background)),
+		widget.ContainerOpts.WidgetOpts(widget.WidgetOpts.LayoutData(
+			p.rect(mapLeft, mapBottom-drawerHiddenH, mapRight-mapLeft, drawerHiddenH))),
+	)
+
+	label := ""
+	if state.Note.Celebration {
+		label = "BREAKTHROUGH"
+	}
+	if len(events) > 0 {
+		truncated := truncateToWidth(eventLine(events[0]), p.hiddenBarEventBudgetPx(t), t.face(9))
+		if label != "" {
+			label += " · " + truncated
+		} else {
+			label = truncated
+		}
+	}
+	event := t.button(label, 9, accent, accent, func() { open() })
+	event.GetWidget().LayoutData = widget.RowLayoutData{Stretch: true}
+	p.handles.drawerBarEvent = event
+
+	control := t.button(hiddenBarControlLabel, 9, colorGoldDeep, colorGoldDeep, func() { open() })
+	control.GetWidget().LayoutData = widget.RowLayoutData{Position: widget.RowLayoutPositionEnd}
+	p.handles.drawerTab = control
+
+	bar.AddChild(event, control)
+	p.handles.drawerBar = bar
+	return bar
+}
+
+// hiddenBarEventBudgetPx is the render-pixel width left for the hidden bar's
+// event text once the fixed-label control, the row's own spacing, and its
+// padding are subtracted from the full map width. Computing it rather than
+// guessing means a font, control-label, or scale change cannot silently
+// start clipping the control off the right edge.
+func (p *Panel) hiddenBarEventBudgetPx(t *theme) float64 {
+	controlWidth, _ := text.Measure(hiddenBarControlLabel, *t.face(9), 0)
+	padding := t.insets(3, 8, 8, 3) // matches theme.button's TextPadding
+	controlWidth += float64(padding.Left + padding.Right + 2*t.px(1))
+	total := float64(t.px(mapRight - mapLeft))
+	reserve := controlWidth + float64(t.px(hiddenBarSpacingDIP)) + float64(2*t.px(hiddenBarPaddingDIP))
+	return total - reserve
 }

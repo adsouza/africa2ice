@@ -12,6 +12,7 @@ import (
 	"github.com/ebitenui/ebitenui/input"
 	"github.com/ebitenui/ebitenui/widget"
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
 func testFrame(bands int) *gameapi.Frame {
@@ -774,30 +775,72 @@ func TestDrawerHasThreeStatesAndClickableEvents(t *testing.T) {
 	}
 	state.NotesMode = NotesHidden
 	panel.Update(state)
-	if panel.handles.drawerTab.Text().Label != "▲ notes · F  ·  T12 · Migration · Band 1 migrated again" {
-		t.Fatalf("hidden tab = %q, want newest event retained", panel.handles.drawerTab.Text().Label)
+	if panel.handles.drawerTab.Text().Label != "▲ notes · F" {
+		t.Fatalf("hidden bar control = %q, want the plain control label now that the event moved to its own button", panel.handles.drawerTab.Text().Label)
+	}
+	if panel.handles.drawerBarEvent == nil || panel.handles.drawerBarEvent.Text().Label != "T12 · Migration · Band 1 migrated again" {
+		t.Fatalf("hidden bar event button = %+v, want the newest event retained", panel.handles.drawerBarEvent)
 	}
 	if panel.handles.drawerMore != nil || len(panel.handles.events) != 0 {
 		t.Fatal("hidden drawer still shows body controls")
 	}
 }
 
-func TestHiddenTabTruncatesLongEventsAndShowsBreakthrough(t *testing.T) {
+// TestHiddenDrawerSpansTheMapWidth covers D1: the hidden drawer is a
+// full-width bar along the bottom of the map, not a small corner tab, so the
+// collapsed state shares the drawer's left edge and can show a whole event
+// line. Both the event text and the notes control open the drawer.
+func TestHiddenDrawerSpansTheMapWidth(t *testing.T) {
 	frame := testFrame(1)
-	frame.Events = []gameapi.Event{{Turn: 12, Kind: gameapi.EventMigration, Summary: strings.Repeat("x", 70)}}
+	frame.Events = []gameapi.Event{{Turn: 12, Kind: gameapi.EventMigration, Summary: "Band 1 migrated"}}
 	panel := New()
 	state := testState(frame, 1)
 	state.NotesMode = NotesHidden
 	panel.Update(state)
-	label := panel.handles.drawerTab.Text().Label
-	parts := strings.SplitN(label, "  ·  ", 2)
-	if len(parts) != 2 || !strings.HasSuffix(parts[1], "…") || len([]rune(parts[1])) != 42 {
-		t.Fatalf("hidden tab with long event = %q, want a 42-rune truncated event part ending in an ellipsis", label)
+	screen := ebiten.NewImage(1280, 720)
+	panel.Draw(screen)
+	screen.Deallocate()
+
+	want := image.Rectangle(panel.rect(mapLeft, mapBottom-drawerHiddenH, mapRight-mapLeft, drawerHiddenH))
+	if got := panel.handles.drawerBar.GetWidget().Rect; got != want {
+		t.Fatalf("hidden bar rect = %v, want %v (spanning the full map width)", got, want)
+	}
+	if got, want := panel.handles.drawerBar.GetWidget().Rect.Dy(), panel.theme.px(drawerHiddenH); got != want {
+		t.Fatalf("hidden bar height = %d render px, want %d", got, want)
+	}
+	if panel.handles.drawerBarEvent == nil {
+		t.Fatal("hidden bar has no clickable event text")
+	}
+	panel.handles.drawerBarEvent.Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentSetNotesMode || intents[0].Notes != NotesCompact {
+		t.Fatalf("clicking the hidden bar's event text = %+v, want IntentSetNotesMode(NotesCompact)", intents)
+	}
+	panel.handles.drawerTab.Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentSetNotesMode || intents[0].Notes != NotesCompact {
+		t.Fatalf("clicking the hidden bar's control = %+v, want IntentSetNotesMode(NotesCompact)", intents)
+	}
+}
+
+func TestHiddenTabTruncatesLongEventsAndShowsBreakthrough(t *testing.T) {
+	frame := testFrame(1)
+	frame.Events = []gameapi.Event{{Turn: 12, Kind: gameapi.EventMigration, Summary: strings.Repeat("x", 300)}}
+	panel := New()
+	state := testState(frame, 1)
+	state.NotesMode = NotesHidden
+	panel.Update(state)
+	label := panel.handles.drawerBarEvent.Text().Label
+	full := eventLine(frame.Events[0])
+	if !strings.HasSuffix(label, "…") || len([]rune(label)) >= len([]rune(full)) {
+		t.Fatalf("hidden bar event with a long summary = %q, want it shortened and ending in an ellipsis", label)
+	}
+	budget := panel.hiddenBarEventBudgetPx(panel.theme)
+	if width, _ := text.Measure(label, *panel.theme.face(9), 0); width > budget {
+		t.Fatalf("hidden bar event width = %.1f, want at most the %.1f px budget left after the notes control", width, budget)
 	}
 	state.Note.Celebration = true
 	panel.Update(state)
-	if got := panel.handles.drawerTab.Text().Label; !strings.HasPrefix(got, "BREAKTHROUGH · ") {
-		t.Fatalf("celebration hidden tab = %q, want the BREAKTHROUGH prefix", got)
+	if got := panel.handles.drawerBarEvent.Text().Label; !strings.HasPrefix(got, "BREAKTHROUGH · ") {
+		t.Fatalf("celebration hidden bar event = %q, want the BREAKTHROUGH prefix", got)
 	}
 }
 

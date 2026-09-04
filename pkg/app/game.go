@@ -675,7 +675,7 @@ func (g *Game) mapVisibleHeight() float64 {
 	case hud.NotesExpanded:
 		return 626 - hud.DrawerExpandedHeight
 	default:
-		return 626
+		return 626 - hud.DrawerHiddenHeight
 	}
 }
 

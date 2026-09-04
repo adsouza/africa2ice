@@ -47,7 +47,7 @@ func TestCameraStepsEachUpdateAndTracksTheDrawer(t *testing.T) {
 		t.Fatalf("visible height with expanded drawer = %.0f", game.mapVisibleHeight())
 	}
 	game.notesMode = hud.NotesHidden
-	if game.mapVisibleHeight() != 626 {
+	if game.mapVisibleHeight() != 626-hud.DrawerHiddenHeight {
 		t.Fatalf("visible height with hidden drawer = %.0f", game.mapVisibleHeight())
 	}
 }
