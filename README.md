@@ -67,8 +67,15 @@ Current controls:
   The browser lists Manual 1–3, Quick Save, and rolling Auto 1–3 together.
 
 Victory, extinction, and turn-400 dispersal failure open a campaign epilogue with final
-population, destination, and geographic-breadth results. Planning then stops, but Ctrl/Cmd+S can
-still save the final state. Click **New Campaign** or press N to begin again with a fresh world.
+population, destination, and geographic-breadth results. The dialog is a true modal window that
+blocks every click to the chrome beneath it — the band chips, checklist rows, and drawer — not just
+the planning commands they would have sent, and every checklist action control (Move, Research,
+Workforce) is disabled rather than left live and silently doing nothing. Planning then stops, but
+Ctrl/Cmd+S can still save the final state. Click **New Campaign** or press N to begin again with a
+fresh world.
+
+A band that has researched every technology shows its Research row as done — a green header and
+"All technologies learned" — instead of reading as an outstanding to-do forever.
 
 Desktop and web builds automatically resume the newest committed Quick or Auto 1–3 save on their
 next launch; manual slots remain explicit checkpoints. If the window is closed while a quick-save is

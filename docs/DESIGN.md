@@ -5675,7 +5675,14 @@ one/two-to-four/five-destination breadth label. Its panel is confined to the top
 centred on that area's own centre, rather than the screen, so it never runs under the right-hand
 chrome column. The map-corner Overview/Focus camera toggle is hidden for as long as the dialog is up,
 since the two would otherwise overlap. It blocks every planning command while leaving
-Ctrl/Cmd+S available for preserving the final state. Reopening a session that quit with the dialog
+Ctrl/Cmd+S available for preserving the final state. The dialog is a genuine modal `widget.Window` in
+the chrome layer, not a plain button drawn over the terminal presentation: a modal window's
+full-screen input layer wins over every other elevated layer beneath it, so **New Campaign** always
+receives the click regardless of what else is on screen (an expanded Field Notes drawer, the chip
+overflow list, an open checklist row) instead of losing it to whichever widget happens to sit above
+it in the tree. Every checklist action control also goes visibly dead once the campaign is no
+longer `Ongoing` — see "THIS TURN checklist" below — so nothing on the panel looks live and silently
+does nothing. Reopening a session that quit with the dialog
 showing lands on the title scene first; the title takes precedence and suppresses the end scene
 underneath it, so the player sees one dialog rather than two stacked on top of each other, and the
 end scene reappears as soon as Continue leaves the title. A prominent **New Campaign** button and the
@@ -7017,7 +7024,7 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   | Row | Done when | Summary |
   |---|---|---|
   | Move | `SpatialActionUsed` ∨ `HasQueuedMigration` ∨ `HasInterbreedTarget` | queued tile's biome and compass direction; "Split queued"; "Interbreeding with B*n*"; otherwise "Choose a destination" |
-  | Research | `HasResearchTarget` | `Firecraft 66/80 · +5.8/turn`; otherwise "No target · choose one" |
+  | Research | `HasResearchTarget` ∨ every `gameapi.Tech` acquired | `Firecraft 66/80 · +5.8/turn`; "All technologies learned" once every technology is acquired with no active target; otherwise "No target · choose one" |
   | Workforce | optional; never blocks | collapsed role summary `F 35 · H 30 · T 15 · M 5 · S 15` (Foraging, Hunting and Fishing, Toolcraft, Megafauna Tracking, Shelter); "Unapplied changes" while the draft is dirty |
 
   The Move predicate is the same one chip coloring reads, so a chip and its row can never disagree.
@@ -7078,6 +7085,14 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   move` (or "1 band" for the singular case); a second click in the same turn, or `Space` at any
   time, ends the turn anyway and the label becomes `End turn now · Space` while armed. The button is
   hidden once the campaign is no longer `Ongoing`.
+- **Campaign over:** once `Frame.CampaignResult` is no longer `Ongoing`, `hud.State.CampaignOver`
+  disables every band-action control instead of leaving it live to silently refuse the click: the
+  Move row's `Move here`/`Best tile`/`Split`/`Interbreed` buttons, every Research technology
+  button, and the Workforce row's sliders, `−`/`+`, `Apply`, and `Discard`. The rows still show
+  their data — the last accepted allocation, research progress, the HERE/TARGET comparison — only
+  the controls go dead, and `CampaignOver` participates in the panel's ordinary structural
+  comparison like every other `hud.State` field, so no refresh path needs to know about it
+  separately.
 
 Display current population, `Health`, `StoredFood`, and environmental values from the accepted
 frame. The panel-header population is a display-only sum over at most `MaxBands = 256` band values;

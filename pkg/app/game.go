@@ -207,6 +207,15 @@ func (g *Game) Update() error {
 	}
 	g.stepCamera()
 	intents := g.panel.Update(g.hudState())
+	// One record per left-button press (never per frame): the cursor
+	// position, whether the chrome claimed the pointer, and how many
+	// intents this tick produced. This is the seam that let the New
+	// Campaign click go undiagnosable from a session log — the gap between
+	// a pointer going down and an action dispatch.
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		cursorX, cursorY := ebiten.CursorPosition()
+		g.logSession.LogUIPointer(cursorX, cursorY, g.panel.Hovered(), len(intents))
+	}
 	// Overlay intents are handled in every scene: the panel column's own
 	// buttons are gameplay-only, but a modal window (title/menu/storage/
 	// settings, or the shortcut sheet) blocks pointer input to whatever sits

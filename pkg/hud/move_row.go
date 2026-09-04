@@ -109,7 +109,7 @@ func (p *Panel) buildMoveBody(state State, band *gameapi.Band) widget.PreferredS
 	done := ui.MoveDone(*band)
 	// A computer-controlled selection is read only: the row still shows the
 	// HERE/TARGET comparison, but none of its four actions may be sent.
-	readOnly := band.Species != gameapi.HomoSapiens
+	readOnly := band.Species != gameapi.HomoSapiens || state.CampaignOver
 	canMove := !done && !readOnly && target.Reachable && source != ui.TargetQueued
 	moveHere := t.button("Move here · Enter", 10.5, colorCyan, colorCyan, func() { p.emit(Intent{Kind: IntentMoveTo, Tile: targetTile}) })
 	moveHere.GetWidget().Disabled = !canMove
@@ -218,7 +218,7 @@ func (p *Panel) refreshTarget(state State) bool {
 	}
 
 	done := ui.MoveDone(*band)
-	readOnly := band.Species != gameapi.HomoSapiens
+	readOnly := band.Species != gameapi.HomoSapiens || state.CampaignOver
 	canMove := !done && !readOnly && target.Reachable && source != ui.TargetQueued
 	p.handles.moveHere.GetWidget().Disabled = !canMove
 

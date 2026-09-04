@@ -76,9 +76,17 @@ type State struct {
 	Camera          CameraState
 	ShortcutsOpen   bool
 	Overlay         OverlayState
-	Ending          render.EndScene
-	Viewport        render.Viewport
-	Transform       render.PresentationTransform
+	// CampaignOver is true once the campaign has ended (frame.CampaignResult
+	// != gameapi.Ongoing): every band action control goes dead — the Move
+	// row's four buttons, every research technology button, and the
+	// Workforce row's sliders, −/+, Apply and Discard — while the rows keep
+	// showing their data (spec §5.3, Wave I item I3). It participates in the
+	// ordinary structural comparison like every other field above, so no
+	// refresh path needs to know about it separately.
+	CampaignOver bool
+	Ending       render.EndScene
+	Viewport     render.Viewport
+	Transform    render.PresentationTransform
 }
 
 // selectedBand returns the selected band within the frame, or nil.

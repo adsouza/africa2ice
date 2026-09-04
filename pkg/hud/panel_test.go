@@ -1559,3 +1559,110 @@ func TestShortcutSheetLinesFitTheWindow(t *testing.T) {
 		}
 	}
 }
+
+// campaignControlTestFrame builds a one-band frame where every action
+// control this test walks would be enabled absent CampaignOver: a
+// non-passage migration candidate (Best/Split), an interbreed candidate
+// (Interbreed), and one available, unacquired research option (Firecraft) —
+// testFrame already sets the last of these. Every other research slot stays
+// unavailable, so it is disabled either way; recorded separately as
+// wantDisabledWithoutCampaignOver so the false-case assertion does not
+// confuse "disabled because unavailable" with "disabled because the
+// campaign ended".
+func campaignControlTestFrame() *gameapi.Frame {
+	frame := testFrame(1)
+	frame.Bands[0].InterbreedCandidateIDs = []gameapi.BandID{2}
+	return frame
+}
+
+// TestCampaignOverDisablesEveryActionControl covers Wave I item I3: with the
+// campaign over, the Move row's four buttons, every research technology
+// button, and the Workforce row's sliders/−/+/Apply/Discard must all go
+// dead — controls that look live and do nothing are worse than disabled
+// ones. With the campaign ongoing, the same controls must be enabled
+// wherever they would normally be (i.e. unaffected by CampaignOver).
+func TestCampaignOverDisablesEveryActionControl(t *testing.T) {
+	for _, campaignOver := range []bool{true, false} {
+		frame := campaignControlTestFrame()
+
+		// --- Move row ---
+		panel := New()
+		state := testState(frame, 1)
+		state.OpenRow = ui.RowMove
+		state.CampaignOver = campaignOver
+		panel.Update(state)
+		moveButtons := map[string]*widget.Button{
+			"best": panel.handles.best, "split": panel.handles.split, "interbreed": panel.handles.interbreed,
+		}
+		for name, button := range moveButtons {
+			if button == nil {
+				t.Fatalf("campaignOver=%v: Move row button %q was not built", campaignOver, name)
+			}
+			got := button.GetWidget().Disabled
+			want := true // done=false, readOnly=species-sapiens||campaignOver, candidates present: enabled only when campaign is not over
+			if !campaignOver {
+				want = false
+			}
+			if got != want {
+				t.Fatalf("campaignOver=%v: Move row button %q disabled = %v, want %v", campaignOver, name, got, want)
+			}
+		}
+		if moveHere := panel.handles.moveHere; moveHere == nil || !moveHere.GetWidget().Disabled {
+			t.Fatalf("campaignOver=%v: Move here should stay disabled (no target chosen) regardless of CampaignOver", campaignOver)
+		}
+
+		// --- Research row ---
+		panel = New()
+		state = testState(frame, 1)
+		state.OpenRow = ui.RowResearch
+		state.CampaignOver = campaignOver
+		panel.Update(state)
+		for technology := gameapi.Tech(0); technology < gameapi.TechCount; technology++ {
+			button := panel.handles.research[technology]
+			if button == nil {
+				t.Fatalf("campaignOver=%v: research button %d was not built", campaignOver, technology)
+			}
+			option := frame.Bands[0].ResearchOptions[technology]
+			wantDisabledWithoutCampaignOver := option.Acquired || !option.Available
+			want := true
+			if !campaignOver {
+				want = wantDisabledWithoutCampaignOver
+			}
+			if got := button.GetWidget().Disabled; got != want {
+				t.Fatalf("campaignOver=%v: research button %d disabled = %v, want %v", campaignOver, technology, got, want)
+			}
+		}
+
+		// --- Workforce row ---
+		panel = New()
+		state = testState(frame, 1)
+		state.OpenRow = ui.RowWorkforce
+		state.CampaignOver = campaignOver
+		state.Workforce = WorkforceDraft{Visible: true, Population: 60, AllocationBP: frame.Bands[0].AllocationBP, Dirty: true, Valid: true}
+		panel.Update(state)
+		h := panel.handles.workforce
+		for role := gameapi.WorkforceRole(0); role < gameapi.AssignmentCount; role++ {
+			if h.sliders[role] == nil || h.minus[role] == nil || h.plus[role] == nil {
+				t.Fatalf("campaignOver=%v: workforce role %d controls were not built", campaignOver, role)
+			}
+			if got := h.sliders[role].GetWidget().Disabled; got != campaignOver {
+				t.Fatalf("campaignOver=%v: workforce slider %d disabled = %v, want %v", campaignOver, role, got, campaignOver)
+			}
+			if got := h.minus[role].GetWidget().Disabled; got != campaignOver {
+				t.Fatalf("campaignOver=%v: workforce − %d disabled = %v, want %v", campaignOver, role, got, campaignOver)
+			}
+			if got := h.plus[role].GetWidget().Disabled; got != campaignOver {
+				t.Fatalf("campaignOver=%v: workforce + %d disabled = %v, want %v", campaignOver, role, got, campaignOver)
+			}
+		}
+		if h.apply == nil || h.discard == nil {
+			t.Fatalf("campaignOver=%v: Apply/Discard were not built", campaignOver)
+		}
+		if got := h.apply.GetWidget().Disabled; got != campaignOver {
+			t.Fatalf("campaignOver=%v: Apply disabled = %v, want %v", campaignOver, got, campaignOver)
+		}
+		if got := h.discard.GetWidget().Disabled; got != campaignOver {
+			t.Fatalf("campaignOver=%v: Discard disabled = %v, want %v", campaignOver, got, campaignOver)
+		}
+	}
+}

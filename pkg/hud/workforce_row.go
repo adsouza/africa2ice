@@ -135,6 +135,19 @@ func (p *Panel) buildWorkforceBody(state State, band *gameapi.Band) widget.Prefe
 			p.handles.workforce.plus[role].GetWidget().Disabled = true
 		}
 	}
+	// Once the campaign is over there is nothing left to apply (spec §5.3,
+	// Wave I item I3): every slider and −/+ goes dead exactly like an
+	// archaic band's read-only allocation, alongside Apply/Discard, which
+	// refreshWorkforce below disables from state.CampaignOver on every call
+	// (including this one) so a later Workforce-only refresh cannot
+	// re-enable them.
+	if state.CampaignOver || band.Species == gameapi.ArchaicHominin {
+		for role := range p.handles.workforce.sliders {
+			p.handles.workforce.sliders[role].GetWidget().Disabled = true
+			p.handles.workforce.minus[role].GetWidget().Disabled = true
+			p.handles.workforce.plus[role].GetWidget().Disabled = true
+		}
+	}
 	p.refreshWorkforce(state)
 	return body
 }
@@ -181,7 +194,7 @@ func (p *Panel) refreshWorkforce(state State) {
 	} else {
 		h.total.SetColor(colorRed)
 	}
-	h.apply.GetWidget().Disabled = !draft.Dirty || !draft.Valid
-	h.discard.GetWidget().Disabled = !draft.Dirty
+	h.apply.GetWidget().Disabled = !draft.Dirty || !draft.Valid || state.CampaignOver
+	h.discard.GetWidget().Disabled = !draft.Dirty || state.CampaignOver
 	refreshWorkforceHeader(h.header, draft)
 }

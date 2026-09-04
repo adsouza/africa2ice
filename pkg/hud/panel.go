@@ -144,8 +144,12 @@ type handles struct {
 	overlayButtons []*widget.Button
 	deleteButtons  []*widget.Button
 	newCampaign    *widget.Button
-	volumeSlider   *widget.Slider
-	volumeLabel    *widget.Text
+	// endScene is the terminal dialog's modal window (see buildEndScene):
+	// closed alongside overlay and bandList on every rebuild so a stale
+	// window never lingers over a fresh campaign.
+	endScene     *widget.Window
+	volumeSlider *widget.Slider
+	volumeLabel  *widget.Text
 }
 
 func New() *Panel {
@@ -299,6 +303,10 @@ func (p *Panel) rebuild(state State) {
 		p.handles.bandList.Close()
 		p.handles.bandList = nil
 	}
+	if p.handles.endScene != nil {
+		p.handles.endScene.Close()
+		p.handles.endScene = nil
+	}
 	p.root.RemoveChildren()
 	p.handles = handles{chips: map[uint32]*widget.Button{}, traits: map[gameapi.HeritableTrait]*widget.Button{}}
 	if state.Frame == nil {
@@ -309,9 +317,7 @@ func (p *Panel) rebuild(state State) {
 	if state.Camera.FocusAvailable && !state.Ending.Visible {
 		p.root.AddChild(p.buildCameraButton(state))
 	}
-	if ending := p.buildEndScene(state); ending != nil {
-		p.root.AddChild(ending)
-	}
+	p.buildEndScene(state)
 	p.buildOverlay(state)
 }
 

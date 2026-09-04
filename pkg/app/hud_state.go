@@ -34,6 +34,7 @@ func (g *Game) hudState() hud.State {
 		NotesMode:       g.notesMode,
 		Guide:           g.guide,
 		ShortcutsOpen:   g.shortcutsOpen,
+		CampaignOver:    frame != nil && frame.CampaignResult != gameapi.Ongoing,
 		Ending:          g.endScene(frame),
 		Viewport:        g.viewport,
 		Transform:       render.FitPresentation(g.viewport.RenderWidthPx, g.viewport.RenderHeightPx),

@@ -64,6 +64,19 @@ func TestGuideSkipsAlreadySatisfiedSteps(t *testing.T) {
 	}
 }
 
+// TestGuideResearchStepSatisfiedByACompletedTechTree covers Wave I item I4:
+// ResearchDone now also counts a band with nothing left to learn as done, so
+// Observe must advance the guide's Research step past a band that has
+// acquired every technology even though it has no HasResearchTarget.
+func TestGuideResearchStepSatisfiedByACompletedTechTree(t *testing.T) {
+	guide := GuideState{Step: GuideResearch}
+	band := allTechAcquiredBand()
+	band.HasQueuedMigration = true
+	if guide = guide.Observe(&band); guide.Step != GuideWorkforce {
+		t.Fatalf("guide landed on %v after Observe on a fully-researched band, want GuideWorkforce", guide.Step)
+	}
+}
+
 func TestGuideCopyAndProgress(t *testing.T) {
 	steps := []GuideStep{GuideMove, GuideResearch, GuideWorkforce, GuideEndTurn}
 	for index, step := range steps {

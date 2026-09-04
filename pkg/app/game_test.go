@@ -1024,6 +1024,13 @@ func TestDrawPaintsChromeAndMapTogether(t *testing.T) {
 	for i := 0; i < render.CameraTransitionTicks+2; i++ {
 		game.Update()
 	}
+	// Settle the chrome too, not just the camera. ebitenui holds its hover and
+	// pointer state in package globals, so the first Draw of a fresh Panel can
+	// still be reading what an earlier test left there; it corrects itself on
+	// the following frame. The invariant under test is about the steady state,
+	// so establish one before sampling rather than measuring the settle.
+	game.Draw(screen)
+	game.Update()
 	game.Draw(screen)
 	paints := game.scene.Paints
 

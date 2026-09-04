@@ -154,6 +154,40 @@ func (session *Session) LogActionDispatch(action ui.Action) {
 	session.logger.Info("action.dispatch", attributes...)
 }
 
+// LogUIIntent records one bounded-scalar record per intent the host actually
+// handles — the gap between a pointer going down and an action dispatch that
+// otherwise left the New Campaign click undiagnosable from a session log.
+// attributes must be the payload fields that kind actually uses (band, tile,
+// row, tech, role, slot, delta — only the relevant ones), each a bounded
+// scalar, never a frame, a slice, or anything per-frame.
+func (session *Session) LogUIIntent(kind string, attributes ...any) {
+	if session == nil {
+		return
+	}
+	values := append([]any{"kind", kind}, attributes...)
+	session.logger.Info("ui.intent", values...)
+}
+
+// LogUIIntentRefused records an intent the host deliberately dropped (for
+// example a band action on a terminal campaign), so a silent refusal is
+// visible in the log instead of looking like a swallowed click.
+func (session *Session) LogUIIntentRefused(kind, reason string) {
+	if session == nil {
+		return
+	}
+	session.logger.Info("ui.intent_refused", "kind", kind, "reason", reason)
+}
+
+// LogUIPointer records one left-button press: the cursor position, whether
+// the chrome claimed the pointer, and how many intents that tick produced.
+// It fires only on inpututil.IsMouseButtonJustPressed, never per frame.
+func (session *Session) LogUIPointer(x, y int, overChrome bool, intents int) {
+	if session == nil {
+		return
+	}
+	session.logger.Info("ui.pointer", "x", x, "y", y, "over_chrome", overChrome, "intents", intents)
+}
+
 func commandLogAttributes(command gameapi.Command) []any {
 	attributes := []any{"command", fmtCommandKind(command), "band_id", uint64(command.ActingBandID())}
 	switch value := command.(type) {

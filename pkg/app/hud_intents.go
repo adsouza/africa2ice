@@ -9,7 +9,45 @@ import (
 // handleIntents maps chrome clicks onto the same guarded methods hotkeys use.
 func (g *Game) handleIntents(intents []hud.Intent) {
 	for _, intent := range intents {
+		g.logSession.LogUIIntent(intent.Kind.String(), uiIntentLogAttributes(intent)...)
 		g.handleIntent(intent)
+	}
+}
+
+// uiIntentLogAttributes returns only the payload fields the given kind
+// actually uses (see handleIntent/handleOverlayIntent below), each a
+// bounded scalar, for internal/adapters/logging's LogUIIntent. It must not
+// grow to include a frame, a slice, or anything per-frame.
+func uiIntentLogAttributes(intent hud.Intent) []any {
+	switch intent.Kind {
+	case hud.IntentSelectBand:
+		return []any{"band", uint64(intent.Band)}
+	case hud.IntentOpenRow:
+		return []any{"row", uint8(intent.Row)}
+	case hud.IntentSetNotesMode:
+		return []any{"notes", uint8(intent.Notes)}
+	case hud.IntentMoveTo:
+		return []any{"tile", uint64(intent.Tile)}
+	case hud.IntentInterbreed:
+		return []any{"band", uint64(intent.Band)}
+	case hud.IntentChooseResearch:
+		return []any{"tech", uint8(intent.Tech)}
+	case hud.IntentAdjustRole:
+		return []any{"role", uint8(intent.Role), "delta", intent.Delta}
+	case hud.IntentEndTurn:
+		return []any{"force", intent.Force}
+	case hud.IntentFocusTrait:
+		return []any{"trait", uint8(intent.Trait)}
+	case hud.IntentFocusEvent:
+		return []any{"event", uint8(intent.Event)}
+	case hud.IntentOpenStorage:
+		return []any{"save", intent.Save}
+	case hud.IntentSaveSlot, hud.IntentLoadSlot, hud.IntentDeleteSlot:
+		return []any{"slot", intent.Slot}
+	case hud.IntentSetVolume:
+		return []any{"volume", intent.Volume}
+	default:
+		return nil
 	}
 }
 
@@ -29,6 +67,7 @@ func bandActionIntent(kind hud.IntentKind) bool {
 
 func (g *Game) handleIntent(intent hud.Intent) {
 	if g.frame != nil && g.frame.CampaignResult != gameapi.Ongoing && bandActionIntent(intent.Kind) {
+		g.logSession.LogUIIntentRefused(intent.Kind.String(), "campaign-over")
 		return
 	}
 	switch intent.Kind {

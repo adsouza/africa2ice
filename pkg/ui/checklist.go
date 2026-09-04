@@ -21,8 +21,34 @@ func (row ChecklistRow) Title() string {
 	return [...]string{"Move", "Research", "Workforce"}[row]
 }
 
-// ResearchDone is the Research row predicate.
-func ResearchDone(band gameapi.Band) bool { return band.HasResearchTarget }
+// ResearchDone is the Research row predicate. A band with nothing left to
+// learn counts as done too (Wave I item I4): without this, a band that has
+// acquired every technology shows Research as an outstanding to-do forever —
+// the row header stays gold, DefaultOpenRow keeps landing on it, and the
+// first-turn guide's Research step never satisfies.
+func ResearchDone(band gameapi.Band) bool {
+	return band.HasResearchTarget || AllTechnologiesLearned(band)
+}
+
+// AllTechnologiesLearned reports whether band has acquired every
+// gameapi.Tech below gameapi.TechCount. It reads
+// band.ResearchOptions[tech].Acquired rather than decoding band.AcquiredTech's
+// bitmask: pkg/gameapi/frame.go documents ResearchOptions as "a projected
+// view of the authoritative prerequisite DAG", and
+// internal/application/snapshot.go fills both AcquiredTech and
+// ResearchOptions[tech].Acquired from the same domain bit for every band on
+// every frame (live play and a loaded save alike), so either is correct here
+// — this uses ResearchOptions because the rest of this file already reads
+// through it (ResearchSummary) rather than introducing bitmask decoding as a
+// second convention.
+func AllTechnologiesLearned(band gameapi.Band) bool {
+	for technology := gameapi.Tech(0); technology < gameapi.TechCount; technology++ {
+		if !band.ResearchOptions[technology].Acquired {
+			return false
+		}
+	}
+	return true
+}
 
 // DefaultOpenRow is the first row that still needs a decision, falling back to
 // Move. It is recomputed on selection change, load, new campaign, and completed
@@ -67,6 +93,9 @@ func MoveSummary(frame *gameapi.Frame, band gameapi.Band) string {
 // ResearchSummary is the collapsed Research row's one-line state.
 func ResearchSummary(band gameapi.Band) string {
 	if !band.HasResearchTarget {
+		if AllTechnologiesLearned(band) {
+			return "All technologies learned"
+		}
 		return "No target · choose one"
 	}
 	option := band.ResearchOptions[band.ResearchTarget]

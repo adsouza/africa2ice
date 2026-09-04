@@ -65,7 +65,7 @@ func (p *Panel) buildResearchBody(state State, band *gameapi.Band) widget.Prefer
 			widget.ButtonOpts.ClickedHandler(func(*widget.ButtonClickedEventArgs) { p.emit(Intent{Kind: IntentChooseResearch, Tech: tech}) }),
 			widget.ButtonOpts.WidgetOpts(stretch(), widget.WidgetOpts.CursorHovered("pointer")),
 		)
-		button.GetWidget().Disabled = option.Acquired || !option.Available || band.Species != gameapi.HomoSapiens
+		button.GetWidget().Disabled = option.Acquired || !option.Available || band.Species != gameapi.HomoSapiens || state.CampaignOver
 		p.handles.research[technology] = button
 		body.AddChild(button)
 	}

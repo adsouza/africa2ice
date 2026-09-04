@@ -80,6 +80,49 @@ func TestSummariesNameTheAcceptedState(t *testing.T) {
 	}
 }
 
+// allTechAcquiredBand returns a band with every gameapi.Tech acquired in
+// ResearchOptions, and shortOneTechAcquiredBand the same but one technology
+// short — the two fixtures TestResearchDoneCountsACompletedTechTreeAsDone
+// exercises.
+func allTechAcquiredBand() gameapi.Band {
+	band := gameapi.Band{Species: gameapi.HomoSapiens}
+	for technology := gameapi.Tech(0); technology < gameapi.TechCount; technology++ {
+		band.ResearchOptions[technology] = gameapi.ResearchOption{Acquired: true}
+	}
+	return band
+}
+
+// TestResearchDoneCountsACompletedTechTreeAsDone covers Wave I item I4:
+// ui.ResearchDone(band) used to be exactly band.HasResearchTarget, so a band
+// that had learned every technology showed the Research row as an
+// outstanding to-do forever. A band with every technology acquired must now
+// report ResearchDone, AllTechnologiesLearned and the new summary; a band
+// one technology short must still report all three the old way.
+func TestResearchDoneCountsACompletedTechTreeAsDone(t *testing.T) {
+	complete := allTechAcquiredBand()
+	if !AllTechnologiesLearned(complete) {
+		t.Fatal("AllTechnologiesLearned(complete) = false, want true")
+	}
+	if !ResearchDone(complete) {
+		t.Fatal("ResearchDone(complete) = false, want true")
+	}
+	if got := ResearchSummary(complete); got != "All technologies learned" {
+		t.Fatalf("ResearchSummary(complete) = %q, want %q", got, "All technologies learned")
+	}
+
+	short := allTechAcquiredBand()
+	short.ResearchOptions[gameapi.Firecraft] = gameapi.ResearchOption{Acquired: false, Available: true}
+	if AllTechnologiesLearned(short) {
+		t.Fatal("AllTechnologiesLearned(short) = true, want false — one technology is unacquired")
+	}
+	if ResearchDone(short) {
+		t.Fatal("ResearchDone(short) = true, want false — no target and one technology unacquired")
+	}
+	if got := ResearchSummary(short); got != "No target · choose one" {
+		t.Fatalf("ResearchSummary(short) = %q, want %q", got, "No target · choose one")
+	}
+}
+
 func TestEndTurnGateOrdersHardBlocksBeforeTheSoftBlock(t *testing.T) {
 	frame := checklistFrame()
 	if gate := EndTurnGateFor(frame, true, true, false); gate.Enabled || gate.Label != "End turn · apply or discard workforce changes" {

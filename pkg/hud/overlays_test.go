@@ -139,6 +139,24 @@ func TestEndSceneShowsNewCampaignButton(t *testing.T) {
 	if panel.handles.newCampaign == nil {
 		t.Fatal("end scene has no New Campaign button")
 	}
+	// The button must read as the dialog's primary action: a filled gold
+	// idle background over dark text, the same treatment End turn gets
+	// (end_turn.go), not black text over the theme's dark button fill.
+	// Button colors have no public getter, so this checks the theme's
+	// memoized solid-fill cache the way
+	// TestHiddenBarControlMatchesTheBreakthroughAccent checks the border
+	// cache: colorGoldDeep only ever reaches t.solid (as opposed to
+	// t.bordered) from buildEndTurn's idle fill and buildEndScene's, and
+	// End turn is never built while the campaign is over.
+	sawGoldDeepFill := false
+	for key := range panel.theme.solids {
+		if key == colorGoldDeep {
+			sawGoldDeepFill = true
+		}
+	}
+	if !sawGoldDeepFill {
+		t.Fatal("New Campaign button's idle image is not the gold fill (colorGoldDeep); it should match End turn's primary treatment")
+	}
 	panel.handles.newCampaign.Click()
 	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentNewCampaign {
 		t.Fatalf("new campaign = %+v", intents)
