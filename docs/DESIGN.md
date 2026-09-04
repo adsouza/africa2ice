@@ -6983,9 +6983,11 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   completed turn's starvation/seasonal/chronic/macro/acute mortality breakdown; current stored food;
   the six heritable variants as a 2×3 grid of focus buttons, each showing its current value and the
   local pressure driving it (temperature, elevation, biome, moisture, latitude, diet), clickable to
-  open that trait's Field Note — `G` cycles the same focus by keyboard; and, for a co-located
-  sapiens selection, its eligible archaic interbreeding partners, with consequence text once one is
-  accepted.
+  open that trait's Field Note — `G` cycles the same focus by keyboard. Whichever variant's Field
+  Note is currently displayed, whether reached by click or by `G`, has its cell outlined and
+  relabeled in gold; the highlight clears once the drawer moves on to any other note (a technology,
+  an event, a band). And, for a co-located sapiens selection, its eligible archaic interbreeding
+  partners, with consequence text once one is accepted.
 - **First-turn guide card:** while not dismissed, a card sits between the details disclosure and the
   THIS TURN checklist. Its title reads `FIRST TURN · STEP N OF 4 · <STEP>` for the four numbered
   steps — Move, Research, Workforce, End turn — beside a four-segment progress bar filled up to the

@@ -92,12 +92,18 @@ type handles struct {
 	bandDetail    *widget.Text
 	detailsBody   *widget.Container
 	traits        map[gameapi.HeritableTrait]*widget.Button
-	overlay       *widget.Window
-	rowHeader     [ui.ChecklistRowCount]*widget.Button
-	moveHere      *widget.Button
-	best          *widget.Button
-	split         *widget.Button
-	interbreed    *widget.Button
+	// traitFocused is the trait cell matching state.Note.Trait when
+	// state.Note.HasTrait is true, or nil when the drawer shows no trait
+	// note (or details are collapsed). buildDetails sets it directly rather
+	// than making callers search handles.traits, since ebitenui exposes no
+	// colour getter on a built widget to verify the highlight another way.
+	traitFocused *widget.Button
+	overlay      *widget.Window
+	rowHeader    [ui.ChecklistRowCount]*widget.Button
+	moveHere     *widget.Button
+	best         *widget.Button
+	split        *widget.Button
+	interbreed   *widget.Button
 	// The TARGET column of the open Move row (moveTargetHeader,
 	// moveTargetValues, moveTargetStatus) and moveHint are refreshed in place
 	// by refreshTarget as the hover/cursor/queued target changes; nil when

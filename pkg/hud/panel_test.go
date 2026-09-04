@@ -450,6 +450,44 @@ func TestDetailsDisclosureListsTraitsAsFocusButtons(t *testing.T) {
 	}
 }
 
+// TestTraitCellHighlightsTheDisplayedNote covers the Wave G highlight: the
+// details grid marks whichever variant's Field Note is currently displayed,
+// found from state.Note itself (not pkg/app's traitFocus cursor, which means
+// "next" on one path and "current" on the other).
+func TestTraitCellHighlightsTheDisplayedNote(t *testing.T) {
+	panel := New()
+	state := testState(testFrame(1), 1)
+	state.DetailsOpen = true
+	note, ok := ui.TraitFieldNote(gameapi.PigmentationLevel, 0.4)
+	if !ok {
+		t.Fatal("TraitFieldNote(PigmentationLevel) not ok")
+	}
+	state.Note = note
+	panel.Update(state)
+	if panel.handles.traitFocused == nil || panel.handles.traitFocused != panel.handles.traits[gameapi.PigmentationLevel] {
+		t.Fatalf("traitFocused = %v, want the Pigmentation Level cell %v", panel.handles.traitFocused, panel.handles.traits[gameapi.PigmentationLevel])
+	}
+	for trait, cell := range panel.handles.traits {
+		if trait != gameapi.PigmentationLevel && cell == panel.handles.traitFocused {
+			t.Fatalf("trait %v cell wrongly shares the focused handle", trait)
+		}
+	}
+	state.Note = render.FieldNote{Topic: "FIRECRAFT"}
+	panel.Update(state)
+	if panel.handles.traitFocused != nil {
+		t.Fatalf("traitFocused = %v, want nil once the drawer shows a non-trait note", panel.handles.traitFocused)
+	}
+}
+
+func TestTraitCellColors(t *testing.T) {
+	if border, text, borderPx := traitCellColors(true); border != colorGold || text != colorGold || borderPx != 2 {
+		t.Fatalf("traitCellColors(focused) = %v, %v, %v", border, text, borderPx)
+	}
+	if border, text, borderPx := traitCellColors(false); border != colorPanelEdge || text != colorText || borderPx != 1 {
+		t.Fatalf("traitCellColors(unfocused) = %v, %v, %v", border, text, borderPx)
+	}
+}
+
 // walkDescendants visits w and, if it is a container, every descendant
 // beneath it.
 func walkDescendants(w widget.PreferredSizeLocateableWidget, visit func(widget.PreferredSizeLocateableWidget)) {

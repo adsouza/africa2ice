@@ -106,6 +106,12 @@ type FieldNote struct {
 	Hint         string
 	References   string
 	Celebration  bool
+	// Trait and HasTrait identify the heritable variant this note is about,
+	// so pkg/hud's details grid can highlight the matching cell. Only
+	// ui.TraitFieldNote sets HasTrait true; every other constructor leaves
+	// it false and clears the highlight by construction.
+	Trait    gameapi.HeritableTrait
+	HasTrait bool
 }
 
 func NewMapScene() *MapScene {

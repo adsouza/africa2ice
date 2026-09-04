@@ -69,6 +69,25 @@ func TestIntentsReuseHotkeyPaths(t *testing.T) {
 	}
 }
 
+// TestGContinuesPastAClickedVariant covers the traitFocus cursor fix: before
+// this fix, IntentFocusTrait set g.traitFocus to the trait just clicked, so
+// focusNextTraitNote's next call (G) re-displayed that same variant instead
+// of advancing — the two paths disagreed on whether traitFocus means "the
+// current one" or "the next one". Now both leave traitFocus pointing at the
+// next variant G will show.
+func TestGContinuesPastAClickedVariant(t *testing.T) {
+	stub := &gameStub{frame: migrationPreviewFrame()}
+	game := New(stub)
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentFocusTrait, Trait: gameapi.ColdAdaptation}})
+	if !game.fieldNote.HasTrait || game.fieldNote.Trait != gameapi.ColdAdaptation {
+		t.Fatalf("clicked trait note = %#v", game.fieldNote)
+	}
+	game.focusNextTraitNote()
+	if !game.fieldNote.HasTrait || game.fieldNote.Trait != gameapi.HighAltitudeAdaptation {
+		t.Fatalf("G right after a click = %#v, want it to move on to HighAltitudeAdaptation", game.fieldNote)
+	}
+}
+
 func TestHidingNotesPreservesTheLastChosenHeight(t *testing.T) {
 	game := New(&gameStub{frame: migrationPreviewFrame()})
 	game.setNotesMode(hud.NotesExpanded)

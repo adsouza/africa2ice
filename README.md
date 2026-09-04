@@ -44,8 +44,10 @@ Current controls:
   layer (cursor, then popover, then the Game Menu); N splits a band; I interbreeds with a co-located
   archaic band and J cycles the highlighted partner — while the choice is live, the Move row shows
   the focused partner's heritable traits next to the band's own; G cycles the heritable-trait Field
-  Notes; B moves to the best tile and leaves the Move row open so the chosen destination stays
-  visible; D toggles the band details disclosure; 1–9 choose a research target; M mutes; ? opens the
+  Notes, and whichever variant's cell is currently showing (clicked or reached with G) is outlined
+  and relabeled in gold until the drawer moves on to another note; B moves to the best tile and
+  leaves the Move row open so the chosen destination stays visible; D toggles the band details
+  disclosure; 1–9 choose a research target; M mutes; ? opens the
   shortcut sheet (which also documents D's global meaning and its Workforce-row override); PgUp/PgDn
   or Shift+Up/Shift+Down change the open checklist row; Ctrl+S (Cmd+S on macOS) quick-saves; F1–F3
   save Manual 1–3 and Shift+F1–F3 load them;

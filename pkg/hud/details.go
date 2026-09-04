@@ -2,12 +2,21 @@ package hud
 
 import (
 	"fmt"
+	"image/color"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/ebitenui/ebitenui/widget"
 )
 
 var traitShortNames = [gameapi.HeritableTraitCount]string{"Cold", "Altitude", "Immune", "Arid", "Pigment", "Fat"}
+
+// traitCellColors marks the variant whose Field Note is currently displayed.
+func traitCellColors(focused bool) (border, text color.RGBA, borderPx float64) {
+	if focused {
+		return colorGold, colorGold, 2
+	}
+	return colorPanelEdge, colorText, 1
+}
 
 // detailsTextWidth bounds every text line in buildDetails to the panel's
 // inner width, so the food, deaths, stored-food, and interbreeding lines
@@ -93,9 +102,25 @@ func (p *Panel) buildDetails(state State, band *gameapi.Band) widget.PreferredSi
 	)
 	for trait := gameapi.HeritableTrait(0); trait < gameapi.HeritableTraitCount; trait++ {
 		focus := trait
-		cell := t.button(fmt.Sprintf("%s %.2f · %s", traitShortNames[trait], band.HeritableState[trait], pressures[trait]), 8.5, colorPanelEdge, colorText,
-			func() { p.emit(Intent{Kind: IntentFocusTrait, Trait: focus}) })
+		focused := state.Note.HasTrait && state.Note.Trait == trait
+		border, textColor, borderPx := traitCellColors(focused)
+		width := t.px(borderPx)
+		images := &widget.ButtonImage{
+			Idle:    t.bordered(colorButtonIdle, border, width),
+			Hover:   t.bordered(colorButtonHover, border, width),
+			Pressed: t.bordered(colorButtonDown, border, width),
+		}
+		cell := widget.NewButton(
+			widget.ButtonOpts.Image(images),
+			widget.ButtonOpts.Text(fmt.Sprintf("%s %.2f · %s", traitShortNames[trait], band.HeritableState[trait], pressures[trait]), t.face(8.5), t.buttonText(textColor)),
+			widget.ButtonOpts.TextPadding(t.insets(3, 8, 8, 3)),
+			widget.ButtonOpts.ClickedHandler(func(*widget.ButtonClickedEventArgs) { p.emit(Intent{Kind: IntentFocusTrait, Trait: focus}) }),
+			widget.ButtonOpts.WidgetOpts(widget.WidgetOpts.CursorHovered("pointer")),
+		)
 		p.handles.traits[trait] = cell
+		if focused {
+			p.handles.traitFocused = cell
+		}
 		grid.AddChild(cell)
 	}
 	column.AddChild(grid)

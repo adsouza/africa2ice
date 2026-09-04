@@ -98,6 +98,25 @@ func TestTraitAndRegionFieldNotesCoverTheirClosedCatalogs(t *testing.T) {
 	}
 }
 
+// TestTraitFieldNoteCarriesItsTraitForTheHighlight covers the details grid's
+// highlight (pkg/hud's traitCellColors): TraitFieldNote is the only
+// constructor that identifies a heritable-variant cell, so every other note
+// must leave HasTrait false by construction rather than by an explicit
+// reset at each call site.
+func TestTraitFieldNoteCarriesItsTraitForTheHighlight(t *testing.T) {
+	note, ok := TraitFieldNote(gameapi.PigmentationLevel, 0.4)
+	if !ok || !note.HasTrait || note.Trait != gameapi.PigmentationLevel {
+		t.Fatalf("TraitFieldNote(PigmentationLevel) = %#v, ok %t", note, ok)
+	}
+	technology, ok := TechnologyFieldNote(gameapi.Firecraft, 7, 1)
+	if !ok || technology.HasTrait {
+		t.Fatalf("technology note should not carry a trait highlight: %#v", technology)
+	}
+	if overview := CampaignOverviewFieldNote(); overview.HasTrait {
+		t.Fatalf("campaign overview should not carry a trait highlight: %#v", overview)
+	}
+}
+
 func TestCampanianFieldNoteLabelsTheSimulationEnvelope(t *testing.T) {
 	note, ok := MacroEpisodeFieldNote(gameapi.MacroEpisodeSummary{Episode: gameapi.CampanianIgnimbrite, Warned: true})
 	assertFieldNoteHasNoManualLineBreaks(t, note)

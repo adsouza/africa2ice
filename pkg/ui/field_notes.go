@@ -351,6 +351,8 @@ func TraitFieldNote(trait gameapi.HeritableTrait, value float64) (render.FieldNo
 		GameEffect:   entry.gameEffect,
 		Hint:         entry.hint,
 		References:   traitReferences(trait),
+		Trait:        trait,
+		HasTrait:     true,
 	}, true
 }
 

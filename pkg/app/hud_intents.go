@@ -77,7 +77,11 @@ func (g *Game) handleIntent(intent hud.Intent) {
 	case hud.IntentFocusTrait:
 		if band := g.selected(); band != nil {
 			if note, ok := ui.TraitFieldNote(intent.Trait, band.HeritableState[intent.Trait]); ok {
-				g.traitFocus = intent.Trait
+				// traitFocus is always "the next variant G will show", the
+				// same meaning focusNextTraitNote leaves it in after
+				// displaying a note — so a click sets it one past the trait
+				// just displayed, not to that trait itself.
+				g.traitFocus = (intent.Trait + 1) % gameapi.HeritableTraitCount
 				g.setFieldNote(note)
 			}
 		}
