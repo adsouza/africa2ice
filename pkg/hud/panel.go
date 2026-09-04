@@ -106,11 +106,18 @@ type handles struct {
 	moveTargetValues [8]*widget.Text
 	moveTargetStatus *widget.Text
 	moveHint         *widget.Text
-	research         [gameapi.TechCount]*widget.Button
-	workforce        workforceHandles
-	endTurn          *widget.Button
-	drawerTab        *widget.Button
-	drawerMore       *widget.Button
+	// partnerGenetics, partnerGeneticsHeading and partnerGeneticsValues are
+	// the focused-partner block below the interbreed picker; nil unless the
+	// selected sapiens band has an open spatial action and at least one
+	// interbreed candidate (see buildPartnerGenetics).
+	partnerGenetics        *widget.Container
+	partnerGeneticsHeading *widget.Text
+	partnerGeneticsValues  [gameapi.HeritableTraitCount]*widget.Text
+	research               [gameapi.TechCount]*widget.Button
+	workforce              workforceHandles
+	endTurn                *widget.Button
+	drawerTab              *widget.Button
+	drawerMore             *widget.Button
 	// drawerBar and drawerBarEvent are the hidden-mode full-width bar and its
 	// left-hand clickable event text; nil in compact/expanded mode, where the
 	// edge tab (drawerTab/drawerMore above) is what tests and refreshes reach.

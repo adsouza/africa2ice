@@ -523,6 +523,74 @@ func TestMoveRowButtonsFitThePanel(t *testing.T) {
 	}
 }
 
+// TestPartnerGeneticsShowTheFocusedCandidate covers F2: interbreeding moves
+// the band's heritable traits toward the partner's, but the panel never
+// showed the partner's own values, so choosing among more than one
+// candidate was blind. The block must name the focused partner, show all
+// six traits, colour a cell green when the partner is higher there, and
+// update when State.InterbreedFocus moves to a different candidate.
+func TestPartnerGeneticsShowTheFocusedCandidate(t *testing.T) {
+	frame := testFrame(1)
+	frame.Bands[0].HeritableState = [gameapi.HeritableTraitCount]float64{0.1, 0.2, 0.3, 0.4, 0.5, 0.6}
+	frame.Bands[0].InterbreedCandidateIDs = []gameapi.BandID{2, 3}
+	frame.Bands = append(frame.Bands,
+		gameapi.Band{ID: 2, Species: gameapi.ArchaicHominin, Population: 40, TileID: 0,
+			HeritableState: [gameapi.HeritableTraitCount]float64{0.5, 0.1, 0.3, 0.4, 0.5, 0.6}},
+		gameapi.Band{ID: 3, Species: gameapi.ArchaicHominin, Population: 25, TileID: 0,
+			HeritableState: [gameapi.HeritableTraitCount]float64{0.9, 0.9, 0.9, 0.9, 0.9, 0.9}},
+	)
+
+	panel := New()
+	state := testState(frame, 1)
+	panel.Update(state)
+	screen := ebiten.NewImage(1280, 720)
+	defer screen.Deallocate()
+	panel.Draw(screen)
+
+	if panel.handles.partnerGeneticsHeading == nil {
+		t.Fatal("partner genetics heading missing")
+	}
+	if got := panel.handles.partnerGeneticsHeading.Label; !strings.Contains(got, "B2") || !strings.Contains(got, "40") {
+		t.Fatalf("partner heading = %q, want it to name B2 and its population 40", got)
+	}
+	for trait, value := range panel.handles.partnerGeneticsValues {
+		if value == nil {
+			t.Fatalf("trait %d value cell missing", trait)
+		}
+	}
+	// widget.Text keeps its resolved color unexported with no getter, so the
+	// colour rule itself is verified directly against the pure function the
+	// cell construction uses (partnerTraitColor), rather than by reading the
+	// built widget back.
+	if got := partnerTraitColor(0.1, 0.5); got != colorGreen {
+		t.Fatalf("partnerTraitColor(0.1, 0.5) = %v, want colorGreen (partner higher)", got)
+	}
+	if got := partnerTraitColor(0.5, 0.1); got != colorDim {
+		t.Fatalf("partnerTraitColor(0.5, 0.1) = %v, want colorDim (partner lower)", got)
+	}
+	if got := partnerTraitColor(0.4, 0.4); got != colorText {
+		t.Fatalf("partnerTraitColor(0.4, 0.4) = %v, want colorText (equal)", got)
+	}
+
+	rightEdge := image.Rectangle(panel.rect(panelX, panelY, panelWidth, panelHeight)).Max.X
+	walkDescendants(panel.handles.partnerGenetics, func(w widget.PreferredSizeLocateableWidget) {
+		if got := w.GetWidget().Rect.Max.X; got > rightEdge {
+			t.Fatalf("partner genetics widget %T right edge = %d, want <= panel right edge %d", w, got, rightEdge)
+		}
+	})
+
+	before := panel.handles.partnerGeneticsValues[gameapi.ColdAdaptation].Label
+	state.InterbreedFocus = 3
+	panel.Update(state)
+	panel.Draw(screen)
+	if got := panel.handles.partnerGeneticsHeading.Label; !strings.Contains(got, "B3") {
+		t.Fatalf("partner heading after focus change = %q, want it to name B3", got)
+	}
+	if after := panel.handles.partnerGeneticsValues[gameapi.ColdAdaptation].Label; after == before {
+		t.Fatalf("changing InterbreedFocus to a different candidate did not change the displayed values (%q both times)", before)
+	}
+}
+
 // TestEndTurnStaysVisibleWithGuideAndDetailsOpen covers the reviewer-found
 // overflow: header + chips + band line + details + guide + three row headers
 // + an open row body + End turn + footer exceeds the 632 DIP column, and

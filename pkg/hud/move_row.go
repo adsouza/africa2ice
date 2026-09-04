@@ -147,6 +147,11 @@ func (p *Panel) buildMoveBody(state State, band *gameapi.Band) widget.PreferredS
 		}
 		body.AddChild(picker)
 	}
+	if band.Species == gameapi.HomoSapiens && !done && len(band.InterbreedCandidateIDs) > 0 {
+		if partnerBand := bandWithID(state.Frame, partner); partnerBand != nil {
+			body.AddChild(p.buildPartnerGenetics(band, partnerBand))
+		}
+	}
 	hint := "Arrows move a cursor instead of the pointer · Esc clears it · staying put is fine"
 	switch {
 	case band.Species == gameapi.ArchaicHominin:
@@ -226,4 +231,71 @@ func (p *Panel) refreshTarget(state State) bool {
 	}
 	p.handles.moveHint.Label = hint
 	return true
+}
+
+// partnerTraitColor is the comparison colour for one heritable trait cell in
+// buildPartnerGenetics: green when the partner is higher, dim when lower,
+// and the neutral text colour when equal. This is a difference display, not
+// a judgement about which value is better.
+func partnerTraitColor(self, other float64) color.RGBA {
+	switch {
+	case other > self:
+		return colorGreen
+	case other < self:
+		return colorDim
+	default:
+		return colorText
+	}
+}
+
+// bandWithID finds a band by ID in the frame, or nil. Unlike
+// State.selectedBand it takes an arbitrary ID, so buildPartnerGenetics can
+// look up the focused interbreeding candidate rather than the selection.
+func bandWithID(frame *gameapi.Frame, id gameapi.BandID) *gameapi.Band {
+	if frame == nil {
+		return nil
+	}
+	for index := range frame.Bands {
+		if frame.Bands[index].ID == id {
+			return &frame.Bands[index]
+		}
+	}
+	return nil
+}
+
+// buildPartnerGenetics is the compact block shown below the partner picker
+// while interbreeding is still open (spec F2): interbreeding moves the
+// band's heritable traits toward the partner's, but until now the panel
+// never showed the partner's own values, so a choice among more than one
+// candidate was blind. Every trait cell splits into two labels so only the
+// arrow-and-partner-value half carries the comparison colour — the self
+// value stays neutral, since this is a difference display, not a judgement
+// about which value is better.
+func (p *Panel) buildPartnerGenetics(band, partner *gameapi.Band) widget.PreferredSizeLocateableWidget {
+	t := p.theme
+	column := t.column(3, t.insets(4, 0, 2, 0), nil, stretch())
+	p.handles.partnerGenetics = column
+	heading := t.label(fmt.Sprintf("PARTNER B%d · pop %d", partner.ID, partner.Population), 9, colorInterbreed)
+	p.handles.partnerGeneticsHeading = heading
+	column.AddChild(heading)
+	grid := widget.NewContainer(
+		widget.ContainerOpts.Layout(widget.NewGridLayout(
+			widget.GridLayoutOpts.Columns(2),
+			widget.GridLayoutOpts.Spacing(t.px(8), t.px(2)),
+			widget.GridLayoutOpts.Stretch([]bool{true, true}, nil),
+		)),
+		widget.ContainerOpts.WidgetOpts(stretch()),
+	)
+	for trait := gameapi.HeritableTrait(0); trait < gameapi.HeritableTraitCount; trait++ {
+		self, other := band.HeritableState[trait], partner.HeritableState[trait]
+		valueColor := partnerTraitColor(self, other)
+		cell := t.rowOf(2)
+		cell.AddChild(t.label(fmt.Sprintf("%s %.2f", traitShortNames[trait], self), 8.5, colorDim))
+		value := t.label(fmt.Sprintf("→ %.2f", other), 8.5, valueColor)
+		p.handles.partnerGeneticsValues[trait] = value
+		cell.AddChild(value)
+		grid.AddChild(cell)
+	}
+	column.AddChild(grid)
+	return column
 }
