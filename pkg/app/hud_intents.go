@@ -42,7 +42,7 @@ func (g *Game) handleIntent(intent hud.Intent) {
 	case hud.IntentOpenRow:
 		g.openRow, g.rowChosen = intent.Row, true
 	case hud.IntentToggleDetails:
-		g.detailsOpen = !g.detailsOpen
+		g.toggleDetails()
 	case hud.IntentSetNotesMode:
 		g.setNotesMode(intent.Notes)
 	case hud.IntentMoveTo:

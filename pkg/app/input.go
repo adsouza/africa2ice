@@ -64,10 +64,8 @@ func (g *Game) handleGameplayKeys() {
 		g.changeOpenRow(-1)
 	case shift && inpututil.IsKeyJustPressed(ebiten.KeyArrowDown):
 		g.changeOpenRow(1)
-	case inpututil.IsKeyJustPressed(ebiten.KeyA):
-		g.applyAssignmentDraft()
-	case inpututil.IsKeyJustPressed(ebiten.KeyD):
-		g.discardAssignmentDraft()
+	case inpututil.IsKeyJustPressed(ebiten.KeyD) && g.openRow != ui.RowWorkforce:
+		g.toggleDetails()
 	case inpututil.IsKeyJustPressed(splitBandHotkey):
 		g.splitSelectedBand()
 	case inpututil.IsKeyJustPressed(ebiten.KeyI):
@@ -87,7 +85,7 @@ func (g *Game) handleGameplayKeys() {
 				return
 			}
 		}
-		for _, key := range [...]ebiten.Key{ebiten.KeyArrowUp, ebiten.KeyArrowDown, ebiten.KeyArrowLeft, ebiten.KeyArrowRight, ebiten.KeyEnter, ebiten.KeyMinus, ebiten.KeyEqual} {
+		for _, key := range [...]ebiten.Key{ebiten.KeyArrowUp, ebiten.KeyArrowDown, ebiten.KeyArrowLeft, ebiten.KeyArrowRight, ebiten.KeyEnter, ebiten.KeyMinus, ebiten.KeyEqual, ebiten.KeyA, ebiten.KeyD} {
 			if inpututil.IsKeyJustPressed(key) {
 				g.handleRowKey(key, shift)
 				return
@@ -132,8 +130,10 @@ func (g *Game) handleRowKey(key ebiten.Key, shift bool) {
 			g.adjustSelectedRole(-100, shift)
 		case ebiten.KeyArrowRight, ebiten.KeyEqual:
 			g.adjustSelectedRole(100, shift)
-		case ebiten.KeyEnter:
+		case ebiten.KeyEnter, ebiten.KeyA:
 			g.applyAssignmentDraft()
+		case ebiten.KeyD:
+			g.discardAssignmentDraft()
 		}
 	}
 }

@@ -681,6 +681,12 @@ func (g *Game) mapVisibleHeight() float64 {
 
 func (g *Game) toggleCameraOverride() { g.cameraOverride = !g.cameraOverride }
 
+// toggleDetails flips the band details disclosure (spec §8). It is `D`'s
+// global meaning; while the Workforce row is open, D is row-owned instead
+// (handleRowKey's ui.RowWorkforce case discards the draft), matching the
+// row-owned model arrows, Enter, and -/+ already use there.
+func (g *Game) toggleDetails() { g.detailsOpen = !g.detailsOpen }
+
 func (g *Game) syncAssignmentDraft(force bool) {
 	band := g.selected()
 	g.syncInterbreedFocus(band)

@@ -165,3 +165,50 @@ func TestEscapePeelsOneLayerAtATime(t *testing.T) {
 		t.Fatal("third Esc has nothing to peel and should return false so the menu opens")
 	}
 }
+
+// TestDetailsHotkeyIsRowOwnedAgainstWorkforce covers D2: `D` toggles the band
+// details disclosure everywhere except while the Workforce row is open,
+// where it keeps its old meaning (discard the workforce draft) instead, the
+// same row-owned model arrows/Enter/-+ already use. Real key state cannot be
+// injected (see gameplayKeysActive's comment), so this drives the same seam
+// TestArrowsBelongToTheOpenRow does: handleRowKey directly for the row-owned
+// half, and the Game method the global switch calls for the other half.
+func TestDetailsHotkeyIsRowOwnedAgainstWorkforce(t *testing.T) {
+	game := New(&gameStub{frame: migrationPreviewFrame()})
+	game.openRow = ui.RowMove
+
+	// With Move open, handleRowKey does not own D at all (RowMove's switch
+	// has no KeyD case) — it is the global toggleDetails path that owns it,
+	// and that path must leave the workforce draft alone.
+	draftBefore := game.assignmentDraft
+	game.handleRowKey(ebiten.KeyD, false)
+	if game.assignmentDraft != draftBefore {
+		t.Fatal("handleRowKey's D case touched the workforce draft with the Move row open")
+	}
+	detailsBefore := game.detailsOpen
+	game.toggleDetails()
+	if game.detailsOpen == detailsBefore {
+		t.Fatal("toggleDetails did not flip detailsOpen")
+	}
+	game.toggleDetails()
+	if game.detailsOpen != detailsBefore {
+		t.Fatal("toggleDetails did not flip detailsOpen back")
+	}
+
+	// With Workforce open and a dirty draft, D is row-owned: it discards the
+	// draft and must not touch detailsOpen.
+	game.openRow, game.rowChosen = ui.RowWorkforce, true
+	game.assignmentRole = gameapi.Foraging
+	game.handleRowKey(ebiten.KeyArrowRight, false)
+	if !game.assignmentDraftDirty() {
+		t.Fatal("setup: Right should have dirtied the workforce draft")
+	}
+	detailsBefore = game.detailsOpen
+	game.handleRowKey(ebiten.KeyD, false)
+	if game.assignmentDraftDirty() {
+		t.Fatal("D did not discard the dirty workforce draft with the Workforce row open")
+	}
+	if game.detailsOpen != detailsBefore {
+		t.Fatal("D changed detailsOpen while the Workforce row was open; that row should own D instead")
+	}
+}
