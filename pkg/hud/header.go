@@ -40,7 +40,9 @@ func (p *Panel) buildHeader(state State) widget.PreferredSizeLocateableWidget {
 	}
 	column.AddChild(t.label(era+" · "+frame.Season.String()+" · "+frame.Climate.Epoch.String(), 10.5, colorDim))
 	if warning := macroWarning(frame); warning != "" {
-		column.AddChild(t.label(warning, 9.5, colorAmber))
+		label := t.label(warning, 9.5, colorAmber)
+		p.handles.macroWarning = label
+		column.AddChild(label)
 	}
 	var total uint64
 	living := 0
@@ -54,6 +56,7 @@ func (p *Panel) buildHeader(state State) widget.PreferredSizeLocateableWidget {
 	population.AddChild(t.label(fmt.Sprintf("Homo sapiens %d", total), 14, colorGold))
 	population.AddChild(t.label(fmt.Sprintf("· %d bands · Regions %d", living, len(frame.SapiensEstablishedRegions)), 10.5, colorDim))
 	column.AddChild(population)
+	p.handles.headerContent = column
 	return column
 }
 

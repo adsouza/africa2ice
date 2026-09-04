@@ -27,8 +27,14 @@ const (
 	drawerExpandedH = 300.0
 	drawerTabW      = 150.0
 	drawerTabH      = 18.0
-	panelHeaderH    = 118.0
 	panelFooterH    = 62.0
+	// panelHeaderMinH and panelHeaderMaxH bound the header region's height
+	// once it is measured from its own content (spec §4 item 1): a
+	// pathological measurement — an empty frame, a future field that grows
+	// unboundedly — cannot eat into the scrollable middle or push the
+	// footer below the panel this way.
+	panelHeaderMinH = 92.0
+	panelHeaderMaxH = 140.0
 )
 
 // DrawerHiddenHeight, DrawerCompactHeight and DrawerExpandedHeight are
@@ -61,19 +67,28 @@ type Panel struct {
 // in the package is exactly the dead code the unused linter exists to catch,
 // so it is added alongside its first use, not ahead of it.
 type handles struct {
-	chips       map[uint32]*widget.Button // keyed by gameapi.BandID
-	more        *widget.Button
-	bandList    *widget.Window
-	details     *widget.Button
-	bandDetail  *widget.Text
-	detailsBody *widget.Container
-	traits      map[gameapi.HeritableTrait]*widget.Button
-	overlay     *widget.Window
-	rowHeader   [ui.ChecklistRowCount]*widget.Button
-	moveHere    *widget.Button
-	best        *widget.Button
-	split       *widget.Button
-	interbreed  *widget.Button
+	chips    map[uint32]*widget.Button // keyed by gameapi.BandID
+	more     *widget.Button
+	bandList *widget.Window
+	details  *widget.Button
+	// headerContent, macroWarning and panelMiddle let TestHeaderRegionFitsItsContent
+	// measure the header region against its own content instead of the old
+	// fixed constant: headerContent is buildHeader's returned column (its
+	// Rect.Max.Y is the bottom of its last child, the population line);
+	// macroWarning is the optional warning line inside it; panelMiddle is
+	// the scroll container the header's height must leave room above.
+	headerContent *widget.Container
+	macroWarning  *widget.Text
+	panelMiddle   *widget.ScrollContainer
+	bandDetail    *widget.Text
+	detailsBody   *widget.Container
+	traits        map[gameapi.HeritableTrait]*widget.Button
+	overlay       *widget.Window
+	rowHeader     [ui.ChecklistRowCount]*widget.Button
+	moveHere      *widget.Button
+	best          *widget.Button
+	split         *widget.Button
+	interbreed    *widget.Button
 	// The TARGET column of the open Move row (moveTargetHeader,
 	// moveTargetValues, moveTargetStatus) and moveHint are refreshed in place
 	// by refreshTarget as the hover/cursor/queued target changes; nil when
@@ -235,9 +250,26 @@ func (p *Panel) buildPanel(state State) widget.PreferredSizeLocateableWidget {
 	)
 	band := state.selectedBand()
 
-	header := t.column(2, t.insets(14, panelPadding, panelPadding, 6), nil,
-		widget.WidgetOpts.LayoutData(p.rect(panelX, panelY, panelWidth, panelHeaderH)))
-	header.AddChild(p.buildHeader(state))
+	// The header region used to be a fixed constant sized for the busiest
+	// case (a macro warning line present), which left dead space above the
+	// chips whenever that line was absent. Building the inner content first
+	// and measuring it means the region always fits what it actually holds,
+	// with panelHeaderMinH/MaxH as a sane backstop rather than a tuned
+	// constant that only ever matched one case.
+	headerInsets := t.insets(14, panelPadding, panelPadding, 6)
+	headerContent := p.buildHeader(state)
+	_, contentHeightPx := headerContent.PreferredSize()
+	headerHeightPx := contentHeightPx + headerInsets.Top + headerInsets.Bottom
+	headerHeightPx = max(t.px(panelHeaderMinH), min(t.px(panelHeaderMaxH), headerHeightPx))
+	scale := p.theme.scale
+	if scale <= 0 {
+		scale = 1
+	}
+	headerHeightDIP := float64(headerHeightPx) / scale
+
+	header := t.column(2, headerInsets, nil,
+		widget.WidgetOpts.LayoutData(p.rect(panelX, panelY, panelWidth, headerHeightDIP)))
+	header.AddChild(headerContent)
 	background.AddChild(header)
 
 	body := t.column(8, t.insets(8, panelPadding, panelPadding, 8), nil, stretch())
@@ -251,7 +283,7 @@ func (p *Panel) buildPanel(state State) widget.PreferredSizeLocateableWidget {
 	}
 	body.AddChild(p.buildChecklistRows(state, band))
 
-	middleHeight := panelHeight - panelHeaderH - panelFooterH
+	middleHeight := panelHeight - headerHeightDIP - panelFooterH
 	content := scrollContent{Container: body, widthPx: t.px(panelWidth)}
 	scroll := widget.NewScrollContainer(
 		widget.ScrollContainerOpts.Content(content),
@@ -260,8 +292,9 @@ func (p *Panel) buildPanel(state State) widget.PreferredSizeLocateableWidget {
 			Idle: t.solid(colorPanel), Disabled: t.solid(colorPanel), Mask: t.solid(colorPanel),
 		}),
 		widget.ScrollContainerOpts.WidgetOpts(widget.WidgetOpts.LayoutData(
-			p.rect(panelX, panelY+panelHeaderH, panelWidth, middleHeight))),
+			p.rect(panelX, panelY+headerHeightDIP, panelWidth, middleHeight))),
 	)
+	p.handles.panelMiddle = scroll
 	p.wireScrollWheel(scroll, content)
 	background.AddChild(scroll)
 

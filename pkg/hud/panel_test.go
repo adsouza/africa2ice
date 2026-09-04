@@ -97,6 +97,45 @@ func TestPanelRebuildsOnlyWhenStateChanges(t *testing.T) {
 	}
 }
 
+// TestHeaderRegionFitsItsContent covers D3: panelHeaderH used to be a fixed
+// constant sized for the case with a macro warning line present, which left
+// roughly 17 DIP of dead space between the population line and the chips
+// when there was no warning. The header region now sizes itself from its
+// own measured content instead of a constant tuned for the busier case.
+func TestHeaderRegionFitsItsContent(t *testing.T) {
+	frame := testFrame(1)
+	panel := New()
+	state := testState(frame, 1)
+	panel.Update(state)
+	screen := ebiten.NewImage(1280, 720)
+	panel.Draw(screen)
+	screen.Deallocate()
+
+	headerBottom := panel.handles.headerContent.GetWidget().Rect.Max.Y
+	chipTop := panel.handles.chips[uint32(state.SelectedBand)].GetWidget().Rect.Min.Y
+	if gap := chipTop - headerBottom; gap < 0 || gap >= panel.theme.px(16) {
+		t.Fatalf("header-to-chip gap = %d render px, want [0, %d) now that the header fits its content", gap, panel.theme.px(16))
+	}
+
+	warned := testFrame(1)
+	warned.MacroEpisodes = []gameapi.MacroEpisodeSummary{{Episode: gameapi.CampanianIgnimbrite, Warned: true}}
+	warnedPanel := New()
+	warnedState := testState(warned, 1)
+	warnedPanel.Update(warnedState)
+	warnedScreen := ebiten.NewImage(1280, 720)
+	warnedPanel.Draw(warnedScreen)
+	warnedScreen.Deallocate()
+
+	if warnedPanel.handles.macroWarning == nil {
+		t.Fatal("macro warning line missing from the header")
+	}
+	warningBottom := warnedPanel.handles.macroWarning.GetWidget().Rect.Max.Y
+	scrollTop := warnedPanel.handles.panelMiddle.GetWidget().Rect.Min.Y
+	if warningBottom > scrollTop {
+		t.Fatalf("macro warning bottom %d render px is below the scroll container's top %d; it no longer fits inside the header region", warningBottom, scrollTop)
+	}
+}
+
 func TestChipsCarryProgressColorMarkerAndSelection(t *testing.T) {
 	frame := testFrame(3)
 	frame.Bands[1].HasQueuedMigration = true
