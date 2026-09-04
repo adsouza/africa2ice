@@ -26,10 +26,10 @@ func TestMenuOverlayButtonsEmitNavigationIntents(t *testing.T) {
 	state := testState(testFrame(1), 1)
 	state.Overlay = OverlayState{Scene: ui.SceneMenu}
 	panel.Update(state)
-	if panel.handles.overlay == nil || len(panel.handles.overlayButtons) != 6 {
-		t.Fatalf("menu buttons = %d", len(panel.handles.overlayButtons))
+	if panel.handles.overlay == nil || len(panel.handles.overlayButtons) != 5 {
+		t.Fatalf("menu buttons = %d, want 5 now that Field Notes (always reachable via F/Shift+F and its own edge controls) is gone from the menu", len(panel.handles.overlayButtons))
 	}
-	want := []IntentKind{IntentBack, IntentOpenStorage, IntentOpenStorage, IntentOpenSettings, IntentSetNotesMode, IntentReturnToTitle}
+	want := []IntentKind{IntentBack, IntentOpenStorage, IntentOpenStorage, IntentOpenSettings, IntentReturnToTitle}
 	for index, kind := range want {
 		panel.handles.overlayButtons[index].Click()
 		intents := panel.Update(state)

@@ -36,17 +36,11 @@ func (p *Panel) buildOverlay(state State) {
 			{"Load a checkpoint · L", Intent{Kind: IntentOpenStorage}},
 		})
 	case state.Overlay.Scene == ui.SceneMenu:
-		notes := "Show Field Notes · F"
-		mode := NotesCompact
-		if state.NotesMode != NotesHidden {
-			notes, mode = "Hide Field Notes · F", NotesHidden
-		}
 		content = p.menuList("Game Menu", menuHelp, []menuEntry{
 			{"Back to game · Esc", Intent{Kind: IntentBack}},
 			{"Save slots · S", Intent{Kind: IntentOpenStorage, Save: true}},
 			{"Load or delete slots · L", Intent{Kind: IntentOpenStorage}},
 			{"Settings · O", Intent{Kind: IntentOpenSettings}},
-			{notes, Intent{Kind: IntentSetNotesMode, Notes: mode}},
 			{"Return to title · T", Intent{Kind: IntentReturnToTitle}},
 		})
 	case state.Overlay.Scene == ui.SceneStorage:
@@ -129,7 +123,7 @@ func (p *Panel) storageList(state State) *widget.Container {
 
 func (p *Panel) settingsPanel(state State) *widget.Container {
 	t := p.theme
-	help := "Drag the slider · M mutes · F toggles notes · O or Esc back"
+	help := "Drag the slider · M mutes · O or Esc back"
 	if state.Overlay.SettingsDisabled {
 		help = "Loading preferences… controls disabled · O/Esc back"
 	}
@@ -157,20 +151,12 @@ func (p *Panel) settingsPanel(state State) *widget.Container {
 	if state.Overlay.Muted {
 		mute = "Muted: on · M"
 	}
-	notes := "Field Notes: hidden · F"
-	if state.NotesMode != NotesHidden {
-		notes = "Field Notes: visible · F"
-	}
 	for _, entry := range []menuEntry{
 		{mute, Intent{Kind: IntentToggleMute}},
-		{notes, Intent{Kind: IntentSetNotesMode, Notes: NotesCompact}},
 		{"Show first-turn guide", Intent{Kind: IntentShowGuide}},
 		{"Back · Esc", Intent{Kind: IntentBack}},
 	} {
 		intent := entry.intent
-		if intent.Kind == IntentSetNotesMode && state.NotesMode != NotesHidden {
-			intent.Notes = NotesHidden
-		}
 		button := t.button(entry.label, 13, colorPanelEdge, colorText, func() { p.emit(intent) })
 		button.GetWidget().Disabled = state.Overlay.SettingsDisabled && intent.Kind != IntentBack
 		p.handles.overlayButtons = append(p.handles.overlayButtons, button)
