@@ -1184,8 +1184,8 @@ func TestResearchCursorRowIsMarked(t *testing.T) {
 // TestHoverRefreshesTargetWithoutRebuilding covers the reviewer-found defect:
 // State.Hover was part of the structural comparison, so sweeping the pointer
 // across map tiles rebuilt the whole widget tree at up to 60 Hz, discarding
-// the Field Notes drawer's TextArea (and the reader's scroll position with
-// it) on every tick.
+// the Field Notes drawer's scroll container (and the reader's scroll
+// position with it) on every tick.
 func TestHoverRefreshesTargetWithoutRebuilding(t *testing.T) {
 	frame := testFrame(1)
 	panel := New()
@@ -1193,9 +1193,9 @@ func TestHoverRefreshesTargetWithoutRebuilding(t *testing.T) {
 	panel.Update(state)
 
 	buildsBefore := panel.builds
-	notesAreaBefore := panel.handles.notesArea
-	if notesAreaBefore == nil {
-		t.Fatal("drawer TextArea handle missing before the hover change")
+	notesScrollBefore := panel.handles.notesScroll
+	if notesScrollBefore == nil {
+		t.Fatal("drawer scroll container handle missing before the hover change")
 	}
 	if got := panel.handles.moveTargetHeader.Label; got != "TARGET" {
 		t.Fatalf("TARGET header before hover = %q, want plain TARGET", got)
@@ -1207,8 +1207,8 @@ func TestHoverRefreshesTargetWithoutRebuilding(t *testing.T) {
 	if panel.builds != buildsBefore {
 		t.Fatalf("hover change rebuilt the tree: builds %d -> %d", buildsBefore, panel.builds)
 	}
-	if panel.handles.notesArea != notesAreaBefore {
-		t.Fatal("hover change replaced the drawer's TextArea, losing the reader's scroll position")
+	if panel.handles.notesScroll != notesScrollBefore {
+		t.Fatal("hover change replaced the drawer's scroll container, losing the reader's scroll position")
 	}
 	if got := panel.handles.moveTargetHeader.Label; got != "TARGET · hover" {
 		t.Fatalf("TARGET header while hovering = %q, want TARGET · hover", got)
@@ -1350,5 +1350,40 @@ func TestPresentationKeyChangesWithWheelScroll(t *testing.T) {
 	panel.handles.bandListScroll.ScrollTop = 0.5
 	if panel.PresentationKey() == key {
 		t.Fatal("PresentationKey did not change when the band list's own ScrollTop changed")
+	}
+}
+
+// TestNotesBodyScrollsAndCountsInThePresentationKey covers F3: DESIGN.md
+// says the drawer scrolls with the wheel, but the old widget.TextArea was
+// built without ShowVerticalScrollbar, and ebitenui only wires its wheel
+// handler in that case — so a note longer than the drawer could not be
+// scrolled into view at all. The notes body is now a pkg/hud-owned
+// ScrollContainer, so its ScrollTop must be reachable for PresentationKey
+// exactly like panelMiddle and bandListScroll already are.
+func TestNotesBodyScrollsAndCountsInThePresentationKey(t *testing.T) {
+	frame := testFrame(1)
+	panel := New()
+	state := testState(frame, 1)
+	state.NotesMode = NotesExpanded
+	state.Note = render.FieldNote{Topic: "LONG NOTE", Introduction: strings.Repeat("word ", 400)}
+	panel.Update(state)
+	screen := ebiten.NewImage(1280, 720)
+	defer screen.Deallocate()
+	panel.Draw(screen)
+
+	if panel.handles.notesScroll == nil {
+		t.Fatal("notes scroll container handle missing")
+	}
+
+	key := panel.PresentationKey()
+	panel.handles.notesScroll.ScrollTop = 0.5
+	if panel.PresentationKey() == key {
+		t.Fatal("PresentationKey did not change when the notes body's own ScrollTop changed")
+	}
+
+	drawerRect := image.Rectangle(panel.rect(mapLeft, mapBottom-drawerExpandedH-drawerTabH, mapRight-mapLeft, drawerExpandedH+drawerTabH))
+	bodyRect := panel.handles.notesScroll.GetWidget().Rect
+	if !bodyRect.In(drawerRect) {
+		t.Fatalf("notes body rect %v not inside drawer rect %v", bodyRect, drawerRect)
 	}
 }

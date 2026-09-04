@@ -12,6 +12,29 @@ import (
 
 const drawerEventLines = 2
 
+// notesContent wraps the Field Notes drawer body's wrapped Text and reports
+// a fixed width plus a height floored at minHeightPx, mirroring scrollContent
+// (see panel.go) with one addition: minHeightPx keeps the scroll container's
+// own slot in the drawer's RowLayout column a stable size regardless of note
+// length (RowLayoutData.MaxHeight on the scroll container clamps the other
+// direction, so together the two make the slot exactly noteHeight whether
+// the note is short or long). Height above the floor still reports the
+// text's true preferred height, so the ScrollContainer's own scroll-extent
+// math (which reads this same PreferredSize) sees the full note and can
+// scroll to it.
+type notesContent struct {
+	*widget.Container
+	widthPx, minHeightPx int
+}
+
+func (c notesContent) PreferredSize() (int, int) {
+	_, height := c.Container.PreferredSize()
+	if height < c.minHeightPx {
+		height = c.minHeightPx
+	}
+	return c.widthPx, height
+}
+
 func noteBody(note render.FieldNote) string {
 	parts := []string{"[color=9fb1ae]SUMMARY[/color] · " + note.Introduction}
 	if note.Context != "" {
@@ -117,16 +140,29 @@ func (p *Panel) buildDrawer(state State) widget.PreferredSizeLocateableWidget {
 		widget.WidgetOpts.LayoutData(p.rect(mapLeft, mapBottom-height, mapRight-mapLeft, height)))
 	body.AddChild(t.label(heading, 10, headingColor))
 	noteHeight := height - 24 - 14*float64(min(len(events), drawerEventLines)+1) - 12
-	area := widget.NewTextArea(
-		widget.TextAreaOpts.ContainerOpts(widget.ContainerOpts.WidgetOpts(widget.WidgetOpts.MinSize(t.px(mapRight-mapLeft-24), t.px(noteHeight)))),
-		widget.TextAreaOpts.FontFace(t.face(9)),
-		widget.TextAreaOpts.FontColor(colorText),
-		widget.TextAreaOpts.ProcessBBCode(true),
-		widget.TextAreaOpts.Text(noteBody(state.Note)),
-		widget.TextAreaOpts.ScrollContainerImage(&widget.ScrollContainerImage{Idle: t.solid(background), Mask: t.solid(background)}),
+	noteWidthDIP := mapRight - mapLeft - 24
+	noteTextHolder := widget.NewContainer(widget.ContainerOpts.Layout(widget.NewRowLayout(widget.RowLayoutOpts.Direction(widget.DirectionVertical))))
+	noteTextHolder.AddChild(widget.NewText(
+		widget.TextOpts.Text(noteBody(state.Note), t.face(9), colorText),
+		widget.TextOpts.ProcessBBCode(true),
+		widget.TextOpts.MaxWidth(float64(t.px(noteWidthDIP))),
+	))
+	// notesContent floors its reported height at noteHeight (the drawer's
+	// fixed budget for the note body) so a short note still gives the
+	// scroll container the same slot a long one does — RowLayoutData.
+	// MaxHeight below only ever shrinks, never grows, so without this floor
+	// a short note would report a smaller PreferredSize and the RECENT
+	// EVENTS heading would creep up the drawer depending on note length.
+	content := notesContent{Container: noteTextHolder, widthPx: t.px(noteWidthDIP), minHeightPx: t.px(noteHeight)}
+	scroll := widget.NewScrollContainer(
+		widget.ScrollContainerOpts.Content(content),
+		widget.ScrollContainerOpts.StretchContentWidth(),
+		widget.ScrollContainerOpts.Image(&widget.ScrollContainerImage{Idle: t.solid(background), Disabled: t.solid(background), Mask: t.solid(background)}),
+		widget.ScrollContainerOpts.WidgetOpts(widget.WidgetOpts.LayoutData(widget.RowLayoutData{Stretch: true, MaxHeight: t.px(noteHeight)})),
 	)
-	p.handles.notesArea = area
-	body.AddChild(area)
+	p.handles.notesScroll = scroll
+	p.wireScrollWheel(scroll, content)
+	body.AddChild(scroll)
 	body.AddChild(t.label("RECENT EVENTS", 8, headingColor))
 	if len(events) == 0 {
 		body.AddChild(t.label("No campaign events yet.", 8.5, colorDim))

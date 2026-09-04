@@ -123,14 +123,17 @@ type handles struct {
 	// edge tab (drawerTab/drawerMore above) is what tests and refreshes reach.
 	drawerBar      *widget.Container
 	drawerBarEvent *widget.Button
-	// notesArea is the Field Notes drawer's TextArea. It carries the reader's
-	// scroll position, so tests use this handle to prove a hover-driven
-	// Update did not discard and recreate it (see refreshTarget).
-	notesArea *widget.TextArea
-	events    []*widget.Button
-	camera    *widget.Button
-	guideNext *widget.Button
-	guideX    *widget.Button
+	// notesScroll is the Field Notes drawer body's own ScrollContainer (see
+	// buildDrawer): pkg/hud owns its scrolling the same way it owns
+	// panelMiddle's and bandListScroll's, so ScrollTop is directly readable
+	// here for PresentationKey, and tests use this handle to prove a
+	// hover-driven Update did not discard and recreate it (see
+	// refreshTarget).
+	notesScroll *widget.ScrollContainer
+	events      []*widget.Button
+	camera      *widget.Button
+	guideNext   *widget.Button
+	guideX      *widget.Button
 
 	overlayButtons []*widget.Button
 	deleteButtons  []*widget.Button
@@ -205,6 +208,7 @@ type PresentationKey struct {
 	uiHovered   bool
 	panelScroll float64
 	bandListTop float64
+	notesTop    float64
 }
 
 // PresentationKey returns a value that changes whenever anything this Panel
@@ -216,26 +220,21 @@ type PresentationKey struct {
 //   - the cursor position and mouse button state, which drive ebitenui's
 //     hover and pressed visuals without going through Update at all;
 //   - input.UIHovered, ebitenui's own hover flag;
-//   - the panel's own scroll offset (panelMiddle.ScrollTop) and the band
-//     list window's scroll offset (bandListScroll.ScrollTop, 0 when the
-//     window is closed) — wireScrollWheel mutates a *widget.ScrollContainer's
-//     ScrollTop directly from the mouse wheel, with no other side effect any
-//     of the fields above would catch, so a scroll-only tick would otherwise
-//     report the same key as the tick before it and the map would skip
-//     repainting over the newly-scrolled chrome. (Opening or closing the
-//     band list window is itself a rebuild, already covered by p.builds.)
+//   - the panel's own scroll offset (panelMiddle.ScrollTop), the band list
+//     window's scroll offset (bandListScroll.ScrollTop, 0 when the window is
+//     closed), and the Field Notes drawer body's scroll offset
+//     (notesScroll.ScrollTop, 0 when the drawer is hidden) — wireScrollWheel
+//     mutates a *widget.ScrollContainer's ScrollTop directly from the mouse
+//     wheel, with no other side effect any of the fields above would catch,
+//     so a scroll-only tick would otherwise report the same key as the tick
+//     before it and the map would skip repainting over the newly-scrolled
+//     chrome. (Opening or closing the band list window, or switching the
+//     drawer's mode, is itself a rebuild, already covered by p.builds.)
 //
-// This set is complete for the current widget set except one gap this
-// implementation cannot close: the Field Notes drawer's *widget.TextArea
-// (p.handles.notesArea) also scrolls on the mouse wheel, but ebitenui v0.7.3
-// keeps that scroll position on an unexported inner ScrollContainer with no
-// public accessor, so it cannot be read here. A wheel-scroll-only change to
-// the notes drawer can therefore still be skipped incorrectly; closing this
-// needs either an upstream accessor or replacing TextArea's built-in scroll
-// with one pkg/hud owns directly. A widget added later with animation of
-// its own that none of these fields already track (a spinner, a blinking
-// caret, a hover-delayed tooltip) must extend this key too, or that
-// animation will not repaint on an otherwise-idle frame.
+// A widget added later with animation of its own that none of these fields
+// already track (a spinner, a blinking caret, a hover-delayed tooltip) must
+// extend this key too, or that animation will not repaint on an otherwise-
+// idle frame.
 func (p *Panel) PresentationKey() PresentationKey {
 	x, y := ebiten.CursorPosition()
 	var panelScroll float64
@@ -245,6 +244,10 @@ func (p *Panel) PresentationKey() PresentationKey {
 	var bandListTop float64
 	if p.handles.bandListScroll != nil {
 		bandListTop = p.handles.bandListScroll.ScrollTop
+	}
+	var notesTop float64
+	if p.handles.notesScroll != nil {
+		notesTop = p.handles.notesScroll.ScrollTop
 	}
 	return PresentationKey{
 		builds:      p.builds,
@@ -257,6 +260,7 @@ func (p *Panel) PresentationKey() PresentationKey {
 		uiHovered:   input.UIHovered,
 		panelScroll: panelScroll,
 		bandListTop: bandListTop,
+		notesTop:    notesTop,
 	}
 }
 
