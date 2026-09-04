@@ -6910,10 +6910,14 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   health is below `0.80` or the projected sum of current seasonal and chronic mortality rates is at
   least `0.004`; suffering takes precedence over danger. These are presentation-only interpretations
   of projected values, not simulation inputs, stored flags, forecasts of acute events, or guarantees
-  that an unmarked band is safe. Chips wrap to two lines up to eight bands; beyond that a `+N` chip
-  opens a modal, attention-ordered list of every living sapiens band with its marker, population,
-  health, and Move-row summary, so later bands are never silently hidden and the selected band is
-  always reachable.
+  that an unmarked band is safe. The chip row sizes its column count to the widest chip label
+  currently in play, from four to eight columns. Row 1 pins the first `columns` bands in attention
+  order, so the most urgent bands never move or disappear; row 2 windows the remaining bands so the
+  band the player is acting on is always visible there once it falls outside row 1. Once both rows
+  still cannot fit every band, a trailing `+N` chip takes row 2's last cell and opens a modal,
+  attention-ordered list of every living sapiens band with its marker, population, health, and
+  Move-row summary, so later bands are never silently hidden and the selected band is always
+  reachable.
 - **Persistent terrain legend:** the strip immediately above the map shows a swatch and a short
   liveability explanation for each of the six biome classes, plus open water, unexplored terrain,
   and the ochre escarpment-edge mark.

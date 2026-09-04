@@ -11,7 +11,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
-const maxVisibleChips = 8
+const maxChipColumns = 8
 
 // chipRowScrollbarAllowance is the DIP width reserved for the scroll
 // container's chrome. The panel draws no visible scrollbar (wireScrollWheel
@@ -41,28 +41,43 @@ const (
 	bandListMaxHeight = 420.0
 )
 
-// visibleChipIDs returns at most eight band IDs in attention order, always
-// including the selected band, and the count left over for the +N chip.
-func visibleChipIDs(frame *gameapi.Frame, selected gameapi.BandID) ([]gameapi.BandID, int) {
-	ordered := ui.SapiensBandIDsByAttention(frame.Bands)
-	if len(ordered) <= maxVisibleChips {
-		return ordered, 0
+// chipRows splits the attention-ordered bands into the pinned first row and a
+// window over the rest. Row 1 holds the most urgent bands so they never scroll
+// away; row 2 follows the selection so the band the player is acting on is
+// always on screen. hidden is the count the +N chip stands for.
+func chipRows(ordered []gameapi.BandID, selected gameapi.BandID, columns int) (first, second []gameapi.BandID, hidden int) {
+	if columns <= 0 {
+		columns = 1
 	}
-	visible := append([]gameapi.BandID(nil), ordered[:maxVisibleChips-1]...)
-	included := false
-	for _, id := range visible {
+	if len(ordered) <= columns {
+		return ordered, nil, 0
+	}
+	first = ordered[:columns]
+	rest := ordered[columns:]
+	if len(rest) <= columns {
+		return first, rest, 0
+	}
+	window := columns - 1
+	index := -1
+	for i, id := range rest {
 		if id == selected {
-			included = true
+			index = i
+			break
 		}
 	}
-	if !included {
-		for _, id := range ordered {
-			if id == selected {
-				visible[len(visible)-1] = id
-			}
+	start := 0
+	if index >= 0 {
+		start = index - window/2
+		if start < 0 {
+			start = 0
+		}
+		if max := len(rest) - window; start > max {
+			start = max
 		}
 	}
-	return visible, len(ordered) - len(visible)
+	second = rest[start : start+window]
+	hidden = len(rest) - window
+	return first, second, hidden
 }
 
 // chipColors picks the chip's Move-status border/fill/border-width: the
@@ -124,7 +139,7 @@ func (p *Panel) chipButton(band gameapi.Band, selected bool) *widget.Button {
 // single-digit band IDs waste roughly half the column's width at a fixed 4,
 // but band IDs reach three digits and a suffering chip's "!!" prefix makes
 // "!! B256" far wider than "B3", so a fixed 8 would overflow the column once
-// IDs and warnings run long. columns is clamped to [4, maxVisibleChips] and
+// IDs and warnings run long. columns is clamped to [4, maxChipColumns] and
 // never zero.
 func (p *Panel) chipColumns(labels []string) int {
 	t := p.theme
@@ -137,42 +152,61 @@ func (p *Panel) chipColumns(labels []string) int {
 	}
 	chipWidth := int(widest+0.5) + t.px(chipColumnPaddingDIP) + t.px(chipColumnSpacingDIP)
 	if chipWidth <= 0 {
-		return maxVisibleChips
+		return maxChipColumns
 	}
 	available := t.px(panelWidth-2*panelPadding) - t.px(chipRowScrollbarAllowance)
-	return max(4, min(maxVisibleChips, available/chipWidth))
+	return max(4, min(maxChipColumns, available/chipWidth))
 }
 
 // buildChips is the band row (spec §4 item 2): a grid sized to how many
-// chips of the actual, current label width fit the column, plus a +N chip
-// past eight bands.
+// chips of the actual, current label width fit the column, row 1 pinned to
+// the most urgent bands and row 2 windowed around the selection (chipRows),
+// plus a +N chip past two full rows.
+//
+// Measurement has to run before chipRows can decide which bands appear in
+// row 2, and row 2's contents shift with the selection — so the labels used
+// to size the grid cannot literally be "the labels rendered" without the
+// column count changing as the window slides (a chip could join or leave
+// the row 2 window with a slightly different widest label, nudging columns,
+// which would re-slice the window, and so on). Instead, chipColumns measures
+// every living sapiens band's label plus a worst-case "+N" label sized off
+// the total count (hidden is always < len(ordered), so this is a safe upper
+// bound on the +N label's width): the column count then depends only on the
+// full roster, not on which bands the window currently shows.
 func (p *Panel) buildChips(state State) widget.PreferredSizeLocateableWidget {
 	t := p.theme
-	visible, remaining := visibleChipIDs(state.Frame, state.SelectedBand)
-	byID := make(map[gameapi.BandID]gameapi.Band, len(visible))
+	ordered := ui.SapiensBandIDsByAttention(state.Frame.Bands)
+	byID := make(map[gameapi.BandID]gameapi.Band, len(state.Frame.Bands))
 	for _, band := range state.Frame.Bands {
 		byID[band.ID] = band
 	}
-	labels := make([]string, 0, len(visible)+1)
-	for _, id := range visible {
-		labels = append(labels, chipLabel(byID[id]))
+	measureLabels := make([]string, 0, len(ordered)+1)
+	for _, id := range ordered {
+		measureLabels = append(measureLabels, chipLabel(byID[id]))
 	}
-	moreLabel := fmt.Sprintf("+%d", remaining)
-	if remaining > 0 {
-		labels = append(labels, moreLabel)
-	}
-	columns := p.chipColumns(labels)
+	measureLabels = append(measureLabels, fmt.Sprintf("+%d", len(ordered)))
+	columns := p.chipColumns(measureLabels)
+
+	first, second, hidden := chipRows(ordered, state.SelectedBand, columns)
+	moreLabel := fmt.Sprintf("+%d", hidden)
+
 	grid := widget.NewContainer(
 		widget.ContainerOpts.Layout(widget.NewGridLayout(widget.GridLayoutOpts.Columns(columns), widget.GridLayoutOpts.Spacing(t.px(chipColumnSpacingDIP), t.px(4)))),
 		widget.ContainerOpts.WidgetOpts(stretch()),
 	)
-	for _, id := range visible {
+	for _, id := range first {
 		band := byID[id]
 		chip := p.chipButton(band, band.ID == state.SelectedBand)
 		p.handles.chips[uint32(band.ID)] = chip
 		grid.AddChild(chip)
 	}
-	if remaining > 0 {
+	for _, id := range second {
+		band := byID[id]
+		chip := p.chipButton(band, band.ID == state.SelectedBand)
+		p.handles.chips[uint32(band.ID)] = chip
+		grid.AddChild(chip)
+	}
+	if hidden > 0 {
 		more := t.button(moreLabel, 10.5, colorDim, colorText, func() { p.emit(Intent{Kind: IntentToggleBandList}) })
 		p.handles.more = more
 		grid.AddChild(more)

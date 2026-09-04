@@ -1,6 +1,7 @@
 package hud
 
 import (
+	"fmt"
 	"image"
 	"strings"
 	"testing"
@@ -117,15 +118,43 @@ func TestChipsCarryProgressColorMarkerAndSelection(t *testing.T) {
 	}
 }
 
+// TestChipRowOverflowsIntoAPlusChip covers the +N chip's wiring: past two
+// full rows of chips, a +N cell appears, clicking it emits
+// IntentToggleBandList, and BandListOpen shows the modal window. The row 1
+// pinned / row 2 windowed split itself (chipRows) has its own exhaustive
+// table test, TestChipRowsPinUrgentBandsAndWindowTheRest, so this test
+// derives the expected chip count and +N label from the same production
+// helpers (chipColumns, chipRows) rather than a hardcoded column count —
+// the widest label, and therefore the column count, shifts as band IDs
+// gain digits.
 func TestChipRowOverflowsIntoAPlusChip(t *testing.T) {
 	panel := New()
-	state := testState(testFrame(12), 1)
+	frame := testFrame(20)
+	state := testState(frame, 1)
 	panel.Update(state)
-	if len(panel.handles.chips) != 7 {
-		t.Fatalf("visible chips = %d, want 7 alongside the +N chip", len(panel.handles.chips))
+
+	ordered := ui.SapiensBandIDsByAttention(frame.Bands)
+	byID := make(map[gameapi.BandID]gameapi.Band, len(frame.Bands))
+	for _, band := range frame.Bands {
+		byID[band.ID] = band
 	}
-	if panel.handles.more == nil || panel.handles.more.Text().Label != "+5" {
-		t.Fatal("overflow chip missing or mislabelled")
+	measureLabels := make([]string, 0, len(ordered)+1)
+	for _, id := range ordered {
+		measureLabels = append(measureLabels, chipLabel(byID[id]))
+	}
+	measureLabels = append(measureLabels, fmt.Sprintf("+%d", len(ordered)))
+	columns := panel.chipColumns(measureLabels)
+	first, second, hidden := chipRows(ordered, state.SelectedBand, columns)
+	if hidden == 0 {
+		t.Fatalf("test setup: 20 bands at %d columns produced no overflow to exercise the +N chip", columns)
+	}
+
+	if want := len(first) + len(second); len(panel.handles.chips) != want {
+		t.Fatalf("visible chips = %d, want %d", len(panel.handles.chips), want)
+	}
+	wantLabel := fmt.Sprintf("+%d", hidden)
+	if panel.handles.more == nil || panel.handles.more.Text().Label != wantLabel {
+		t.Fatalf("overflow chip missing or mislabelled, want %q", wantLabel)
 	}
 	panel.handles.more.Click()
 	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentToggleBandList {
@@ -135,6 +164,159 @@ func TestChipRowOverflowsIntoAPlusChip(t *testing.T) {
 	panel.Update(state)
 	if panel.handles.bandList == nil {
 		t.Fatal("band list window not shown when BandListOpen")
+	}
+}
+
+// TestChipRowsPinUrgentBandsAndWindowTheRest drives chipRows directly
+// (brief: pkg/hud/chips.go chipRows) across the row-1/row-2/+N split rules.
+func TestChipRowsPinUrgentBandsAndWindowTheRest(t *testing.T) {
+	ordered := func(n int) []gameapi.BandID {
+		out := make([]gameapi.BandID, n)
+		for i := range out {
+			out[i] = gameapi.BandID(i)
+		}
+		return out
+	}
+	containsBand := func(ids []gameapi.BandID, id gameapi.BandID) bool {
+		for _, got := range ids {
+			if got == id {
+				return true
+			}
+		}
+		return false
+	}
+	equalBands := func(a, b []gameapi.BandID) bool {
+		if len(a) != len(b) {
+			return false
+		}
+		for i := range a {
+			if a[i] != b[i] {
+				return false
+			}
+		}
+		return true
+	}
+
+	tests := []struct {
+		name     string
+		bands    int
+		columns  int
+		selected gameapi.BandID
+		check    func(t *testing.T, first, second []gameapi.BandID, hidden int)
+	}{
+		{
+			name: "fits in one row", bands: 5, columns: 8, selected: 0,
+			check: func(t *testing.T, first, second []gameapi.BandID, hidden int) {
+				if !equalBands(first, ordered(5)) || second != nil || hidden != 0 {
+					t.Fatalf("first=%v second=%v hidden=%d", first, second, hidden)
+				}
+			},
+		},
+		{
+			name: "two full rows, no overflow", bands: 12, columns: 8, selected: 0,
+			check: func(t *testing.T, first, second []gameapi.BandID, hidden int) {
+				full := ordered(12)
+				if !equalBands(first, full[:8]) || !equalBands(second, full[8:12]) || hidden != 0 {
+					t.Fatalf("first=%v second=%v hidden=%d", first, second, hidden)
+				}
+			},
+		},
+		{
+			name: "selection in row 1 windows at the start", bands: 30, columns: 8, selected: 2,
+			check: func(t *testing.T, first, second []gameapi.BandID, hidden int) {
+				full := ordered(30)
+				if !equalBands(first, full[:8]) || !equalBands(second, full[8:15]) || hidden != 15 {
+					t.Fatalf("first=%v second=%v hidden=%d", first, second, hidden)
+				}
+			},
+		},
+		{
+			name: "selection deep in rest keeps row 1 and centers the window", bands: 30, columns: 8, selected: 20,
+			check: func(t *testing.T, first, second []gameapi.BandID, hidden int) {
+				full := ordered(30)
+				if !equalBands(first, full[:8]) {
+					t.Fatalf("first changed: %v", first)
+				}
+				if len(second) != 7 {
+					t.Fatalf("len(second) = %d, want 7", len(second))
+				}
+				if !containsBand(second, 20) {
+					t.Fatalf("second %v does not contain selected band 20", second)
+				}
+				if hidden != 15 {
+					t.Fatalf("hidden = %d, want 15", hidden)
+				}
+			},
+		},
+		{
+			name: "selection at the tail clamps the window", bands: 30, columns: 8, selected: 29,
+			check: func(t *testing.T, first, second []gameapi.BandID, hidden int) {
+				if len(second) == 0 || second[len(second)-1] != 29 {
+					t.Fatalf("second = %v, want to end at band 29", second)
+				}
+			},
+		},
+		{
+			name: "narrower columns still window correctly", bands: 30, columns: 4, selected: 10,
+			check: func(t *testing.T, first, second []gameapi.BandID, hidden int) {
+				full := ordered(30)
+				if !equalBands(first, full[:4]) {
+					t.Fatalf("first = %v, want %v", first, full[:4])
+				}
+				if len(second) != 3 {
+					t.Fatalf("len(second) = %d, want 3", len(second))
+				}
+				if !containsBand(second, 10) {
+					t.Fatalf("second %v does not contain selected band 10", second)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			first, second, hidden := chipRows(ordered(tt.bands), tt.selected, tt.columns)
+			tt.check(t, first, second, hidden)
+		})
+	}
+}
+
+// TestChipRowsKeepTheSelectedBandOnScreen is the render-level companion to
+// TestChipRowsPinUrgentBandsAndWindowTheRest: with 30 bands and a selection
+// late in attention order, row 2 must still bring the selected band's chip
+// onto the panel, row 1's pinned bands must remain, and no chip's rect may
+// spill past the panel's right edge at any UI scale.
+func TestChipRowsKeepTheSelectedBandOnScreen(t *testing.T) {
+	frame := testFrame(30)
+	selected := gameapi.BandID(25)
+	for _, scale := range []float64{1, 2} {
+		panel := New()
+		state := testState(frame, scale)
+		state.SelectedBand = selected
+		state.BandListOpen = false
+		panel.Update(state)
+		screen := ebiten.NewImage(int(1280*scale), int(720*scale))
+		panel.Draw(screen)
+		screen.Deallocate()
+
+		if _, ok := panel.handles.chips[uint32(selected)]; !ok {
+			t.Fatalf("scale %.1f: selected band %d not rendered as a chip", scale, selected)
+		}
+		if _, _, borderPx := chipColors(false, true); borderPx != 2 {
+			t.Fatalf("scale %.1f: selected chip's ring border = %v, want 2px", scale, borderPx)
+		}
+		for id := gameapi.BandID(1); id <= 3; id++ {
+			if _, ok := panel.handles.chips[uint32(id)]; !ok {
+				t.Fatalf("scale %.1f: pinned row-1 band %d missing", scale, id)
+			}
+		}
+
+		rightEdge := image.Rectangle(panel.rect(panelX, panelY, panelWidth, panelHeight)).Max.X
+		for id, chip := range panel.handles.chips {
+			if got := chip.GetWidget().Rect.Max.X; got > rightEdge {
+				t.Fatalf("scale %.1f: chip %d right edge = %d, want <= panel right edge %d", scale, id, got, rightEdge)
+			}
+		}
 	}
 }
 
