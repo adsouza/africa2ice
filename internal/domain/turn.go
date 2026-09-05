@@ -1,6 +1,16 @@
 package domain
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
+
+// tileOccupant pairs a live band with the tile it stands on, so the
+// subsistence pass can walk tiles without rescanning every band.
+type tileOccupant struct {
+	tile  TileID
+	index int
+}
 
 type turnBandWork struct {
 	floraDemand, huntingDemand, megafaunaDemand, waterDemand float64
@@ -103,31 +113,50 @@ func (world *World) advanceTurn() error {
 		}
 	}
 
-	for tileID := range TileCount {
-		indices := make([]int, 0, 4)
-		for index, band := range nextBands {
-			if int(band.TileID) == tileID && band.Population > 0 {
-				indices = append(indices, index)
-			}
+	// Bands are grouped by tile in a single pass. Asking every tile which
+	// bands stood on it cost TileCount*len(nextBands) iterations a turn —
+	// 1.57M at full occupancy — and each one bound a 360-byte Band by value,
+	// so the scan moved well over half a gigabyte per turn to find at most a
+	// handful of occupants per tile. It was also the map's most
+	// alignment-sensitive loop: an eight-byte change to this function's stack
+	// frame moved its cost by a factor of eight, which made unrelated edits
+	// look like performance regressions. Tiles are still visited in ascending
+	// order, so this pass is indistinguishable from the scan it replaces.
+	occupants := make([]tileOccupant, 0, len(nextBands))
+	for index := range nextBands {
+		if nextBands[index].Population > 0 {
+			occupants = append(occupants, tileOccupant{tile: nextBands[index].TileID, index: index})
 		}
-		if len(indices) == 0 {
-			continue
+	}
+	sort.Slice(occupants, func(left, right int) bool {
+		if occupants[left].tile != occupants[right].tile {
+			return occupants[left].tile < occupants[right].tile
 		}
-		floraDemands, waterDemands := make([]float64, len(indices)), make([]float64, len(indices))
-		faunaDemands := make([]float64, 0, len(indices)*2)
-		for offset, index := range indices {
-			floraDemands[offset], waterDemands[offset] = work[index].floraDemand, work[index].waterDemand
-			faunaDemands = append(faunaDemands, work[index].huntingDemand, work[index].megafaunaDemand)
+		return occupants[left].index < occupants[right].index
+	})
+	for start := 0; start < len(occupants); {
+		tileID := occupants[start].tile
+		end := start + 1
+		for end < len(occupants) && occupants[end].tile == tileID {
+			end++
+		}
+		group := occupants[start:end]
+		start = end
+		floraDemands, waterDemands := make([]float64, len(group)), make([]float64, len(group))
+		faunaDemands := make([]float64, 0, len(group)*2)
+		for offset, occupant := range group {
+			floraDemands[offset], waterDemands[offset] = work[occupant.index].floraDemand, work[occupant.index].waterDemand
+			faunaDemands = append(faunaDemands, work[occupant.index].huntingDemand, work[occupant.index].megafaunaDemand)
 		}
 		floraAllocated := ProportionalAllocate(nextTiles[tileID].Stock.Flora, floraDemands)
 		faunaAllocated := ProportionalAllocate(nextTiles[tileID].Stock.Fauna, faunaDemands)
 		waterAllocated := ProportionalAllocate(nextTiles[tileID].Stock.Water, waterDemands)
 		floraUsed, faunaUsed, waterUsed := 0.0, 0.0, 0.0
-		for offset, index := range indices {
-			work[index].floraAllocated = floraAllocated[offset]
-			work[index].huntingAllocated = faunaAllocated[offset*2]
-			work[index].megafaunaAllocated = faunaAllocated[offset*2+1]
-			work[index].waterAllocated = waterAllocated[offset]
+		for offset, occupant := range group {
+			work[occupant.index].floraAllocated = floraAllocated[offset]
+			work[occupant.index].huntingAllocated = faunaAllocated[offset*2]
+			work[occupant.index].megafaunaAllocated = faunaAllocated[offset*2+1]
+			work[occupant.index].waterAllocated = waterAllocated[offset]
 			floraUsed += floraAllocated[offset]
 			faunaUsed += faunaAllocated[offset*2] + faunaAllocated[offset*2+1]
 			waterUsed += waterAllocated[offset]
