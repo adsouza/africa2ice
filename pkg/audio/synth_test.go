@@ -39,7 +39,7 @@ func TestSynthesizedEffectsAreBoundedStereoAndDistinct(t *testing.T) {
 func TestNoopAndLazyMasterSettingsAreSafeBeforeConstruction(t *testing.T) {
 	NoopManager{}.SetMaster(0.8, true)
 	NoopManager{}.Play(SFXChoiceClick)
-	lazy := NewLazyManager()
+	lazy := NewLazyManager(nil)
 	lazy.SetMaster(2, true)
 	if lazy.volume != 1 || !lazy.muted || !lazy.settled || lazy.manager != nil {
 		t.Fatalf("lazy settings = volume %v muted %t manager %T", lazy.volume, lazy.muted, lazy.manager)
@@ -52,7 +52,7 @@ func TestNoopAndLazyMasterSettingsAreSafeBeforeConstruction(t *testing.T) {
 
 func TestLazyManagerAppliesSettledMasterBeforeFirstSound(t *testing.T) {
 	backend := &recordingManager{}
-	lazy := newLazyManager(func() SoundManager { return backend })
+	lazy := newLazyManager(func() (SoundManager, error) { return backend, nil }, nil)
 	lazy.SetMaster(0.8, false)
 	lazy.Play(SFXEventTrigger)
 	if len(backend.masters) != 1 || backend.masters[0].volume != 0.8 || backend.masters[0].muted {
@@ -65,7 +65,7 @@ func TestLazyManagerAppliesSettledMasterBeforeFirstSound(t *testing.T) {
 
 func TestLazyManagerQueuesPreSettingsSoundUntilPreferencesArrive(t *testing.T) {
 	backend := &recordingManager{}
-	lazy := newLazyManager(func() SoundManager { return backend })
+	lazy := newLazyManager(func() (SoundManager, error) { return backend, nil }, nil)
 	lazy.Play(SFXChoiceClick)
 	if len(backend.played) != 0 || len(backend.masters) != 1 || !backend.masters[0].muted {
 		t.Fatalf("preference-pending backend = played %v masters %#v", backend.played, backend.masters)
@@ -78,7 +78,7 @@ func TestLazyManagerQueuesPreSettingsSoundUntilPreferencesArrive(t *testing.T) {
 
 func TestLazyManagerDoesNotStartMutedSounds(t *testing.T) {
 	backend := &recordingManager{}
-	lazy := newLazyManager(func() SoundManager { return backend })
+	lazy := newLazyManager(func() (SoundManager, error) { return backend, nil }, nil)
 	lazy.SetMaster(0.4, true)
 	lazy.Play(SFXChoiceClick)
 	if len(backend.played) != 0 {

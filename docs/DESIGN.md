@@ -345,9 +345,9 @@ internal/adapters/logging/ OUTER OBSERVABILITY ADAPTER — stdlib + application/
   sink_desktop.go        unique size-bounded JSONL temp file             (//go:build !js)
   sink_js.go             JSONL stdout -> browser JavaScript console      (//go:build js)
 
-pkg/audio/               stdlib + Ebitengine audio only
+pkg/audio/               stdlib + oto only (never Ebitengine's audio package: see §11)
   synth.go               PCM tone generation (enveloped sine/square)
-  manager.go             SoundManager, lazily constructed with persisted master settings
+  manager.go             SoundManager, lazily constructed, degrades to silence on device failure
 
 pkg/render/              DRAWING ADAPTER — gameapi + Ebitengine; no domain/application/ui/hud
   palette.go             water and UI-chrome colors from the three-anchor epoch grade
@@ -935,7 +935,7 @@ linters:
           files: ["**/pkg/audio/**/*.go"]
           allow:
             - "$gostd"
-            - "github.com/hajimehoshi/ebiten/v2"
+            - "github.com/ebitengine/oto/v3"
 
         verification-drives-the-inbound-port:
           list-mode: strict
@@ -8029,7 +8029,7 @@ state, operation FIFO ordering, and deletion interrupted between tombstone publi
   failed read applies the §8 defaults and then emits it. Thus no sound can precede settings
   settlement, and a persisted mute always governs the first emitted sound without blocking the
   browser gesture. Construction failure yields a silent no-op manager, never a crash.
-- `-dumpmap` / `-headless` / `-screenshot` / `-turns` plus verification-only
+- `-dumpmap` / `-headless` / `-screenshot` / `-turns` / `-no-sound` plus verification-only
   `-seed` / `-policy` / `-checkpoint-json` are registered only in
   `main.go` (`!js`), so the wasm binary does not carry `flag` plumbing it cannot use.
 - **Performance and transfer size are the two web risks, and §12's step 2a measures both before the
@@ -8079,7 +8079,7 @@ state, operation FIFO ordering, and deletion interrupted between tombstone publi
 ## 11. Audio
 
 `synth.go` generates short enveloped PCM waveforms at three distinct pitches, played through
-`audio.Context.NewPlayerF32FromBytes`. Constants keep the established event names —
+`oto.Context.NewPlayer`. Constants keep the established event names —
 `SFXChoiceClick`, `SFXSaveComplete`, `SFXEventTrigger` — so real `.wav` assets can replace the synth
 without an API change. After a successful `game.EndTurn()` use case, `pkg/app` compares event
 `(turn, ordinal)` keys and requests at most one `SFXEventTrigger` when that completed turn appended
@@ -8117,7 +8117,31 @@ The `-dumpmap`, `-headless`, and `-screenshot` verification modes need no audio 
 context. The first two finish before constructing the interactive host; the screenshot path uses
 the lazy manager but requests no sound, so it also never creates a device context. The §13 gate
 therefore requires no sound device on any runner. Tests inject `NoopManager` explicitly when they
-need a permanently silent presentation port.
+need a permanently silent presentation port. The cost of that property is that **no gate lane can
+exercise a real device**, so `pkg/audio`'s only device-backed test is skipped unless
+`A2I_AUDIO_MANUAL` is set and must be run by hand when `Manager` changes.
+
+**A sound device that cannot be opened must never end the campaign.** Audio is presentation-only in
+the §8 sense, so its failure degrades exactly as an unreadable preference does: the manager goes
+permanently silent, `pkg/app` shows one notice, and play continues. This is why `pkg/audio` drives
+`oto` directly instead of through Ebitengine's `audio` package. Ebitengine reports a device error
+from a per-tick `AppendHookOnBeforeUpdate` hook, and a non-nil result there ends `RunGame` — merely
+constructing an `ebiten/v2/audio.Context` arms that hook, which then opens the device on the next
+tick whether or not any player exists, so a persisted mute could not prevent it either. The error is
+also unrecoverable once raised: `oto.Context.Err()` never clears and only one `oto` context may
+exist per process. A device failure is therefore reported, never returned: `Manager.Err()` surfaces
+it, `LazyManager` polls that once per tick because `oto` opens the device asynchronously, and the
+host records it as `audio.failure` with a `stage` of `init` (never opened) or `play` (stopped
+working) on the session log, the console, and a HUD notice. Each of those three is the only reader
+some player has. `-no-sound` skips construction entirely for a machine known to lack a usable
+device.
+
+Driving `oto` directly costs one behaviour and keeps another. Lost: Ebitengine no longer suspends
+and resumes the context on focus change, because that was wired through the same `audio` package
+hooks. This is deliberate and harmless here — every sound is a 120ms blip requested by a click, so a
+window without focus requests none. Kept: the browser gesture requirement, which `oto`'s own js
+driver enforces by resuming the `AudioContext` from `touchend`/`keyup`/`mouseup` listeners it
+registers itself, so §10's autoplay ordering does not depend on Ebitengine's audio package.
 
 ---
 

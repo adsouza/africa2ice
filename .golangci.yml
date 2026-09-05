@@ -120,7 +120,7 @@ linters:
         audio-is-a-leaf:
           list-mode: strict
           files: ["**/pkg/audio/**/*.go"]
-          allow: ["$gostd", "github.com/hajimehoshi/ebiten/v2"]
+          allow: ["$gostd", "github.com/ebitengine/oto/v3"]
         verification-drives-the-inbound-port:
           list-mode: strict
           files: ["**/internal/verification/**/*.go"]

@@ -134,7 +134,7 @@ func allowedImports(category string) ([]string, bool) {
 	case "ui":
 		return []string{module + "/pkg/gameapi", module + "/pkg/render", module + "/pkg/audio", "github.com/hajimehoshi/ebiten/v2"}, true
 	case "audio":
-		return []string{"github.com/hajimehoshi/ebiten/v2"}, true
+		return []string{"github.com/ebitengine/oto/v3"}, true
 	case "hud":
 		return []string{module + "/pkg/gameapi", module + "/pkg/ui", module + "/pkg/render", "github.com/hajimehoshi/ebiten/v2", "github.com/ebitenui/ebitenui", "golang.org/x/image"}, true
 	case "app":

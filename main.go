@@ -33,6 +33,7 @@ type desktopOptions struct {
 	checkpointJSON   string
 	screenshot       string
 	screenshotFrames int
+	noSound          bool
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -66,7 +67,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	ebiten.SetWindowClosingHandled(true)
 	ebiten.SetScreenClearedEveryFrame(false)
 	ebiten.SetWindowTitle("Africa 2 Ice: Paleolithic Dispersal")
-	game, err := app.NewGame(0x9e3779b97f4a7c15, session)
+	newGame := app.NewGame
+	if options.noSound {
+		newGame = app.NewGameWithoutSound
+	}
+	game, err := newGame(0x9e3779b97f4a7c15, session)
 	if err == nil {
 		err = ebiten.RunGame(game)
 	}
@@ -89,6 +94,7 @@ func parseDesktopOptions(args []string, stderr io.Writer) (desktopOptions, error
 	flags.StringVar(&options.checkpointJSON, "checkpoint-json", "", "write canonical checkpoint JSON to this path")
 	flags.StringVar(&options.screenshot, "screenshot", "", "write one rendered PNG to this path and exit")
 	flags.IntVar(&options.screenshotFrames, "screenshot-frames", options.screenshotFrames, "number of successive frames to capture, for inspecting animation")
+	flags.BoolVar(&options.noSound, "no-sound", false, "play silently and open no audio device, for systems whose sound device cannot be opened")
 	if err := flags.Parse(args); err != nil {
 		return desktopOptions{}, err
 	}

@@ -1,12 +1,28 @@
 package audio
 
-import ebitenaudio "github.com/hajimehoshi/ebiten/v2/audio"
+import (
+	"bytes"
+
+	"github.com/ebitengine/oto/v3"
+)
 
 // SoundManager is the presentation port used by the host. Verification modes
 // receive NoopManager and therefore never construct a sound-device context.
 type SoundManager interface {
 	Play(Sound)
 	SetMaster(volume float64, muted bool)
+}
+
+// Reporter receives audio-subsystem failures. pkg/audio is a leaf and cannot
+// import the observability adapter, so the host injects one. stage is "init"
+// for a device that never opened and "play" for one that stopped working, a
+// distinction a session log needs to tell a missing device from a lost one.
+type Reporter func(stage string, err error)
+
+// deviceHealth is implemented by managers backed by a real device, whose
+// errors surface asynchronously rather than from the Play call itself.
+type deviceHealth interface {
+	Err() error
 }
 
 type NoopManager struct{}
@@ -16,15 +32,42 @@ func (NoopManager) SetMaster(float64, bool) {}
 
 // Manager owns synthesized players and applies one master gain to both
 // current and future sounds.
+//
+// It drives oto directly rather than through Ebitengine's audio package, and
+// that is the whole point: Ebitengine reports a device error from a per-tick
+// hook, where a non-nil result ends RunGame and takes the campaign with it.
+// A sound device is presentation-only, so its failure is reported here and
+// degrades to silence instead.
 type Manager struct {
-	context *ebitenaudio.Context
-	players []*ebitenaudio.Player
+	context *oto.Context
+	players []*oto.Player
 	volume  float64
 	muted   bool
 }
 
-func NewManager() *Manager {
-	return &Manager{context: ebitenaudio.NewContext(sampleRate), volume: 0.5}
+// NewManager opens the sound device. The open runs on oto's own goroutine, so
+// a device that cannot be opened surfaces through Err() a few frames later
+// rather than from this call: waiting on oto's ready channel here would stall
+// the game loop, and on wasm would deadlock the event loop the browser needs
+// in order to resume audio in the first place.
+func NewManager() (*Manager, error) {
+	context, _, err := oto.NewContext(&oto.NewContextOptions{
+		SampleRate:   sampleRate,
+		ChannelCount: channelCount,
+		Format:       oto.FormatFloat32LE,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &Manager{context: context, volume: 0.5}, nil
+}
+
+// Err reports a device that never opened or has stopped working.
+func (manager *Manager) Err() error {
+	if manager == nil || manager.context == nil {
+		return nil
+	}
+	return manager.context.Err()
 }
 
 func (manager *Manager) Play(sound Sound) {
@@ -32,7 +75,7 @@ func (manager *Manager) Play(sound Sound) {
 		return
 	}
 	manager.prunePlayers()
-	player := manager.context.NewPlayerF32FromBytes(synthPCM(sound))
+	player := manager.context.NewPlayer(bytes.NewReader(synthPCM(sound)))
 	player.SetVolume(manager.effectiveVolume())
 	player.Play()
 	manager.players = append(manager.players, player)
@@ -61,9 +104,14 @@ func (manager *Manager) prunePlayers() {
 	for _, player := range manager.players {
 		if player.IsPlaying() {
 			live = append(live, player)
-			continue
 		}
-		_ = player.Close()
+	}
+	// oto releases a finished player through a runtime cleanup rather than
+	// Close, which is a deprecated no-op as of v3.4. A player therefore has to
+	// become genuinely unreachable: leaving stale pointers in the backing
+	// array past len would pin every player the session ever created.
+	for index := len(live); index < len(manager.players); index++ {
+		manager.players[index] = nil
 	}
 	manager.players = live
 }
@@ -83,27 +131,34 @@ func clampVolume(value float64) float64 {
 // leaves startup, headless, map-dump, and screenshot paths device-independent.
 type LazyManager struct {
 	manager SoundManager
-	create  func() SoundManager
+	create  func() (SoundManager, error)
+	report  Reporter
 	volume  float64
 	muted   bool
 	settled bool
+	failed  bool
 	pending *Sound
 }
 
-func NewLazyManager() *LazyManager {
-	return newLazyManager(func() SoundManager { return NewManager() })
+func NewLazyManager(report Reporter) *LazyManager {
+	return newLazyManager(func() (SoundManager, error) { return NewManager() }, report)
 }
 
-func newLazyManager(create func() SoundManager) *LazyManager {
-	return &LazyManager{create: create, volume: 0.5}
+func newLazyManager(create func() (SoundManager, error), report Reporter) *LazyManager {
+	return &LazyManager{create: create, report: report, volume: 0.5}
 }
 
 func (manager *LazyManager) Play(sound Sound) {
-	if manager == nil {
+	if manager == nil || manager.failed {
 		return
 	}
 	if manager.manager == nil {
-		manager.manager = manager.create()
+		created, err := manager.create()
+		if err != nil {
+			manager.fail("init", err)
+			return
+		}
+		manager.manager = created
 		if manager.settled {
 			manager.manager.SetMaster(manager.volume, manager.muted)
 		} else {
@@ -121,6 +176,39 @@ func (manager *LazyManager) Play(sound Sound) {
 		return
 	}
 	manager.manager.Play(sound)
+	manager.checkHealth()
+}
+
+// fail silences audio permanently for this session and reports once. A device
+// that could not be opened will not open on the next click, so retrying per
+// click would only repeat the log record.
+func (manager *LazyManager) fail(stage string, err error) {
+	manager.failed = true
+	manager.manager = nil
+	manager.pending = nil
+	if manager.report != nil {
+		manager.report(stage, err)
+	}
+}
+
+// Poll surfaces a device that failed after it was opened. oto reports an ALSA
+// failure asynchronously, several frames after the sound that triggered it, so
+// the host ticks this rather than waiting for the next sound request.
+func (manager *LazyManager) Poll() {
+	if manager == nil || manager.failed || manager.manager == nil {
+		return
+	}
+	manager.checkHealth()
+}
+
+func (manager *LazyManager) checkHealth() {
+	health, ok := manager.manager.(deviceHealth)
+	if !ok {
+		return
+	}
+	if err := health.Err(); err != nil {
+		manager.fail("play", err)
+	}
 }
 
 func (manager *LazyManager) SetMaster(volume float64, muted bool) {
@@ -130,10 +218,16 @@ func (manager *LazyManager) SetMaster(volume float64, muted bool) {
 	manager.volume = clampVolume(volume)
 	manager.muted = muted
 	manager.settled = true
+	if manager.failed {
+		return
+	}
 	if manager.manager != nil {
 		manager.manager.SetMaster(manager.volume, muted)
 		if manager.pending != nil && !muted {
 			manager.manager.Play(*manager.pending)
+			manager.pending = nil
+			manager.checkHealth()
+			return
 		}
 	}
 	manager.pending = nil

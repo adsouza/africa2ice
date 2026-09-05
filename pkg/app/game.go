@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"hash/maphash"
+	"os"
 
 	"github.com/adsouza/africa2ice/internal/adapters/logging"
 	"github.com/adsouza/africa2ice/internal/application"
@@ -155,6 +156,18 @@ func newGameWithPresentation(port gameapi.Game, sound gameaudio.SoundManager, se
 }
 
 func NewGame(seed uint64, session *logging.Session) (*Game, error) {
+	return newHostedGame(seed, session, true)
+}
+
+// NewGameWithoutSound composes the interactive host with a permanently silent
+// presentation port, constructing no audio context at all. A machine whose
+// sound device cannot be opened needs this: a device that fails to open is
+// reported and degraded now, but -no-sound skips the attempt entirely.
+func NewGameWithoutSound(seed uint64, session *logging.Session) (*Game, error) {
+	return newHostedGame(seed, session, false)
+}
+
+func newHostedGame(seed uint64, session *logging.Session, enableSound bool) (*Game, error) {
 	repository, err := newCampaignRepository()
 	if err != nil {
 		return nil, err
@@ -164,10 +177,17 @@ func NewGame(seed uint64, session *logging.Session) (*Game, error) {
 	if err != nil {
 		return nil, err
 	}
-	sound := gameaudio.NewLazyManager()
+	// game is assigned below; the reporter only ever fires from a later Play.
+	var game *Game
+	var sound gameaudio.SoundManager = gameaudio.NoopManager{}
+	if enableSound {
+		sound = gameaudio.NewLazyManager(audioReporter(session, os.Stderr, func(notice string) {
+			game.showNotice(notice)
+		}))
+	}
 	settingsStore, settingsErr := newUISettingsStore()
 	settingsStore = logging.DecorateUISettingsStore(session, settingsStore)
-	game := newGameWithPresentation(logging.DecorateGame(session, service), sound, settingsStore)
+	game = newGameWithPresentation(logging.DecorateGame(session, service), sound, settingsStore)
 	game.logSession = session
 	game.scenes.Push(ui.SceneTitle)
 	if settingsErr != nil {
@@ -182,6 +202,7 @@ func NewGame(seed uint64, session *logging.Session) (*Game, error) {
 
 func (g *Game) Update() error {
 	g.scene.Update()
+	g.pollAudio()
 	g.pollUISettings()
 	g.advanceToasts()
 	if g.breakthroughFrames > 0 {

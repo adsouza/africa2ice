@@ -116,3 +116,24 @@ func TestNumberedScreenshotPaths(t *testing.T) {
 		}
 	}
 }
+
+// TestParseDesktopOptionsAcceptsNoSound covers the AerynOS report: a machine
+// whose ALSA device cannot be opened aborted RunGame on the first click, so a
+// player needs a way to start the game without ever constructing a device.
+func TestParseDesktopOptionsAcceptsNoSound(t *testing.T) {
+	var stderr bytes.Buffer
+	options, err := parseDesktopOptions([]string{"-no-sound"}, &stderr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !options.noSound {
+		t.Fatalf("-no-sound did not set noSound: %#v", options)
+	}
+	defaults, err := parseDesktopOptions(nil, &stderr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaults.noSound {
+		t.Fatalf("noSound defaulted to true: %#v", defaults)
+	}
+}
