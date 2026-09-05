@@ -6690,8 +6690,11 @@ gap keeps adjacent biomes legible without creating a second geometric interpreta
 unexplored color and draws all 6,144 tiles in stable tile order. Explored water uses the continuous
 epoch water grade, explored land uses its current biome color, and unexplored tiles retain the
 opaque unknown color. Planning-only frames at the same scale reuse the image; the completed
-physical presentation frame is separately cached until frame, UI-local presentation state, or
-target geometry changes.
+physical presentation frame is separately cached and leaves the screen untouched until the
+accepted frame, UI-local presentation state, or target geometry changes. That UI-local key
+includes the fog halo's shimmer phase, so with an unexplored fringe on screen and reduced motion
+off the screen instead repaints 15 times a second; a fully explored map or reduced motion holds
+the phase still and keeps this idle path.
 
 Elevation remains load-bearing simulation and inspector data, but does not displace pixels. There
 are no side walls, lighting, depth targets, 3D camera, free pan, or terrain-detail modes; the only
@@ -6892,12 +6895,26 @@ components so render never reimplements the curve.
 
 ### Exploration fog and hidden-map behavior
 
-`map.go` renders every `Tile.Explored == false` cell in one fixed opaque near-black color instead of
-its water or biome color. Because fog and terrain occupy the same top-down cell, no elevation,
-coastline, biome, or resource information can leak around an edge. The fog needs no separate mesh,
-transparency sorting, texture asset, animation clock, fade timer, or RNG; a newly explored tile
-appears in the next accepted frame. Save, load, screenshots, and deterministic state hashes depend
-only on the authoritative exploration bit.
+`map.go` renders every `Tile.Explored == false` cell more than `haloRingCount` (3) Chebyshev steps
+from the nearest explored tile — the same distance metric the 3×3 sapiens exploration reveal already
+uses — in one fixed opaque near-black color instead of its water or biome color. A tile inside that
+boundary instead shows the fog halo: a heavily darkened trace of its real terrain, graded by ring
+distance and specified in CIE L\* rather than as an alpha blend, so every halo color lands
+strictly below the L\* of the darkest explored biome (Riverine Woodland) regardless of aridity or
+which tile sits beneath the fog. Water sits below land within each ring, so a coastline still
+reads as a lightness edge at a level where hue can no longer discriminate between them. Each
+tile's target shimmers at 15 phase steps a second and re-rolls five times a second, unless the
+reduced-motion setting is on, in which case the halo holds at the ring's plain target. Because fog
+and terrain occupy the same top-down cell, no elevation, coastline, biome, or resource information
+can leak around an edge beyond those three rings; inside them the leak is deliberate and bounded
+to a color strictly darker than any explored tile, never a recognizable biome, resource, or exact
+identity. The fog needs no separate mesh, transparency sorting, texture asset, or fade timer; a
+newly explored tile appears in the next accepted frame. The halo's shimmer needs neither an
+animation clock nor an RNG: it advances a frame-counted phase — Ebitengine's `Update` tick, not a
+wall clock — and re-rolls each tile's target from a pure per-tile hash, and neither reaches the
+simulation RNG, the save, or the state hashes; `internal/archtest` makes that structural by
+pinning `pkg/render`'s allowed imports. Save, load, screenshots, and deterministic state hashes
+depend only on the authoritative exploration bit.
 
 Unexplored tiles have no marker, selection ring, biome/resource label, tile inspector, natural-
 shelter cue, fauna summary, destination highlight, or full passage line. Picking may still resolve
@@ -7383,27 +7400,31 @@ save payload, or any action queue.
 
 Presentation preferences persist locally across application sessions in a versioned `UISettings`
 record; they are intentionally absent from `SaveState`, slot metadata, campaign hashes, and
-cloud/export semantics. The current record is schema `2`, with six required JSON fields:
+cloud/export semantics. The current record is schema `3`, with seven required JSON fields:
 `SchemaVersion`, `FieldNotesVisible bool`, `MasterVolume float64`, `Muted bool`,
-`GuideDismissed bool`, and `FieldNotesExpanded bool` (§11 for the audio fields' behavior).
+`GuideDismissed bool`, `FieldNotesExpanded bool`, and `ReducedMotion bool` (§11 for the audio
+fields' behavior).
 Desktop stores it in
 `os.UserConfigDir()/africa2ice/ui_settings.json`; web stores one record in a separate
 `africa2ice-ui` IndexedDB database so world-save locking and migrations remain independent.
 
 Defaults are **per record, not per field**: an absent, malformed, or unsupported-schema record
-supplies all five preferences at once — Field Notes visible, `MasterVolume` `0.5`, `Muted` false,
-`GuideDismissed` false, `FieldNotesExpanded` false. A schema-2 record is accepted only when all
-six required fields are present, non-null, and have the exact JSON types above. A schema-1
-record — `SchemaVersion`, `FieldNotesVisible`, `MasterVolume`, and `Muted` only, predating the
-first-turn guide and the drawer's compact/expanded height — is still accepted when those four
-original fields are present, non-null, and correctly typed; `GuideDismissed` and
-`FieldNotesExpanded` are not required for it and decode as `false`. Either accepted schema is
-normalized to the current `SchemaVersion == 2` before it reaches the caller, so a decoded
-schema-1 record's next write persists it as schema 2 — decoding upgrades the in-memory record in
-place rather than rewriting the file as a separate migration step. Any other `SchemaVersion`
-value falls back to the whole-record default rather than partially decoding. Unknown extra fields
-are ignored. A syntactically valid object with a missing, null, or wrongly typed required field is
-malformed and defaults as a whole; ordinary Go zero-value decoding is not presence validation.
+supplies all six preferences at once — Field Notes visible, `MasterVolume` `0.5`, `Muted` false,
+`GuideDismissed` false, `FieldNotesExpanded` false, and `ReducedMotion` false. A schema-3 record is
+accepted only when all seven required fields are present, non-null, and have the exact JSON types
+above. A schema-2 record — the same six fields as before `ReducedMotion` existed — is still
+accepted when those are present, non-null, and correctly typed; `ReducedMotion` is not required
+for it and decodes as `false`. A schema-1 record — `SchemaVersion`, `FieldNotesVisible`,
+`MasterVolume`, and `Muted` only, predating the first-turn guide and the drawer's compact/expanded
+height — is still accepted when those four original fields are present, non-null, and correctly
+typed; `GuideDismissed`, `FieldNotesExpanded`, and `ReducedMotion` are not required for it and
+decode as `false`. Any accepted schema is normalized to the current `SchemaVersion == 3` before it
+reaches the caller, so a decoded schema-1 or schema-2 record's next write persists it as schema 3
+— decoding upgrades the in-memory record in place rather than rewriting the file as a separate
+migration step. Any other `SchemaVersion` value falls back to the whole-record default rather than
+partially decoding. Unknown extra fields are ignored. A syntactically valid object with a missing,
+null, or wrongly typed required field is malformed and defaults as a whole; ordinary Go zero-value
+decoding is not presence validation.
 `MasterVolume` must be finite and is clamped to `[0, 1]` on both read and write, so a hand-edited
 preference file cannot produce negative or above-unity gain. Field Notes defaults toward _visible_
 and audio defaults toward _quiet_: an unreadable preference must not surprise the player with
@@ -7424,9 +7445,9 @@ otherwise become idle. Thus rapid slider/toggle input is bounded and last-value-
 completion order is delayed. Failure shows one toast but does not revert the current preference;
 the next user change supplies the next retry.
 
-Until the initial read settles, presentation renders the defaults but all three preference-
-mutating Settings controls — the master-volume slider, the mute toggle, and show-first-turn-guide —
-are disabled under a compact “Loading preferences…” label. Field Notes visibility is no longer a
+Until the initial read settles, presentation renders the defaults but all four preference-
+mutating Settings controls — the master-volume slider, the mute toggle, the reduced-motion toggle,
+and show-first-turn-guide — are disabled under a compact “Loading preferences…” label. Field Notes visibility is no longer a
 Settings control (the drawer's own `F`/`Shift+F` and edge controls are its only toggle), so it is
 unaffected by this gate. The completion atomically installs either the
 validated stored record or the complete default record before enabling those controls. A write can
@@ -8842,12 +8863,12 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    alerts. Catalog completeness and reference tests cover every closed enum/context key. Toggling,
    focusing, and scrolling leave selection, draft, action batch, revision, RNG, and frame untouched.
    Exercise absent/malformed/unsupported-schema `UISettings`, local cross-session persistence of all
-   five preferences, whole-record defaulting (Field Notes visible, `MasterVolume` `0.5`, `Muted`
-   false, `GuideDismissed` false, `FieldNotesExpanded` false), required-field presence for both
-   schema 1 (three fields) and schema 2 (five fields), null and wrong-type rejection, decoding a
-   schema-1 record and re-stamping it schema 2, `MasterVolume` clamping on read and write, write
-   failure, and campaign load/delete
-   independence on desktop and the separate web database. With the initial read pending, all three
+   six preferences, whole-record defaulting (Field Notes visible, `MasterVolume` `0.5`, `Muted`
+   false, `GuideDismissed` false, `FieldNotesExpanded` false, `ReducedMotion` false), required-field
+   presence for schema 1 (three fields), schema 2 (five fields), and schema 3 (six fields), null and
+   wrong-type rejection, decoding a schema-1 or schema-2 record and re-stamping it schema 3,
+   `MasterVolume` clamping on read and write, write failure, and campaign load/delete
+   independence on desktop and the separate web database. With the initial read pending, all four
    preference controls render disabled and issue no write; installing either a valid result or the
    whole-record defaults enables them atomically. This step owns `ui_settings_file.go` and
    `ui_settings_idb_js.go`, including their shared record-validation contract; step 11 composes and
@@ -9995,7 +10016,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | Autosave interval fallback                 | `5` minutes of monotonic running time                          | Policy                                          | §9    |
 | Toast display duration                     | `2` seconds                                                    | Policy                                          | §9    |
 | Toast FIFO capacity                        | `4` entries                                                    | Policy                                          | §9    |
-| `UISettings.SchemaVersion`                 | `2`; see "UI settings schema" below for the required fields per version | Locked                          | §8    |
+| `UISettings.SchemaVersion`                 | `3`; see "UI settings schema" below for the required fields per version | Locked                          | §8    |
 | `UISettings` `FieldNotesVisible` default   | `true`                                                         | Policy                                          | §8    |
 | `UISettings` `MasterVolume` default        | `0.5`                                                          | Policy                                          | §8    |
 | `UISettings` `MasterVolume` range          | `[0, 1]`                                                       | Locked                                          | §8    |
@@ -10024,7 +10045,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | Focus camera scale and transition          | `3×`; `15` update ticks; clamped to the map area above the drawer | Policy                                        | §8    |
 | Field Notes drawer heights                 | hidden `20`, compact `102`, expanded `300` logical px           | Policy                                          | §8    |
 | Liveability tiers (presentation only)      | food red `< RequiredFU`, amber `< 1.5 × RequiredFU`; water red `< 0.25 cap`, amber `< 0.5 cap`; degradation amber `≥ 0.25`, red `≥ 0.5`; mortality amber `≥ 0.004`, red `≥ 0.008`; shelter amber `< 0.3`; archaic present amber | Initial | §8 |
-| UI settings schema                         | `2`: `FieldNotesVisible`, `MasterVolume`, `Muted`, `GuideDismissed`, `FieldNotesExpanded`; schema 1 decodes with the new fields false | Policy | §8 |
+| UI settings schema                         | `3`: `FieldNotesVisible`, `MasterVolume`, `Muted`, `GuideDismissed`, `FieldNotesExpanded`, `ReducedMotion`; schema 1 and schema 2 decode with the newer fields false | Policy | §8 |
 | `MaxRenderScale`                           | `2.0`                                                          | Policy                                          | §8    |
 | Minimum gameplay viewport                  | `1,280 × 720 DIPs`                                             | Policy                                          | §8    |
 | Sapiens band warning thresholds            | suffering: latest decline/food shortfall or `Health < 0.50`; danger: `Health < 0.80` or seasonal + chronic rate `>= 0.004` | Policy | §8 |

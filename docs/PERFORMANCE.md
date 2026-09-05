@@ -74,13 +74,16 @@ Measured 2026-09-01 from the optimized artifact in pinned Chromium `151.0.7922.3
 | top-down | 1 | 59.88 | 30 | 16.8 ms | 68.71 ms | 26.0 MB |
 | top-down | 2 | 59.88 | 20 | 16.8 ms | 212.36 ms | 24.5 MB |
 
-Both floors, the 150 ms p95 frame-gap ceiling, and the two-second turn-latency ceiling pass.
-The key optimization is appropriate to a turn-based presentation: production disables automatic
-screen clearing, caches one complete immutable presentation frame, and leaves the screen untouched
-until either the accepted frame or UI-local presentation key changes. This lets Ebitengine skip idle
-GPU work rather than continually redrawing an unchanged high-DPI canvas. The DPR 2 result above uses
-native 2560 × 1440 presentation and scale-specific terrain targets; it is not an upscale of a
-completed 1280 × 720 frame.
+Both floors, the 150 ms p95 frame-gap ceiling, and the two-second turn-latency ceiling pass. The
+key optimization is appropriate to a turn-based presentation: production disables automatic screen
+clearing, caches one complete immutable presentation frame, and leaves the screen untouched until
+either the accepted frame or UI-local presentation key changes. This lets Ebitengine skip idle GPU
+work rather than continually redrawing an unchanged high-DPI canvas — unconditionally true here,
+since this fixture explores every tile and so carries no fog-halo fringe to animate (see "Fog halo
+benchmark"), but not true in general: with a fringe on screen and reduced motion off, the halo's
+shimmer phase is itself part of that UI-local key, and the screen repaints 15 times a second
+instead. The DPR 2 result above uses native 2560 × 1440 presentation and scale-specific terrain
+targets; it is not an upscale of a completed 1280 × 720 frame.
 
 ### Reference machine identity
 
