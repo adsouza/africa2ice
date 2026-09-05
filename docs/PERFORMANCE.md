@@ -101,26 +101,32 @@ Browser verification and profiling pin Playwright `1.62.1` and Chromium `151.0.7
 The maximum-workload `World.AdvanceTurn` and frame-projection benchmarks exercise exactly 6,144
 tiles and 256 bands, alongside the fixed pure-Go calibration benchmark.
 
-**The ratios below are provisional.** `BenchmarkCalibration` was replaced on 2026-09-05 (see
-"Why the calibration allocates"), so every previously recorded ratio is expressed in a unit that no
-longer exists and none of them carry over. These medians are five samples on the interactive
-reference Mac; §12 step 8 admits a baseline only from `NativeBenchmarkReference`, so the next
-successful `release-readiness` run supplies the authoritative record and the ceilings must then be
-tightened to it.
+`BenchmarkCalibration` was replaced on 2026-09-05 (see "Why the calibration allocates"), so every
+ratio recorded before that date is expressed in a unit that no longer exists and none of them carry
+over. The authoritative five-sample medians below were recorded by the `release-readiness` job on
+2026-09-05 using the GitHub-hosted `ubuntu-24.04` `linux/amd64` runner, image `20260831.293.1`,
+with an Intel Xeon Platinum 8573C:
 
-| benchmark | provisional median ratio | bytes/op | allocs/op |
+| benchmark | median ratio to calibration | bytes/op | allocs/op |
 | --- | ---: | ---: | ---: |
-| maximum turn | 404.20 | 1,881,977 | 3,244 |
-| maximum frame projection | 77.43 | 3,777,561 | 1,998 |
+| maximum turn | 414.70 | 1,881,526 | 3,244 |
+| maximum frame projection | 122.26 | 3,777,570 | 1,998 |
 
 These medians include the current reusable migration-candidate workspace and seed-independent
 world data. The memory ceilings are `2,350,000 B/op` and `4,500,000 B/op`; the allocation ceilings
-are `4,080` and `2,490`; those are counts rather than times and are unaffected by the calibration
-change. The provisional normalized-time ceilings are `810` and `155` — twice the medians above
-rather than the usual 25% margin, because a Mac-derived median cannot predict the reference
-runner's. Twice is still tight enough to catch the regression class that prompted the change: the
-per-tile band scan removed in `cb5296d` cost 2.56x the current maximum turn. Restore the 25% margin
-against the CI median once one is recorded.
+are `4,080` and `2,490`; those are counts rather than times and were unaffected by the calibration
+change. The normalized-time ceilings are `518` and `153`, each less than 25% above its
+corresponding authoritative median. For scale, the per-tile band scan removed in `cb5296d` cost
+`2.56x` the current maximum turn, so this margin still catches that regression class several times
+over.
+
+One caveat applies to the maximum-turn ceiling. Its within-pool stability under the new calibration
+rests on a single runner CPU model so far; the reading that prompted the change came from an AMD
+EPYC 9V74, and this baseline from an Intel Xeon Platinum 8573C. The Mac/CI agreement is strong
+evidence (`391` against `414.70`, a `1.06x` spread, where the old calibration produced `1.59x`
+across the same two machines), but if a future run on another pool CPU exceeds `518`, the correct
+response is to record the ratio and the `cpu:` line and judge whether the calibration is still
+failing to normalise — not to raise the ceiling.
 
 ### Why the calibration allocates
 
@@ -143,7 +149,15 @@ code — a `1.59x` spread that was treated as a machine difference to be re-base
 sign that the normaliser did not work.
 
 The replacement allocates 96 blocks of 576 bytes per operation, putting its mean allocation within
-a few percent of the maximum turn's own. Against a deliberate change in allocator and collector
+a few percent of the maximum turn's own (580 bytes). It deliberately matches the maximum turn
+rather than the frame projection, whose 3.78 MB across 1,998 allocations averages `1,891` bytes: one
+calibration shape cannot bracket both, and the maximum turn is the workload whose ratio was
+unstable across the runner pool (`1,949` on Xeon against `3,840` on EPYC). Frame projection was
+already stable there — `274.10`, `282.89` and `285.24` on three different pool CPUs under the old
+calibration, a `1.04x` spread — so its remaining Mac/CI gap is an ARM-versus-x86 difference on a
+machine that is explicitly not the release baseline. Should frame projection ever destabilise
+within the pool, the fix is a second block class sized near its mean allocation, not a looser
+ceiling. Against a deliberate change in allocator and collector
 cost (`GOGC=off`) the old normaliser's ratio moved `+58.4%` while the new one moved `-22.9%`,
 because the old loop absorbed almost none of the change it was supposed to cancel: it went from
 `9,975 ns` to `10,369 ns`, `+4%`, while the workload it normalises nearly doubled.
