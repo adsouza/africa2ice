@@ -106,3 +106,74 @@ func TestHaloRingsDimWithDistance(t *testing.T) {
 		}
 	}
 }
+
+// haloTestFrame builds a full grid with a single explored tile at (centreX,
+// centreY), which is the cleanest way to read a distance field back out.
+func haloTestFrame(centreX, centreY int) *gameapi.Frame {
+	frame := &gameapi.Frame{Tiles: make([]gameapi.Tile, TerrainGridWidth*TerrainGridHeight)}
+	for y := range TerrainGridHeight {
+		for x := range TerrainGridWidth {
+			id := gameapi.TileID(y*TerrainGridWidth + x)
+			frame.Tiles[id] = gameapi.Tile{ID: id, X: x, Y: y, Land: true}
+		}
+	}
+	frame.Tiles[centreY*TerrainGridWidth+centreX].Explored = true
+	return frame
+}
+
+func TestHaloDistancesAreChebyshev(t *testing.T) {
+	const centreX, centreY = 40, 30
+	distances := haloDistances(haloTestFrame(centreX, centreY))
+	tests := []struct {
+		name string
+		x, y int
+		want uint8
+	}{
+		{name: "the explored tile itself", x: centreX, y: centreY, want: 0},
+		{name: "orthogonal neighbour", x: centreX + 1, y: centreY, want: 1},
+		{name: "diagonal neighbour is also ring 1", x: centreX + 1, y: centreY + 1, want: 1},
+		{name: "knight-ish offset is ring 2 under Chebyshev", x: centreX + 2, y: centreY + 1, want: 2},
+		{name: "far diagonal corner of ring 3", x: centreX + 3, y: centreY + 3, want: 3},
+		{name: "one past the last ring", x: centreX + 4, y: centreY, want: haloFar},
+		{name: "far away", x: centreX + 20, y: centreY + 20, want: haloFar},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := distances[test.y*TerrainGridWidth+test.x]; got != test.want {
+				t.Fatalf("distance at (%d, %d) = %d, want %d", test.x, test.y, got, test.want)
+			}
+		})
+	}
+}
+
+func TestHaloDistancesTakeTheNearestExploredTile(t *testing.T) {
+	frame := haloTestFrame(40, 30)
+	frame.Tiles[30*TerrainGridWidth+45].Explored = true
+	distances := haloDistances(frame)
+	// (43, 30) is 3 from the left anchor and 2 from the right one.
+	if got := distances[30*TerrainGridWidth+43]; got != 2 {
+		t.Fatalf("distance at (43, 30) = %d, want 2 from the nearer anchor", got)
+	}
+}
+
+func TestHaloDistancesAreZeroForEveryExploredTile(t *testing.T) {
+	frame := haloTestFrame(40, 30)
+	for index := range frame.Tiles {
+		frame.Tiles[index].Explored = true
+	}
+	for index, distance := range haloDistances(frame) {
+		if distance != 0 {
+			t.Fatalf("tile %d of a fully explored frame has distance %d", index, distance)
+		}
+	}
+}
+
+func TestHaloDistancesAreAllFarWithNothingExplored(t *testing.T) {
+	frame := haloTestFrame(40, 30)
+	frame.Tiles[30*TerrainGridWidth+40].Explored = false
+	for index, distance := range haloDistances(frame) {
+		if distance != haloFar {
+			t.Fatalf("tile %d of an unexplored frame has distance %d", index, distance)
+		}
+	}
+}

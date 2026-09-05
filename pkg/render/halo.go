@@ -106,3 +106,62 @@ func haloBlendFor(target color.RGBA, lightness float64) float64 {
 func haloColor(base color.RGBA, blend haloBlendPair, noise float64) color.RGBA {
 	return interpolateRGBA(unexploredTileColor, base, lerp(blend[0], blend[1], noise))
 }
+
+// haloFar marks a tile too deep in the fog to show any trace of its terrain.
+const haloFar uint8 = 0xff
+
+// haloDistances labels each tile with its Chebyshev distance to the nearest
+// explored tile, saturating at haloFar. Chebyshev rather than Manhattan
+// because exploration already reveals a 3x3 footprint, so the halo grows the
+// same shape the reveal does. The caller caches this with the terrain key: it
+// changes only when exploration does, never with the shimmer.
+func haloDistances(frame *gameapi.Frame) []uint8 {
+	distances := make([]uint8, len(frame.Tiles))
+	// The grid is dense and tile IDs are stable, but the lookup is built from
+	// the frame's own coordinates rather than assuming id == y*width+x, so a
+	// future partial or reordered tile slice cannot silently misplace a ring.
+	lookup := make([]int32, TerrainGridWidth*TerrainGridHeight)
+	for index := range lookup {
+		lookup[index] = -1
+	}
+	frontier := make([]int32, 0, len(frame.Tiles))
+	for id := range frame.Tiles {
+		tile := &frame.Tiles[id]
+		if tile.X < 0 || tile.X >= TerrainGridWidth || tile.Y < 0 || tile.Y >= TerrainGridHeight {
+			distances[id] = haloFar
+			continue
+		}
+		lookup[tile.Y*TerrainGridWidth+tile.X] = int32(id)
+		if tile.Explored {
+			frontier = append(frontier, int32(id))
+			continue
+		}
+		distances[id] = haloFar
+	}
+	for head := 0; head < len(frontier); head++ {
+		id := frontier[head]
+		step := distances[id] + 1
+		if step > haloRingCount {
+			continue
+		}
+		tile := &frame.Tiles[id]
+		for offsetY := -1; offsetY <= 1; offsetY++ {
+			for offsetX := -1; offsetX <= 1; offsetX++ {
+				if offsetX == 0 && offsetY == 0 {
+					continue
+				}
+				x, y := tile.X+offsetX, tile.Y+offsetY
+				if x < 0 || x >= TerrainGridWidth || y < 0 || y >= TerrainGridHeight {
+					continue
+				}
+				neighbour := lookup[y*TerrainGridWidth+x]
+				if neighbour < 0 || distances[neighbour] != haloFar {
+					continue
+				}
+				distances[neighbour] = step
+				frontier = append(frontier, neighbour)
+			}
+		}
+	}
+	return distances
+}
