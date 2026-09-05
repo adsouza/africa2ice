@@ -37,6 +37,7 @@ const (
 var (
 	unexploredTileColor    = color.RGBA{R: 6, G: 11, B: 15, A: 255}
 	archaicBandMarkerColor = color.RGBA{R: 201, G: 103, B: 82, A: 255}
+	sapiensBandMarkerColor = color.RGBA{R: 245, G: 202, B: 92, A: 255}
 	escarpmentColor        = color.RGBA{R: 220, G: 142, B: 88, A: 255}
 	queuedMigrationColor   = color.RGBA{R: 232, G: 72, B: 72, A: 255}
 )
@@ -266,21 +267,25 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 	if actor := selectedBandInFrame(frame, selectedBand); actor != nil {
 		interbreedTiles = interbreedCandidateTiles(frame, *actor)
 	}
-	for _, band := range frame.Bands {
-		marker, visible := bandColorForRender(frame, band)
-		if !visible {
-			continue
-		}
-		tile := frame.Tiles[band.TileID]
-		centreX, centreY := geometry.TilePoint(tile)
-		vector.FillCircle(mapCanvas, centreX, centreY, 3.6*markerScale, marker, true)
-		// An archaic band the selected band can interbreed with gets its own
-		// ring, so the option is visible on the map rather than only discovered
-		// by pressing the key and hoping.
-		if band.Species == gameapi.ArchaicHominin && interbreedTiles[band.TileID] {
+	// Markers belong to tiles rather than to bands: co-located bands share one
+	// centre, so a circle per band painted the same disc repeatedly and only
+	// the last one drawn survived. Rings follow the disc for the same reason —
+	// stroking them per band stacked identical circles on identical pixels.
+	var selectedTile gameapi.TileID
+	hasSelectedTile := false
+	if actor := selectedBandInFrame(frame, selectedBand); actor != nil {
+		selectedTile, hasSelectedTile = actor.TileID, true
+	}
+	for _, marker := range tileMarkersForRender(frame) {
+		centreX, centreY := geometry.TilePoint(frame.Tiles[marker.TileID])
+		drawTileMarker(mapCanvas, centreX, centreY, markerScale, marker)
+		// Interbreeding requires co-location, so a candidate always stands on
+		// the ringed tile: the option is visible on the map rather than only
+		// discovered by pressing the key and hoping.
+		if interbreedTiles[marker.TileID] {
 			vector.StrokeCircle(mapCanvas, centreX, centreY, 6.4*markerScale, 1.5, interbreedMarkerColor, true)
 		}
-		if band.ID == selectedBand {
+		if hasSelectedTile && marker.TileID == selectedTile {
 			vector.StrokeCircle(mapCanvas, centreX, centreY, 5.2*markerScale, 1.5, color.White, true)
 		}
 	}
@@ -536,6 +541,103 @@ func passageColorForRender(frame *gameapi.Frame, passage gameapi.Passage) (color
 	return color.RGBA{R: 203, G: 172, B: 104, A: 210}, true
 }
 
+// drawTileMarker paints a tile's disc: one species fills it outright, and two
+// or more split it into wedges. The undivided case stays on FillCircle because
+// a whole-turn sweep is not a sector — see scaledVector.FillPie.
+func drawTileMarker(canvas logicalCanvas, centreX, centreY, markerScale float32, marker tileMarker) {
+	radius := 3.6 * markerScale
+	wedges, count := markerWedges(marker)
+	if count == 1 {
+		vector.FillCircle(canvas, centreX, centreY, radius, wedges[0].Color, true)
+		return
+	}
+	for _, wedge := range wedges[:count] {
+		vector.FillPie(canvas, centreX, centreY, radius, wedge.StartAngle, wedge.SweepAngle, wedge.Color, true)
+	}
+}
+
+// markerWedge is one species' slice of a tile's disc.
+type markerWedge struct {
+	Color      color.RGBA
+	StartAngle float32
+	SweepAngle float32
+}
+
+// markerWedges splits a tile's disc into one wedge per species standing on it,
+// running clockwise from twelve o'clock in species order so a tile keeps its
+// slice arrangement as bands are founded and die. Angles accumulate in float64
+// and narrow once, because summing float32 sweeps drifts a wedge off the
+// previous one's edge. A tile holding a single species yields one whole-turn
+// wedge, which drawTileMarker draws as a plain circle rather than an arc.
+func markerWedges(marker tileMarker) ([gameapi.SpeciesCount]markerWedge, int) {
+	var wedges [gameapi.SpeciesCount]markerWedge
+	total := 0
+	for _, bands := range marker.Counts {
+		total += bands
+	}
+	if total == 0 {
+		return wedges, 0
+	}
+	start, count := -math.Pi/2, 0
+	for species, bands := range marker.Counts {
+		if bands == 0 {
+			continue
+		}
+		sweep := 2 * math.Pi * float64(bands) / float64(total)
+		wedges[count] = markerWedge{
+			Color:      speciesMarkerColor(gameapi.Species(species)),
+			StartAngle: float32(start),
+			SweepAngle: float32(sweep),
+		}
+		start += sweep
+		count++
+	}
+	return wedges, count
+}
+
+func speciesMarkerColor(species gameapi.Species) color.RGBA {
+	if species == gameapi.ArchaicHominin {
+		return archaicBandMarkerColor
+	}
+	return sapiensBandMarkerColor
+}
+
+// tileMarker is the consolidated species breakdown of every visible band
+// standing on one tile.
+type tileMarker struct {
+	TileID gameapi.TileID
+	Counts [gameapi.SpeciesCount]int
+}
+
+// tileMarkersForRender groups every visible band onto the tile it stands on,
+// in first-appearance order so discs keep their identity between frames. It
+// buckets species by the same predicate bandColorForRender uses, so a marker's
+// slices and its colours can never disagree.
+func tileMarkersForRender(frame *gameapi.Frame) []tileMarker {
+	if frame == nil {
+		return nil
+	}
+	var markers []tileMarker
+	positions := make(map[gameapi.TileID]int, len(frame.Bands))
+	for _, band := range frame.Bands {
+		if _, visible := bandColorForRender(frame, band); !visible {
+			continue
+		}
+		position, seen := positions[band.TileID]
+		if !seen {
+			position = len(markers)
+			positions[band.TileID] = position
+			markers = append(markers, tileMarker{TileID: band.TileID})
+		}
+		species := gameapi.HomoSapiens
+		if band.Species == gameapi.ArchaicHominin {
+			species = gameapi.ArchaicHominin
+		}
+		markers[position].Counts[species]++
+	}
+	return markers
+}
+
 func bandColorForRender(frame *gameapi.Frame, band gameapi.Band) (color.RGBA, bool) {
 	if frame == nil || int(band.TileID) >= len(frame.Tiles) {
 		return color.RGBA{}, false
@@ -543,10 +645,7 @@ func bandColorForRender(frame *gameapi.Frame, band gameapi.Band) (color.RGBA, bo
 	if !frame.Tiles[band.TileID].Explored && band.Species != gameapi.HomoSapiens {
 		return color.RGBA{}, false
 	}
-	if band.Species == gameapi.ArchaicHominin {
-		return archaicBandMarkerColor, true
-	}
-	return color.RGBA{R: 245, G: 202, B: 92, A: 255}, true
+	return speciesMarkerColor(band.Species), true
 }
 
 func reachableTileColor(candidateIndex int) color.RGBA {

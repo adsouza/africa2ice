@@ -43,6 +43,28 @@ func (scaledVector) FillCircle(destination logicalCanvas, cx, cy, radius float32
 	ebitenvector.FillCircle(destination.image, cx*scale, cy*scale, radius*scale, fillColor, antialias)
 }
 
+// FillPie fills the circular sector that starts at startAngle and sweeps
+// clockwise by sweepAngle, both in radians with 0 pointing along +x.
+// sweepAngle must be less than a whole turn: Arc normalizes its angles
+// modulo 2pi in float32 and only collapses a whole turn back into a full
+// circle when the subtraction round-trips exactly, which holds at some
+// start angles and silently yields an invisible sliver at others. Draw an
+// undivided disc with FillCircle instead of relying on that. The path
+// is assembled from already-scaled coordinates here rather than at the call
+// site: a path built from DIP-authored geometry would rasterize at the wrong
+// size on a high-DPI target, which is the mixing this type exists to prevent.
+func (scaledVector) FillPie(destination logicalCanvas, cx, cy, radius, startAngle, sweepAngle float32, fillColor color.Color, antialias bool) {
+	scale := destination.scale
+	x, y, scaledRadius := cx*scale, cy*scale, radius*scale
+	var sector ebitenvector.Path
+	sector.MoveTo(x, y)
+	sector.Arc(x, y, scaledRadius, startAngle, startAngle+sweepAngle, ebitenvector.Clockwise)
+	sector.Close()
+	options := &ebitenvector.DrawPathOptions{AntiAlias: antialias}
+	options.ColorScale.ScaleWithColor(fillColor)
+	ebitenvector.FillPath(destination.image, &sector, nil, options)
+}
+
 func (scaledVector) StrokeCircle(destination logicalCanvas, cx, cy, radius, strokeWidth float32, strokeColor color.Color, antialias bool) {
 	scale := destination.scale
 	ebitenvector.StrokeCircle(destination.image, cx*scale, cy*scale, radius*scale, strokeWidth*scale, strokeColor, antialias)

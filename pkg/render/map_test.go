@@ -3,6 +3,7 @@ package render
 import (
 	"image"
 	"image/color"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -69,6 +70,92 @@ func TestSelectedBandInFrame(t *testing.T) {
 	}
 }
 
+// TestTileMarkersForRenderSplitsCoLocatedSpecies covers the disc a tile draws
+// for the bands standing on it. Each band used to fill its own circle at its
+// tile's centre, so a sapiens band and an archaic band sharing a tile painted
+// the same disc and whichever sorted later in the slice simply won
+// (user-reported). Grouping by tile first is what lets the marker show both.
+func TestTileMarkersForRenderSplitsCoLocatedSpecies(t *testing.T) {
+	tiles := make([]gameapi.Tile, 5)
+	for id := range tiles {
+		tiles[id] = gameapi.Tile{ID: gameapi.TileID(id), Land: true, Explored: true}
+	}
+	tiles[3].Explored = false
+	frame := &gameapi.Frame{
+		Tiles: tiles,
+		Bands: []gameapi.Band{
+			{ID: 1, Species: gameapi.HomoSapiens, TileID: 2},
+			{ID: 2, Species: gameapi.ArchaicHominin, TileID: 2},
+			{ID: 3, Species: gameapi.HomoSapiens, TileID: 0},
+			{ID: 4, Species: gameapi.HomoSapiens, TileID: 0},
+			{ID: 5, Species: gameapi.ArchaicHominin, TileID: 3},
+			{ID: 6, Species: gameapi.ArchaicHominin, TileID: 1},
+			{ID: 7, Species: gameapi.HomoSapiens, TileID: 99},
+		},
+	}
+	// Tile order follows first appearance so the map does not reshuffle discs
+	// between frames; tile 3's archaic band stays fogged and tile 99 does not
+	// exist, so neither reaches the map.
+	want := []tileMarker{
+		{TileID: 2, Counts: [gameapi.SpeciesCount]int{1, 1}},
+		{TileID: 0, Counts: [gameapi.SpeciesCount]int{2, 0}},
+		{TileID: 1, Counts: [gameapi.SpeciesCount]int{0, 1}},
+	}
+	if got := tileMarkersForRender(frame); !reflect.DeepEqual(got, want) {
+		t.Fatalf("tileMarkersForRender() = %+v, want %+v", got, want)
+	}
+	if got := tileMarkersForRender(nil); got != nil {
+		t.Fatalf("tileMarkersForRender(nil) = %+v, want nil", got)
+	}
+}
+
+// TestMarkerWedgesSplitsTheDiscByBandCount pins the proportions of a tile's
+// disc. Wedges run clockwise from twelve o'clock in species order so a tile
+// keeps its slice arrangement as bands are founded and die.
+func TestMarkerWedgesSplitsTheDiscByBandCount(t *testing.T) {
+	const up = -math.Pi / 2
+	tests := []struct {
+		name   string
+		counts [gameapi.SpeciesCount]int
+		want   []markerWedge
+	}{
+		{name: "empty", counts: [gameapi.SpeciesCount]int{0, 0}, want: []markerWedge{}},
+		{
+			name: "sapiens alone", counts: [gameapi.SpeciesCount]int{1, 0},
+			want: []markerWedge{{Color: sapiensBandMarkerColor, StartAngle: up, SweepAngle: 2 * math.Pi}},
+		},
+		{
+			name: "archaic alone", counts: [gameapi.SpeciesCount]int{0, 3},
+			want: []markerWedge{{Color: archaicBandMarkerColor, StartAngle: up, SweepAngle: 2 * math.Pi}},
+		},
+		{
+			name: "one each", counts: [gameapi.SpeciesCount]int{1, 1},
+			want: []markerWedge{
+				{Color: sapiensBandMarkerColor, StartAngle: up, SweepAngle: math.Pi},
+				{Color: archaicBandMarkerColor, StartAngle: up + math.Pi, SweepAngle: math.Pi},
+			},
+		},
+		{
+			name: "three sapiens to one archaic", counts: [gameapi.SpeciesCount]int{3, 1},
+			want: []markerWedge{
+				{Color: sapiensBandMarkerColor, StartAngle: up, SweepAngle: 3 * math.Pi / 2},
+				{Color: archaicBandMarkerColor, StartAngle: up + 3*math.Pi/2, SweepAngle: math.Pi / 2},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			wedges, count := markerWedges(tileMarker{Counts: test.counts})
+			if count != len(test.want) {
+				t.Fatalf("markerWedges(%v) count = %d, want %d", test.counts, count, len(test.want))
+			}
+			if got := wedges[:count]; !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("markerWedges(%v) = %+v, want %+v", test.counts, got, test.want)
+			}
+		})
+	}
+}
+
 func TestClampRender(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -128,6 +215,27 @@ func TestMapSceneDrawsTerrainVisibilityBandsAndPassagesOffscreen(t *testing.T) {
 	}
 	if first, later := reachableTileColor(0), reachableTileColor(1); first == later || first != (color.RGBA{R: 245, G: 202, B: 92, A: 255}) || later != (color.RGBA{R: 87, G: 211, B: 211, A: 255}) {
 		t.Fatalf("reachable colors = first %v, later %v", first, later)
+	}
+}
+
+// TestMapSceneSplitsACoLocatedTileMarkerBetweenSpecies is the regression for
+// the marker overdraw: with a band per circle, a sapiens and an archaic band
+// on one tile filled the same disc and the later one in the slice simply won,
+// hiding the other entirely (user-reported).
+func TestMapSceneSplitsACoLocatedTileMarkerBetweenSpecies(t *testing.T) {
+	frame := representativeRenderFrame()
+	frame.Bands = append(frame.Bands, gameapi.Band{ID: 11, Species: gameapi.ArchaicHominin, TileID: 0, Population: 40})
+	screen := renderMapOffscreen(t, frame, 0, MigrationPreview{}, EndScene{}, "")
+	defer screen.Deallocate()
+
+	x, y := NewMapScene().geometry(frame).TilePoint(frame.Tiles[0])
+	// Wedges run clockwise from twelve o'clock, so an even split puts the
+	// sapiens slice in the right half of the disc and the archaic in the left.
+	if got := screen.At(int(x)+2, int(y)); got != sapiensBandMarkerColor {
+		t.Errorf("right half of the shared marker = %v, want sapiens %v", got, sapiensBandMarkerColor)
+	}
+	if got := screen.At(int(x)-2, int(y)); got != archaicBandMarkerColor {
+		t.Errorf("left half of the shared marker = %v, want archaic %v", got, archaicBandMarkerColor)
 	}
 }
 

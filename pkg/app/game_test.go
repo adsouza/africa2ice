@@ -760,21 +760,54 @@ func TestResearchKeyWithoutSelectionRequestsSapiensBand(t *testing.T) {
 	}
 }
 
-func TestRepeatedTileClicksCycleVisibleSapiensAndArchaicBands(t *testing.T) {
+// TestTileClicksNeverSelectAnArchaicBandBesideASapiensOne covers the rule the
+// shared tile disc implies: co-located bands are one marker, so a click there
+// cannot say which of them the player meant. It resolves to the band they can
+// actually command. Repeated clicks used to cycle onto the archaic band, which
+// left the player one click away from a read-only selection at exactly the
+// tiles where interbreeding is on offer.
+func TestTileClicksNeverSelectAnArchaicBandBesideASapiensOne(t *testing.T) {
 	frame := migrationPreviewFrame()
 	frame.Bands = append(frame.Bands, gameapi.Band{ID: 12, Species: gameapi.ArchaicHominin, TileID: 0, Population: 90})
 	game := New(&gameStub{frame: frame})
 	if game.selectedBand != 7 {
 		t.Fatalf("initial selection = %d", game.selectedBand)
 	}
-	if !game.selectBandAtTile(0) || game.selectedBand != 12 || game.hasAssignmentDraft {
-		t.Fatalf("first repeated click did not select read-only archaic band: selected %d draft %t", game.selectedBand, game.hasAssignmentDraft)
+	for click := 1; click <= 3; click++ {
+		if !game.selectBandAtTile(0) || game.selectedBand != 7 || !game.hasAssignmentDraft {
+			t.Fatalf("click %d selected %d (draft %t), want band 7 with a workforce draft", click, game.selectedBand, game.hasAssignmentDraft)
+		}
+	}
+}
+
+// TestTileClicksCycleCoLocatedSapiensBands keeps the cycle for the case it was
+// built for: two commandable bands on one tile are still both reachable.
+func TestTileClicksCycleCoLocatedSapiensBands(t *testing.T) {
+	frame := migrationPreviewFrame()
+	frame.Bands = append(frame.Bands,
+		gameapi.Band{ID: 12, Species: gameapi.ArchaicHominin, TileID: 0, Population: 90},
+		gameapi.Band{ID: 13, Species: gameapi.HomoSapiens, TileID: 0, Population: 60},
+	)
+	game := New(&gameStub{frame: frame})
+	if !game.selectBandAtTile(0) || game.selectedBand != 13 {
+		t.Fatalf("first click selected %d, want the other sapiens band 13", game.selectedBand)
+	}
+	if !game.selectBandAtTile(0) || game.selectedBand != 7 {
+		t.Fatalf("second click selected %d, want to wrap to band 7", game.selectedBand)
+	}
+}
+
+// TestTileClicksStillSelectALoneArchaicBand keeps archaic bands inspectable
+// where no sapiens band contests the tile — the read-only Field Notes path.
+func TestTileClicksStillSelectALoneArchaicBand(t *testing.T) {
+	frame := migrationPreviewFrame()
+	frame.Bands = append(frame.Bands, gameapi.Band{ID: 12, Species: gameapi.ArchaicHominin, TileID: 2, Population: 90})
+	game := New(&gameStub{frame: frame})
+	if !game.selectBandAtTile(2) || game.selectedBand != 12 || game.hasAssignmentDraft {
+		t.Fatalf("click selected %d (draft %t), want read-only archaic band 12", game.selectedBand, game.hasAssignmentDraft)
 	}
 	if !strings.Contains(game.fieldNote.Introduction, "Computer controlled") {
 		t.Fatalf("archaic Field Notes = %#v", game.fieldNote)
-	}
-	if !game.selectBandAtTile(0) || game.selectedBand != 7 || !game.hasAssignmentDraft {
-		t.Fatalf("second repeated click did not wrap to sapiens: selected %d draft %t", game.selectedBand, game.hasAssignmentDraft)
 	}
 }
 

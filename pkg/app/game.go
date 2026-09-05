@@ -947,13 +947,25 @@ func (g *Game) selectBandAtTile(tileID gameapi.TileID) bool {
 	if g.frame == nil || int(tileID) >= len(g.frame.Tiles) {
 		return false
 	}
+	// Co-located bands share one disc on the map, so a click there cannot say
+	// which of them the player meant; it resolves to the band they can
+	// actually command. Archaic bands stay selectable only where no sapiens
+	// band contests the tile — otherwise every tile offering interbreeding
+	// left the player one click from a read-only selection.
+	sapiensPresent := false
+	for _, band := range g.frame.Bands {
+		if band.TileID == tileID && band.Species == gameapi.HomoSapiens {
+			sapiensPresent = true
+			break
+		}
+	}
 	bandIDs := make([]gameapi.BandID, 0, 2)
 	selectedIndex := -1
 	for _, band := range g.frame.Bands {
 		if band.TileID != tileID {
 			continue
 		}
-		if band.Species == gameapi.ArchaicHominin && !g.frame.Tiles[tileID].Explored {
+		if band.Species == gameapi.ArchaicHominin && (sapiensPresent || !g.frame.Tiles[tileID].Explored) {
 			continue
 		}
 		if band.ID == g.selectedBand {
