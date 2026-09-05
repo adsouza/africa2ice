@@ -24,20 +24,53 @@ func BenchmarkFrameProjectionMaximumWorkload(b *testing.B) {
 	}
 }
 
+// The calibration workload is frozen: it is the unit every gated ratio is
+// expressed in, so it must not move when the game moves. The sizes are
+// literals rather than domain constants for that reason — this loop used to
+// be sized by TileCount, which would have rescaled every recorded ratio the
+// day the map changed size. calibrationBlockSize is chosen so each block
+// allocates 576 bytes, putting the mean allocation within a few percent of
+// the gated workloads' own (roughly 580 bytes for the maximum turn).
+const (
+	calibrationBlocks    = 96
+	calibrationBlockSize = 72
+)
+
+// BenchmarkCalibration is the denominator check_benchmarks divides the gated
+// workloads by, so its one job is to move with the machine the way they do.
+// It allocates deliberately. Both gated workloads spend their time in the
+// allocator, the collector and memory traffic — around 1.9 MB and 3,200
+// allocations for a maximum turn — while this benchmark was a cache-resident
+// integer loop with zero allocations. Those profiles do not scale together
+// across microarchitectures, so the ratio failed to normalise the very thing
+// it exists to normalise: on one commit an Intel Xeon runner reported a
+// maximum-turn ratio of 1,949 and an AMD EPYC runner 3,840, and the release
+// lane failed on hardware alone. The same mismatch is why the interactive Mac
+// read ~1,490 where the CI reference read ~2,368 for identical code.
 func BenchmarkCalibration(b *testing.B) {
-	values := make([]uint64, domain.TileCount)
 	b.ReportAllocs()
 	b.ResetTimer()
-	var result uint64
+	accumulator := uint64(0x9e3779b97f4a7c15)
 	for range b.N {
-		accumulator := uint64(0x9e3779b97f4a7c15)
-		for index := range values {
-			accumulator ^= uint64(index) + 0x9e3779b97f4a7c15 + accumulator<<6 + accumulator>>2
-			values[index] = accumulator
+		blocks := make([][]uint64, calibrationBlocks)
+		for block := range blocks {
+			values := make([]uint64, calibrationBlockSize)
+			for index := range values {
+				accumulator ^= uint64(index) + 0x9e3779b97f4a7c15 + accumulator<<6 + accumulator>>2
+				values[index] = accumulator
+			}
+			blocks[block] = values
 		}
-		result ^= accumulator
+		// Reading every block back before dropping it keeps the collector and
+		// the memory system in the measurement rather than letting the
+		// allocations retire untouched.
+		for _, values := range blocks {
+			for _, value := range values {
+				accumulator ^= value >> 7
+			}
+		}
 	}
-	calibrationResult = result
+	calibrationResult = accumulator
 }
 
 func maximumProjectionWorld(b *testing.B) *domain.World {

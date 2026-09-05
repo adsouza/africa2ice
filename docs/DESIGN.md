@@ -6819,6 +6819,15 @@ unless the baseline change is reviewed together with the responsible code and th
 Unnormalized wall-clock time remains telemetry, avoiding a gate that mistakes GitHub-host hardware
 variation for a game regression.
 
+Normalization only delivers that property while the calibration shares the gated workloads' cost
+profile, so the calibration must allocate at a comparable mean allocation size rather than measure
+register throughput: those two profiles do not scale together across microarchitectures, and a
+calibration that tracks neither the allocator nor the collector cancels no part of the machine.
+The calibration is also frozen and sized by literals — deriving its size from a game constant such
+as the tile count would move the denominator whenever the game moved and rescale every recorded
+ratio. `NativeBenchmarkReference` pins the runner image and architecture but not the underlying
+CPU model, so the calibration, not the image pin, is what makes a shared runner comparable.
+
 `NativeBenchmarkReference` is the GitHub-hosted `ubuntu-24.04` x86-64 runner
 (`linux/amd64`). Baseline and release records also capture the runner's reported image version, so an
 image refresh is visible even though the stable OS label and architecture remain fixed.

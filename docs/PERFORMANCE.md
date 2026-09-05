@@ -99,27 +99,58 @@ Browser verification and profiling pin Playwright `1.62.1` and Chromium `151.0.7
 ## Native benchmark baseline
 
 The maximum-workload `World.AdvanceTurn` and frame-projection benchmarks exercise exactly 6,144
-tiles and 256 bands, alongside the fixed pure-Go calibration benchmark. The authoritative
-five-sample medians were recorded by the `release-readiness` job on 2026-09-01 using the
-GitHub-hosted `ubuntu-24.04` `linux/amd64` runner, image `20260823.283.1`, with an AMD EPYC 7763:
+tiles and 256 bands, alongside the fixed pure-Go calibration benchmark.
 
-| benchmark | median ratio to calibration | bytes/op | allocs/op |
+**The ratios below are provisional.** `BenchmarkCalibration` was replaced on 2026-09-05 (see
+"Why the calibration allocates"), so every previously recorded ratio is expressed in a unit that no
+longer exists and none of them carry over. These medians are five samples on the interactive
+reference Mac; §12 step 8 admits a baseline only from `NativeBenchmarkReference`, so the next
+successful `release-readiness` run supplies the authoritative record and the ceilings must then be
+tightened to it.
+
+| benchmark | provisional median ratio | bytes/op | allocs/op |
 | --- | ---: | ---: | ---: |
-| maximum turn | 2,367.88 | 1,881,824 | 3,267 |
-| maximum frame projection | 285.24 | 3,728,429 | 1,998 |
+| maximum turn | 404.20 | 1,881,977 | 3,244 |
+| maximum frame projection | 77.43 | 3,777,561 | 1,998 |
 
 These medians include the current reusable migration-candidate workspace and seed-independent
 world data. The memory ceilings are `2,350,000 B/op` and `4,500,000 B/op`; the allocation ceilings
-are `4,080` and `2,490`. The normalized-time ceilings are `2,950` and `355`. Each ceiling is less
-than 25% above its corresponding authoritative median.
+are `4,080` and `2,490`; those are counts rather than times and are unaffected by the calibration
+change. The provisional normalized-time ceilings are `810` and `155` — twice the medians above
+rather than the usual 25% margin, because a Mac-derived median cannot predict the reference
+runner's. Twice is still tight enough to catch the regression class that prompted the change: the
+per-tile band scan removed in `cb5296d` cost 2.56x the current maximum turn. Restore the 25% margin
+against the CI median once one is recorded.
 
-The earlier `1,900` and `165` timing ceilings were derived from the interactive M4 reference Mac
-before the CI reference lane had completed successfully. They could not describe
-`NativeBenchmarkReference`: two consecutive runs on the pinned Ubuntu image produced maximum-turn
-ratios of `2,368.25` and `2,367.88`, and frame-projection ratios of `275.12` and `285.24`. This
-record replaces that bootstrap mismatch; it does not relax the independently passing byte or
-allocation limits. On the interactive reference Mac, the same current workloads remain a useful
-cross-check at ratios of approximately `1,490` and `138`, but they are not the release baseline.
+### Why the calibration allocates
+
+`BenchmarkCalibration` was a cache-resident integer loop with zero allocations, sized by
+`domain.TileCount`. Both properties were defects in a unit of measurement. Sizing it by a game
+constant meant a map-size change would move the denominator and silently rescale every recorded
+ratio; it now uses frozen literals and imports nothing from the game, as this section always
+required.
+
+The larger problem is that the gated workloads are allocator-, collector- and
+memory-bound — roughly 1.9 MB and 3,200 allocations for a maximum turn — so a benchmark that
+allocated nothing could not track them across machines, and the ratio failed to normalise the one
+thing it exists to normalise. Two `ubuntu-24.04` runs of the same commit on 2026-09-05 disagreed
+by nearly a factor of two: an Intel Xeon 6973P-C reported a maximum-turn ratio of `1,949` and an
+AMD EPYC 9V74 `3,840`, failing the release lane on hardware alone. The calibration had slowed
+`1.44x` between those runners where the maximum turn slowed `2.84x`. The same mismatch explains the
+older bootstrap discrepancy recorded here: `1,900`/`165` were derived from the interactive Mac and
+could not describe `NativeBenchmarkReference`, which read `2,368.25` and `2,367.88` for identical
+code — a `1.59x` spread that was treated as a machine difference to be re-baselined rather than a
+sign that the normaliser did not work.
+
+The replacement allocates 96 blocks of 576 bytes per operation, putting its mean allocation within
+a few percent of the maximum turn's own. Against a deliberate change in allocator and collector
+cost (`GOGC=off`) the old normaliser's ratio moved `+58.4%` while the new one moved `-22.9%`,
+because the old loop absorbed almost none of the change it was supposed to cancel: it went from
+`9,975 ns` to `10,369 ns`, `+4%`, while the workload it normalises nearly doubled.
+
+Note that `NativeBenchmarkReference` pins the runner image and architecture but no longer implies
+fixed hardware — EPYC 7763, EPYC 9V74 and Xeon 6973P-C have all served it. Pinning the image is
+therefore not sufficient on its own, and the calibration has to carry the normalisation.
 
 The seed-independent canonical-grid cache is measured separately because its cold initialization
 happens only once per process and does not belong inside the maximum-turn workload. Three one-second
