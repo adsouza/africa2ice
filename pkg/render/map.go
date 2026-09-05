@@ -509,10 +509,11 @@ func (scene *MapScene) drawTerrain(screen logicalCanvas, geometry MapGeometry, f
 // drawHalo tints unexplored tiles within haloRingCount of the explored set.
 // It runs immediately after the terrain blit so the selection overlays drawn
 // below it -- reachable highlights, the guide rectangle, a migration preview --
-// land on top rather than under. Those three do not gate on Explored, and an
-// archaic band's candidates may be unexplored, so a highlight genuinely can
-// share a tile with the halo; markers, rings, escarpments, passage lines and
-// queued migrations cannot, because each is gated on the real Explored bit.
+// land on top rather than under. None of those three tests Explored itself,
+// but none can reach a halo tile either: the projection drops every candidate
+// whose destination is unexplored, so a band's candidate list cannot name one.
+// Markers, rings, escarpments, passage lines and queued migrations cannot
+// either, each being gated on the real Explored bit here.
 // Unlike the terrain layer the halo is not baked into the cached image -- that
 // image is keyed on exploration and would have to redraw all 6,144 cells on
 // every shimmer step.

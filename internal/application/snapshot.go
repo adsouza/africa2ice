@@ -170,6 +170,16 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 			}
 		}
 		for _, candidate := range migrationCandidates[bandIndex].Candidates {
+			// The domain hands archaic bands candidates on unexplored tiles on
+			// purpose, so the computer policy can route them; its own filter is
+			// HomoSapiens-only. Nothing downstream of this frame is, though --
+			// the map draws a highlight per candidate and the panel derives
+			// affordances from them, none of it species-aware -- so a hidden
+			// target reaching the frame is a fog leak in every one of those
+			// readers at once. Drop it here rather than at each of them.
+			if !service.world.IsExplored(candidate.TileID) {
+				continue
+			}
 			destination, _ := grid.Tile(candidate.TileID)
 			seasonalMortalityRate, chronicMortalityRate := domain.Phase3MortalityRates(band, destination, habitat[candidate.TileID], season)
 			publicBand.MigrationCandidates = append(publicBand.MigrationCandidates, gameapi.MigrationCandidate{

@@ -6924,8 +6924,13 @@ explored is absent. With exactly one endpoint explored, the map may show a local
 at that endpoint but no line or far endpoint; the full overlay appears only after both endpoint bits
 are set. All ordinary and named-passage destinations exposed in a sapiens band's candidate list are
 required by §6 to be explored, so masking cannot strand the player without a selectable next move.
-An explored archaic band may retain hidden-target candidates in its isolated frame for the computer
-policy, but its read-only inspector omits those rows; filtering cannot change policy rank or movement.
+An archaic band's hidden-target candidates stay in the domain, where the computer policy scores them;
+the frame projection omits every candidate whose destination is unexplored, for any species. The
+filter belongs at the projection rather than at each reader because none of the readers is
+species-aware: the map draws a highlight per candidate and the panel derives affordances from them,
+so one hidden target reaching the frame is a leak in all of them at once. Filtering cannot change
+policy rank or movement, because the route policy reads candidates from the world rather than from
+the projection.
 The same filter applies to macro episodes: a global atmospheric episode may be named, but its hidden
 epicenter, hidden impact masks, tile factors, and per-band archaic outcomes are omitted until the
 relevant tiles are explored. Filtering only the frame copy never changes the authoritative event
