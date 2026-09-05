@@ -48,7 +48,7 @@ func TestUISettingsVolumeIsFiniteAndClamped(t *testing.T) {
 }
 
 func TestUISettingsSchemaTwoRoundTripsAndUpgradesSchemaOne(t *testing.T) {
-	want := UISettings{SchemaVersion: 2, FieldNotesVisible: false, MasterVolume: 0.3, Muted: true, GuideDismissed: true, FieldNotesExpanded: true}
+	want := UISettings{SchemaVersion: UISettingsSchemaVersion, FieldNotesVisible: false, MasterVolume: 0.3, Muted: true, GuideDismissed: true, FieldNotesExpanded: true}
 	payload, err := EncodeUISettings(want)
 	if err != nil {
 		t.Fatal(err)
@@ -63,7 +63,7 @@ func TestUISettingsSchemaTwoRoundTripsAndUpgradesSchemaOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("schema 1 payload rejected: %v", err)
 	}
-	if upgraded.SchemaVersion != 2 || upgraded.GuideDismissed || upgraded.FieldNotesExpanded || upgraded.MasterVolume != 0.3 || upgraded.FieldNotesVisible || !upgraded.Muted {
+	if upgraded.SchemaVersion != UISettingsSchemaVersion || upgraded.GuideDismissed || upgraded.FieldNotesExpanded || upgraded.MasterVolume != 0.3 || upgraded.FieldNotesVisible || !upgraded.Muted {
 		t.Fatalf("upgraded schema 1 = %+v", upgraded)
 	}
 
@@ -71,7 +71,30 @@ func TestUISettingsSchemaTwoRoundTripsAndUpgradesSchemaOne(t *testing.T) {
 	if _, err := DecodeUISettings(missing); err == nil {
 		t.Fatal("schema 2 payload without FieldNotesExpanded was accepted")
 	}
-	if _, err := DecodeUISettings([]byte(`{"SchemaVersion":3,"FieldNotesVisible":true,"MasterVolume":0.5,"Muted":false,"GuideDismissed":false,"FieldNotesExpanded":false}`)); err == nil {
-		t.Fatal("unknown schema 3 was accepted")
+	if _, err := DecodeUISettings([]byte(`{"SchemaVersion":4,"FieldNotesVisible":true,"MasterVolume":0.5,"Muted":false,"GuideDismissed":false,"FieldNotesExpanded":false,"ReducedMotion":false}`)); err == nil {
+		t.Fatal("unknown schema 4 was accepted")
+	}
+}
+
+func TestSchemaTwoDefaultsReducedMotionOff(t *testing.T) {
+	settings, err := DecodeUISettings([]byte(`{"SchemaVersion":2,"FieldNotesVisible":true,"MasterVolume":0.5,"Muted":false,"GuideDismissed":false,"FieldNotesExpanded":false}`))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if settings.ReducedMotion {
+		t.Fatal("a schema-2 record must not arrive with reduced motion on")
+	}
+	if settings.SchemaVersion != UISettingsSchemaVersion {
+		t.Fatalf("SchemaVersion = %d, want %d", settings.SchemaVersion, UISettingsSchemaVersion)
+	}
+}
+
+func TestSchemaThreeRoundTripsReducedMotion(t *testing.T) {
+	settings, err := DecodeUISettings([]byte(`{"SchemaVersion":3,"FieldNotesVisible":true,"MasterVolume":0.5,"Muted":false,"GuideDismissed":false,"FieldNotesExpanded":false,"ReducedMotion":true}`))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !settings.ReducedMotion {
+		t.Fatal("ReducedMotion did not survive the round trip")
 	}
 }

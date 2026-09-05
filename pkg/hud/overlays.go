@@ -168,8 +168,13 @@ func (p *Panel) settingsPanel(state State) *widget.Container {
 	if state.Overlay.Muted {
 		mute = "Muted: on · M"
 	}
+	motion := "Reduced motion: off"
+	if state.Overlay.ReducedMotion {
+		motion = "Reduced motion: on"
+	}
 	for _, entry := range []menuEntry{
 		{mute, Intent{Kind: IntentToggleMute}},
+		{motion, Intent{Kind: IntentToggleReducedMotion}},
 		{"Show first-turn guide", Intent{Kind: IntentShowGuide}},
 		{"Back · Esc", Intent{Kind: IntentBack}},
 	} {

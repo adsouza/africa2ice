@@ -42,6 +42,7 @@ const (
 	IntentDeleteSlot
 	IntentSetVolume
 	IntentToggleMute
+	IntentToggleReducedMotion
 	IntentShowGuide
 	IntentToggleBandList
 	IntentToggleShortcuts
@@ -117,6 +118,8 @@ func (kind IntentKind) String() string {
 		return "set-volume"
 	case IntentToggleMute:
 		return "toggle-mute"
+	case IntentToggleReducedMotion:
+		return "toggle-reduced-motion"
 	case IntentShowGuide:
 		return "show-guide"
 	case IntentToggleBandList:

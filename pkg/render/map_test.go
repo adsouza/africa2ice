@@ -756,3 +756,26 @@ func TestShimmerStepInTheKeyMatchesTheOneDrawn(t *testing.T) {
 		t.Fatal("the second Draw repainted: the key's shimmer step disagreed with the one drawHalo used")
 	}
 }
+
+func TestReducedMotionFreezesTheShimmer(t *testing.T) {
+	frame := haloRenderFrame()
+	screen := ebiten.NewImage(1280, 720)
+	scene := NewMapScene()
+	scene.SetReducedMotion(true)
+	scene.Update()
+	scene.Draw(screen, frame, 0, MigrationPreview{}, "", EndScene{}, false)
+	before := tileCentrePixel(screen, 41, 30)
+	for range 4 * shimmerTickStride {
+		scene.Update()
+	}
+	if scene.Draw(screen, frame, 0, MigrationPreview{}, "", EndScene{}, false) {
+		t.Fatal("reduced motion still forced a repaint")
+	}
+	if after := tileCentrePixel(screen, 41, 30); after != before {
+		t.Fatalf("halo colour changed under reduced motion: %v then %v", before, after)
+	}
+	// The reveal itself must survive; only the motion is dropped.
+	if cieLightness(before) <= cieLightness(unexploredTileColor) {
+		t.Fatal("reduced motion removed the halo instead of freezing it")
+	}
+}

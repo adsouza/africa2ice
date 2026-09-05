@@ -144,7 +144,7 @@ func (scene *MapScene) Update() { scene.shimmerTick++ }
 // there keeps Draw on its idle path instead of repainting fifteen times a
 // second for nothing.
 func (scene *MapScene) shimmerPhase() int {
-	if !scene.haloActive {
+	if !scene.haloActive || scene.reducedMotion {
 		return 0
 	}
 	return scene.shimmerTick / shimmerTickStride
@@ -162,6 +162,18 @@ func (scene *MapScene) SetCamera(camera Camera, visibleHeight float64) {
 // SetGuideHighlight toggles the dashed rectangle drawn around the selected
 // band's migration candidates.
 func (scene *MapScene) SetGuideHighlight(on bool) { scene.guideHighlight = on }
+
+// SetReducedMotion freezes the fog halo's shimmer at each ring's target,
+// keeping the terrain hint and dropping the animation. It also returns the
+// scene to the idle-paint path, because a frozen halo has nothing to advance.
+func (scene *MapScene) SetReducedMotion(on bool) { scene.reducedMotion = on }
+
+// ReducedMotion reports the current setting. It exists for pkg/app's tests,
+// which cannot observe this scene the way this package's own tests do: pkg/app
+// has no TestMain running inside an ebiten game loop, so reading rendered
+// pixels panics there. Exported so it stays outside golangci-lint's unused
+// check; production code never reads it.
+func (scene *MapScene) ReducedMotion() bool { return scene.reducedMotion }
 
 // SetChromeRevision records an opaque revision of pkg/hud's chrome for the
 // next Draw. pkg/render must not import pkg/hud, so the caller (pkg/app)

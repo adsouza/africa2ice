@@ -282,6 +282,25 @@ func TestPresentationSettingsInstallAtomicallyAndCoalesceWrites(t *testing.T) {
 	}
 }
 
+// TestLoadedReducedMotionSettingReachesTheScene guards the load path
+// specifically: a completed settings read must apply ReducedMotion to the
+// scene, not just to the in-memory settings record. pkg/render's own tests
+// can watch the shimmer freeze by reading pixels, but pkg/app has no
+// TestMain running inside an ebiten game loop to do that, so this asserts
+// through (*render.MapScene).ReducedMotion instead — the only observable
+// pkg/app can reach.
+func TestLoadedReducedMotionSettingReachesTheScene(t *testing.T) {
+	store := &settingsStoreStub{}
+	sounds := &soundRecorder{}
+	game := newGameWithPresentation(&gameStub{frame: migrationPreviewFrame()}, sounds, store)
+	loaded := ui.UISettings{SchemaVersion: ui.UISettingsSchemaVersion, MasterVolume: 0.8, ReducedMotion: true}
+	store.completions = []ui.UISettingsCompletion{{Operation: ui.UISettingsRead, Revision: 1, Settings: loaded}}
+	game.pollUISettings()
+	if !game.scene.ReducedMotion() {
+		t.Fatal("load path did not apply the persisted ReducedMotion setting to the scene")
+	}
+}
+
 func TestRenderProfileFrameDoesNotReplaceAcceptedApplicationFrame(t *testing.T) {
 	accepted := migrationPreviewFrame()
 	profile := &gameapi.Frame{Turn: 300, Bands: make([]gameapi.Band, 256)}

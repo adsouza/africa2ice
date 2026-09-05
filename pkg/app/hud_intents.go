@@ -205,6 +205,8 @@ func (g *Game) handleOverlayIntent(intent hud.Intent) {
 		}
 	case hud.IntentToggleMute:
 		g.toggleMute()
+	case hud.IntentToggleReducedMotion:
+		g.toggleReducedMotion()
 	case hud.IntentShowGuide:
 		g.guide = ui.NewGuideState(false)
 		if !g.settingsLoading {

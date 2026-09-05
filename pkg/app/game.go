@@ -139,8 +139,10 @@ func newGameWithPresentation(port gameapi.Game, sound gameaudio.SoundManager, se
 	}
 	if settingsStore == nil {
 		sound.SetMaster(settings.MasterVolume, settings.Muted)
+		game.scene.SetReducedMotion(settings.ReducedMotion)
 	} else if err := settingsStore.BeginRead(1); err != nil {
 		sound.SetMaster(settings.MasterVolume, settings.Muted)
+		game.scene.SetReducedMotion(settings.ReducedMotion)
 		game.notice = "Preferences could not be loaded; using defaults"
 	} else {
 		game.settingsLoading = true
@@ -285,6 +287,7 @@ func (g *Game) pollUISettings() {
 			g.notesMode = notesModeFor(g.settings)
 			g.guide = ui.NewGuideState(g.settings.GuideDismissed)
 			g.sound.SetMaster(g.settings.MasterVolume, g.settings.Muted)
+			g.scene.SetReducedMotion(g.settings.ReducedMotion)
 			if completion.Err != nil {
 				g.showNotice("Preferences could not be loaded; using defaults")
 			}
@@ -312,6 +315,7 @@ func (g *Game) updateUISettings(settings ui.UISettings) {
 	g.settings = settings
 	g.notesMode = notesModeFor(settings)
 	g.sound.SetMaster(settings.MasterVolume, settings.Muted)
+	g.scene.SetReducedMotion(settings.ReducedMotion)
 	if g.settingsStore == nil {
 		return
 	}
@@ -1407,6 +1411,21 @@ func (g *Game) toggleMute() {
 		g.showNotice("Sound muted")
 	} else {
 		g.showNotice(fmt.Sprintf("Sound unmuted at %.0f%%", settings.MasterVolume*100))
+	}
+}
+
+func (g *Game) toggleReducedMotion() {
+	if g.settingsLoading {
+		g.showNotice("Loading preferences…")
+		return
+	}
+	settings := g.settings
+	settings.ReducedMotion = !settings.ReducedMotion
+	g.updateUISettings(settings)
+	if settings.ReducedMotion {
+		g.showNotice("Reduced motion on")
+	} else {
+		g.showNotice("Reduced motion off")
 	}
 }
 
