@@ -35,6 +35,24 @@ jobs:
       - name: Verify architecture
         shell: bash
         run: test "$(go env GOARCH)" = "${{ matrix.arch }}"
+      - name: Bound apt fetch time
+        if: runner.os == 'Linux'
+        shell: bash
+        # A single stalled mirror connection once held this job for 13m44s on
+        # one 3.5 MB font package before apt gave up and refetched it in two
+        # seconds. apt has no default that bounds that, so set one: an
+        # unresponsive connection now fails over after 30s instead of minutes.
+        run: |
+          sudo tee /etc/apt/apt.conf.d/99-ci-fetch-timeouts >/dev/null <<'EOF'
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          Acquire::Retries "3";
+          EOF
+          # Prove apt actually reads it; a config that silently fails to apply
+          # would leave the job exposed while looking fixed.
+          apt-config dump | grep -q 'Acquire::http::Timeout "30"'
+          apt-config dump | grep -q 'Acquire::https::Timeout "30"'
+          apt-config dump | grep -q 'Acquire::Retries "3"'
       - name: Install Linux graphics and audio headers
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libgl1-mesa-dev libgl1-mesa-dri libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev xvfb
@@ -82,6 +100,23 @@ jobs:
           node-version: 26
           cache: npm
           cache-dependency-path: tools/web-e2e/package-lock.json
+      - name: Bound apt fetch time
+        shell: bash
+        # A single stalled mirror connection once held this job for 13m44s on
+        # one 3.5 MB font package before apt gave up and refetched it in two
+        # seconds. apt has no default that bounds that, so set one: an
+        # unresponsive connection now fails over after 30s instead of minutes.
+        run: |
+          sudo tee /etc/apt/apt.conf.d/99-ci-fetch-timeouts >/dev/null <<'EOF'
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          Acquire::Retries "3";
+          EOF
+          # Prove apt actually reads it; a config that silently fails to apply
+          # would leave the job exposed while looking fixed.
+          apt-config dump | grep -q 'Acquire::http::Timeout "30"'
+          apt-config dump | grep -q 'Acquire::https::Timeout "30"'
+          apt-config dump | grep -q 'Acquire::Retries "3"'
       - name: Install pinned Binaryen and Brotli
         shell: bash
         run: |
@@ -193,6 +228,23 @@ jobs:
           node-version: 26
           cache: npm
           cache-dependency-path: tools/web-e2e/package-lock.json
+      - name: Bound apt fetch time
+        shell: bash
+        # A single stalled mirror connection once held this job for 13m44s on
+        # one 3.5 MB font package before apt gave up and refetched it in two
+        # seconds. apt has no default that bounds that, so set one: an
+        # unresponsive connection now fails over after 30s instead of minutes.
+        run: |
+          sudo tee /etc/apt/apt.conf.d/99-ci-fetch-timeouts >/dev/null <<'EOF'
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          Acquire::Retries "3";
+          EOF
+          # Prove apt actually reads it; a config that silently fails to apply
+          # would leave the job exposed while looking fixed.
+          apt-config dump | grep -q 'Acquire::http::Timeout "30"'
+          apt-config dump | grep -q 'Acquire::https::Timeout "30"'
+          apt-config dump | grep -q 'Acquire::Retries "3"'
       - name: Install graphics, audio, and browser dependencies
         run: sudo apt-get update && sudo apt-get install -y brotli libasound2-dev libgl1-mesa-dev libgl1-mesa-dri libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev xvfb
       - name: Start Linux virtual display
