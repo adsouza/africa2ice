@@ -76,3 +76,43 @@ func TestRunReferenceWritesTheSameCanonicalBytesItPrints(t *testing.T) {
 		t.Fatalf("file/stdout differ:\nfile %q\nout %q", written, stdout.Bytes())
 	}
 }
+
+func TestScreenshotFramesDefaultsToOne(t *testing.T) {
+	options, err := parseDesktopOptions([]string{"-screenshot", "shot.png"}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if options.screenshotFrames != 1 {
+		t.Fatalf("screenshotFrames = %d, want 1", options.screenshotFrames)
+	}
+}
+
+func TestScreenshotFramesRejectsNonPositiveCounts(t *testing.T) {
+	if _, err := parseDesktopOptions([]string{"-screenshot", "shot.png", "-screenshot-frames", "0"}, &bytes.Buffer{}); err == nil {
+		t.Fatal("expected an error for a zero frame count")
+	}
+}
+
+func TestScreenshotFramesRequiresAScreenshotPath(t *testing.T) {
+	if _, err := parseDesktopOptions([]string{"-screenshot-frames", "8"}, &bytes.Buffer{}); err == nil {
+		t.Fatal("expected an error when frames are requested with no screenshot path")
+	}
+}
+
+func TestNumberedScreenshotPaths(t *testing.T) {
+	tests := []struct {
+		path  string
+		index int
+		want  string
+	}{
+		{path: "shot.png", index: 0, want: "shot.png"},
+		{path: "shot.png", index: 1, want: "shot-002.png"},
+		{path: "out/dir.d/shot.png", index: 11, want: "out/dir.d/shot-012.png"},
+		{path: "noext", index: 2, want: "noext-003"},
+	}
+	for _, test := range tests {
+		if got := numberedScreenshotPath(test.path, test.index); got != test.want {
+			t.Errorf("numberedScreenshotPath(%q, %d) = %q, want %q", test.path, test.index, got, test.want)
+		}
+	}
+}

@@ -74,13 +74,16 @@ Measured 2026-09-01 from the optimized artifact in pinned Chromium `151.0.7922.3
 | top-down | 1 | 59.88 | 30 | 16.8 ms | 68.71 ms | 26.0 MB |
 | top-down | 2 | 59.88 | 20 | 16.8 ms | 212.36 ms | 24.5 MB |
 
-Both floors, the 150 ms p95 frame-gap ceiling, and the two-second turn-latency ceiling pass.
-The key optimization is appropriate to a turn-based presentation: production disables automatic
-screen clearing, caches one complete immutable presentation frame, and leaves the screen untouched
-until either the accepted frame or UI-local presentation key changes. This lets Ebitengine skip idle
-GPU work rather than continually redrawing an unchanged high-DPI canvas. The DPR 2 result above uses
-native 2560 × 1440 presentation and scale-specific terrain targets; it is not an upscale of a
-completed 1280 × 720 frame.
+Both floors, the 150 ms p95 frame-gap ceiling, and the two-second turn-latency ceiling pass. The
+key optimization is appropriate to a turn-based presentation: production disables automatic screen
+clearing, caches one complete immutable presentation frame, and leaves the screen untouched until
+either the accepted frame or UI-local presentation key changes. This lets Ebitengine skip idle GPU
+work rather than continually redrawing an unchanged high-DPI canvas — unconditionally true here,
+since this fixture explores every tile and so carries no fog-halo fringe to animate (see "Fog halo
+benchmark"), but not true in general: with a fringe on screen and reduced motion off, the halo's
+shimmer phase is itself part of that UI-local key, and the screen repaints 15 times a second
+instead. The DPR 2 result above uses native 2560 × 1440 presentation and scale-specific terrain
+targets; it is not an upscale of a completed 1280 × 720 frame.
 
 ### Reference machine identity
 
@@ -95,6 +98,53 @@ match for the specified configuration:
 | OS               | macOS 26.6.1                           | macOS 26.6.1 (build 25G76)   |
 
 Browser verification and profiling pin Playwright `1.62.1` and Chromium `151.0.7922.34`.
+
+### Fog halo benchmark
+
+`testdata/performance_profile_save.json` explores all 6,144 tiles, so it has no fringe: every tile
+is either explored or beyond `haloRingCount`, the halo has nothing to draw, and a fringeless frame
+takes the cache-skip path that recognizes an empty fringe and leaves the idle-paint-nothing property
+in place. The Playwright frame-rate measurement above therefore
+**does not cover the halo at all** — it would report the same 59.88 FPS regardless of how slow that
+feature is. This is a gap, not a clean bill of health.
+
+`BenchmarkMapDrawWithHalo` (`pkg/render/performance_test.go`) closes it with a synthetic worst case
+instead: a diagonal lattice of explored tiles spaced, via `haloBenchmarkSpacing`, so their ring-3
+neighbourhoods tile the grid edge to edge rather than reproducing an in-campaign frame. A tile within
+`haloRingCount` (3) Chebyshev steps of an anchor forms a 7×7 square, and 7×7 squares placed 7 tiles
+apart cover the plane with no gap — reaching 5,940 of the grid's 6,144 tiles (96.7%). It asserts, not
+just measures — `Draw`'s return value is checked and the benchmark fails outright if a frame takes
+the skip path, so it cannot pass by silently measuring nothing.
+
+Measured 2026-09-05 on the interactive reference machine confirmed above (`go test ./pkg/render/
+-run '^$' -bench BenchmarkMapDrawWithHalo -benchtime 200x -v`):
+
+| run | fringe tiles | ns/op |
+| --- | ---: | ---: |
+| 1 | 5,940 of 6,144 | 3,345,176 |
+| 2 | 5,940 of 6,144 | 3,247,770 |
+
+Both samples land at roughly 3.2–3.3 ms per `Draw`, against a 66.7 ms budget for the halo's 15 phase
+steps a second and the tighter 16.7 ms of a single 60 FPS frame that this cost shares with everything
+else drawn that frame. That is comfortably under the 5 ms level at which the spec's cached,
+cross-faded fallback (section 6.1) would need to be considered — this benchmark does not exercise
+that path. This is a native `go test` benchmark, not a browser measurement, so it is not directly
+comparable to the Playwright table above; it exists to give the halo a gate that can fail, not to
+extend that table's own numbers. It is a point measurement rather than a CI gate: no ceiling is
+wired into `tools/check_benchmarks.sh` for it, so a future regression here will not fail a build on
+its own.
+
+**The wasm fixture that spec §8 also requires has not been run.** §8 asks for two measurements: this Go
+benchmark, and a partially-explored fixture for the wasm harness, sized to maximise fringe perimeter,
+with its own recorded row here held to the same DPR 1 / DPR 2 floors as the table above. Only the
+first exists. The harness itself is in place (`tools/web-e2e/profile.mjs`), but a figure worth
+recording needs the pinned Chromium build CI uses rather than whatever happens to be on this
+machine, and the partially-explored save fixture the measurement would run against does not exist
+yet either. Neither gap is closed here, in keeping with this file's own rule that a partially
+recorded baseline that reads as complete is worse than an empty one. What this leaves unmeasured:
+the browser-side cost of the shipped default, where any halo fringe on screen means the map
+recomposes 15 times a second — the Playwright table above cannot see this cost, by construction,
+since its fixture has no fringe, and no other row in this file covers it either.
 
 ## Native benchmark baseline
 

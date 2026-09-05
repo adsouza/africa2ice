@@ -53,6 +53,7 @@ type OverlayState struct {
 	SettingsDisabled bool
 	MasterVolume     float64
 	Muted            bool
+	ReducedMotion    bool
 }
 
 // State is everything the chrome draws. The application derives it every

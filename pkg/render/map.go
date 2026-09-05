@@ -61,6 +61,16 @@ type MapScene struct {
 	visibleHeight   float64
 	guideHighlight  bool
 	chromeRevision  uint64
+	haloDistance    []uint8
+	haloWater       [haloRingCount]haloBlendPair
+	haloActive      bool
+	haloRevision    uint64
+	haloAridity     float64
+	haloCached      bool
+	shimmerTick     int
+	// reducedMotion freezes the halo at its ring target instead of animating
+	// the shimmer. SetReducedMotion below is the setter; drawHalo reads it.
+	reducedMotion bool
 	// Paints counts every Draw call that actually painted the screen (i.e.
 	// returned true). It exists for pkg/app's tests: unlike pkg/render's own
 	// package, pkg/app has no TestMain running inside an ebiten game loop, so
@@ -82,6 +92,7 @@ type mapFrameKey struct {
 	visibleHeight  float64
 	guideHighlight bool
 	chromeRevision uint64
+	shimmerStep    int
 }
 
 type MigrationPreview struct {
@@ -123,7 +134,21 @@ func NewMapScene() *MapScene {
 	return &MapScene{faceSource: source}
 }
 
-func (scene *MapScene) Update() {}
+// Update advances the fog halo's shimmer clock. It is the scene's only
+// per-tick state; everything else the map draws comes from the accepted frame
+// or from an explicit setter.
+func (scene *MapScene) Update() { scene.shimmerTick++ }
+
+// shimmerPhase is the current phase step, or zero when nothing would move:
+// a frame with no fringe has no halo to animate, and holding the step at zero
+// there keeps Draw on its idle path instead of repainting fifteen times a
+// second for nothing.
+func (scene *MapScene) shimmerPhase() int {
+	if !scene.haloActive || scene.reducedMotion {
+		return 0
+	}
+	return scene.shimmerTick / shimmerTickStride
+}
 
 func (scene *MapScene) SetTileHover(hover TileHover) { scene.hover = hover }
 
@@ -137,6 +162,18 @@ func (scene *MapScene) SetCamera(camera Camera, visibleHeight float64) {
 // SetGuideHighlight toggles the dashed rectangle drawn around the selected
 // band's migration candidates.
 func (scene *MapScene) SetGuideHighlight(on bool) { scene.guideHighlight = on }
+
+// SetReducedMotion freezes the fog halo's shimmer at each ring's target,
+// keeping the terrain hint and dropping the animation. It also returns the
+// scene to the idle-paint path, because a frozen halo has nothing to advance.
+func (scene *MapScene) SetReducedMotion(on bool) { scene.reducedMotion = on }
+
+// ReducedMotion reports the current setting. It exists for pkg/app's tests,
+// which cannot observe this scene the way this package's own tests do: pkg/app
+// has no TestMain running inside an ebiten game loop, so reading rendered
+// pixels panics there. Exported so it stays outside golangci-lint's unused
+// check; production code never reads it.
+func (scene *MapScene) ReducedMotion() bool { return scene.reducedMotion }
 
 // SetChromeRevision records an opaque revision of pkg/hud's chrome for the
 // next Draw. pkg/render must not import pkg/hud, so the caller (pkg/app)
@@ -181,11 +218,12 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 		scene.Paints++
 		return true
 	}
+	scene.refreshHaloCache(frame)
 	key := mapFrameKey{
 		frame: frame, selectedBand: selectedBand, preview: preview, hover: scene.hover, notice: notice,
 		ending: ending, resizeRequired: resizeRequired,
 		camera: scene.camera, visibleHeight: scene.visibleHeight, guideHighlight: scene.guideHighlight,
-		chromeRevision: scene.chromeRevision,
+		chromeRevision: scene.chromeRevision, shimmerStep: scene.shimmerPhase(),
 	}
 	width, height := screen.Bounds().Dx(), screen.Bounds().Dy()
 	if scene.frameCached && scene.frameKey == key && scene.frameWidth == width && scene.frameHeight == height {
@@ -236,6 +274,7 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 
 	markerScale := geometry.Cell / mapTileSize
 	scene.drawTerrain(mapCanvas, geometry, frame)
+	scene.drawHalo(mapCanvas, geometry, frame)
 	scene.drawReachableTiles(mapCanvas, geometry, frame, selectedBand)
 	scene.drawGuideHighlight(mapCanvas, geometry, frame, selectedBand)
 	// The pointer's tile is tinted on the map itself now that the bottom
@@ -410,6 +449,31 @@ func absRenderInt(value int) int {
 	return value
 }
 
+// refreshHaloCache recomputes the fringe distance field and the water blend
+// pairs when exploration or the climate grade changes. It runs at the top of
+// Draw rather than inside drawTerrain because shimmerPhase reads haloActive
+// while the frame key is built before any drawing happens: leaving it in the
+// terrain cache let the key's shimmer step disagree with the one drawHalo
+// rendered with on the tick the halo first became active. Unlike the terrain
+// image this cache is scale-free, so a resize no longer rebuilds it.
+func (scene *MapScene) refreshHaloCache(frame *gameapi.Frame) {
+	if scene.haloCached && scene.haloRevision == frame.TerrainRevision && scene.haloAridity == frame.Climate.AridityIndex {
+		return
+	}
+	scene.haloDistance = haloDistances(frame)
+	scene.haloWater = haloWaterBlend(EpochGrade(frame.Climate.AridityIndex).Water)
+	scene.haloActive = false
+	for _, distance := range scene.haloDistance {
+		if distance >= 1 && distance <= haloRingCount {
+			scene.haloActive = true
+			break
+		}
+	}
+	scene.haloRevision = frame.TerrainRevision
+	scene.haloAridity = frame.Climate.AridityIndex
+	scene.haloCached = true
+}
+
 // drawTerrain caches the immutable top-down tile layer until either its coarse
 // terrain revision or its continuously graded water color changes. Commands
 // that reveal terrain (including a successful split) advance that revision;
@@ -440,6 +504,42 @@ func (scene *MapScene) drawTerrain(screen logicalCanvas, geometry MapGeometry, f
 	options.GeoM.Translate(float64(geometry.OriginX)*float64(screen.scale), float64(geometry.OriginY)*float64(screen.scale))
 	options.Filter = ebiten.FilterNearest
 	screen.image.DrawImage(scene.terrainImage, options)
+}
+
+// drawHalo tints unexplored tiles within haloRingCount of the explored set.
+// It runs immediately after the terrain blit so the selection overlays drawn
+// below it -- reachable highlights, the guide rectangle, a migration preview --
+// land on top rather than under. None of those three tests Explored itself,
+// but none can reach a halo tile either: the projection drops every candidate
+// whose destination is unexplored, so a band's candidate list cannot name one.
+// Markers, rings, escarpments, passage lines and queued migrations cannot
+// either, each being gated on the real Explored bit here.
+// Unlike the terrain layer the halo is not baked into the cached image -- that
+// image is keyed on exploration and would have to redraw all 6,144 cells on
+// every shimmer step.
+func (scene *MapScene) drawHalo(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame) {
+	if !scene.haloActive || len(scene.haloDistance) != len(frame.Tiles) {
+		return
+	}
+	step := scene.shimmerPhase()
+	extent := geometry.Cell * (mapTileSize - 0.4) / mapTileSize
+	for id := range frame.Tiles {
+		ring := int(scene.haloDistance[id]) - 1
+		if ring < 0 || ring >= haloRingCount {
+			continue
+		}
+		tile := &frame.Tiles[id]
+		noise := 1.0
+		if !scene.reducedMotion {
+			noise = shimmerNoise(tile.X, tile.Y, step)
+		}
+		base, blend := climateBiomeColor(tile.Biome, frame.Climate.AridityIndex), haloLandBlend[tile.Biome][ring]
+		if !tile.Land {
+			base, blend = EpochGrade(frame.Climate.AridityIndex).Water, scene.haloWater[ring]
+		}
+		x, y := geometry.TilePoint(*tile)
+		vector.FillRect(screen, x-geometry.Cell/2, y-geometry.Cell/2, extent, extent, haloColor(base, blend, noise), false)
+	}
 }
 
 func (scene *MapScene) drawFlatTerrain(screen logicalCanvas, frame *gameapi.Frame) {
