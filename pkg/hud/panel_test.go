@@ -2075,17 +2075,25 @@ func showSplitTooltip(t *testing.T) (*Panel, *ebiten.Image, State, PresentationK
 	}
 	armed := panel.PresentationKey()
 
-	time.Sleep(tooltipDelay + 150*time.Millisecond)
-	// One tick to notice the timer expired, one for the showing state to place
-	// the tooltip and announce it.
-	for range 2 {
+	// ebitenui applies tooltipDelay against the wall clock, but only an Update
+	// tick can notice it has elapsed and announce the tooltip. Sleeping out the
+	// delay and then ticking a fixed number of times asserts the tooltip
+	// appears inside one exact window, and a loaded machine misses it -- that
+	// cost a Windows CI job, which then passed on a re-run of the same commit.
+	// Tick until it actually shows instead. On an unloaded machine this returns
+	// sooner than the old sleep did, because it stops the moment the tooltip
+	// appears rather than always waiting out the delay plus a margin.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
 		panel.Update(state)
 		panel.Draw(screen)
+		if panel.tooltipShown {
+			return panel, screen, state, armed
+		}
+		time.Sleep(time.Millisecond)
 	}
-	if !panel.tooltipShown {
-		t.Fatal("the tooltip never became visible")
-	}
-	return panel, screen, state, armed
+	t.Fatal("the tooltip never became visible")
+	return nil, nil, State{}, PresentationKey{}
 }
 
 // The Move row sits against the right edge of the presentation, so a tooltip
