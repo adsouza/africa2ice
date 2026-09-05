@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/adsouza/africa2ice/internal/adapters/logging"
@@ -24,13 +25,14 @@ func main() {
 }
 
 type desktopOptions struct {
-	dumpMap        bool
-	headless       bool
-	turns          int
-	seed           uint64
-	policy         string
-	checkpointJSON string
-	screenshot     string
+	dumpMap          bool
+	headless         bool
+	turns            int
+	seed             uint64
+	policy           string
+	checkpointJSON   string
+	screenshot       string
+	screenshotFrames int
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -76,7 +78,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func parseDesktopOptions(args []string, stderr io.Writer) (desktopOptions, error) {
-	options := desktopOptions{turns: verification.MaxTurns, seed: 0x9e3779b97f4a7c15, policy: "reference"}
+	options := desktopOptions{turns: verification.MaxTurns, seed: 0x9e3779b97f4a7c15, policy: "reference", screenshotFrames: 1}
 	flags := flag.NewFlagSet("africa2ice", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.BoolVar(&options.dumpMap, "dumpmap", false, "print biome and region map layers without opening a window")
@@ -86,6 +88,7 @@ func parseDesktopOptions(args []string, stderr io.Writer) (desktopOptions, error
 	flags.StringVar(&options.policy, "policy", options.policy, "route policy: "+strings.Join(verification.PolicyNames(), ", "))
 	flags.StringVar(&options.checkpointJSON, "checkpoint-json", "", "write canonical checkpoint JSON to this path")
 	flags.StringVar(&options.screenshot, "screenshot", "", "write one rendered PNG to this path and exit")
+	flags.IntVar(&options.screenshotFrames, "screenshot-frames", options.screenshotFrames, "number of successive frames to capture, for inspecting animation")
 	if err := flags.Parse(args); err != nil {
 		return desktopOptions{}, err
 	}
@@ -97,6 +100,12 @@ func parseDesktopOptions(args []string, stderr io.Writer) (desktopOptions, error
 	}
 	if _, err := verification.ParsePolicy(options.policy); err != nil {
 		return desktopOptions{}, err
+	}
+	if options.screenshotFrames < 1 {
+		return desktopOptions{}, fmt.Errorf("screenshot-frames must be at least 1")
+	}
+	if options.screenshotFrames > 1 && options.screenshot == "" {
+		return desktopOptions{}, fmt.Errorf("screenshot-frames requires -screenshot")
 	}
 	modeCount := 0
 	for _, enabled := range []bool{options.dumpMap, options.headless || options.checkpointJSON != "", options.screenshot != ""} {
@@ -110,6 +119,16 @@ func parseDesktopOptions(args []string, stderr io.Writer) (desktopOptions, error
 	return options, nil
 }
 
+// numberedScreenshotPath suffixes a capture index before the extension, so a
+// multi-frame run writes shot.png, shot-002.png, shot-003.png in order.
+func numberedScreenshotPath(path string, index int) string {
+	if index == 0 {
+		return path
+	}
+	extension := filepath.Ext(path)
+	return fmt.Sprintf("%s-%03d%s", strings.TrimSuffix(path, extension), index+1, extension)
+}
+
 func runScreenshot(options desktopOptions, session *logging.Session, stderr io.Writer) int {
 	port, _, err := verification.PrepareGame(options.seed, options.turns, options.policy)
 	if err != nil {
@@ -117,7 +136,7 @@ func runScreenshot(options desktopOptions, session *logging.Session, stderr io.W
 		return 1
 	}
 	game := app.New(logging.DecorateGame(session, port))
-	runner := &screenshotRunner{game: game, path: options.screenshot}
+	runner := &screenshotRunner{game: game, path: options.screenshot, frames: options.screenshotFrames}
 	ebiten.SetScreenClearedEveryFrame(false)
 	ebiten.SetWindowSize(app.LogicalWidth, app.LogicalHeight)
 	ebiten.SetWindowTitle("Africa 2 Ice: screenshot verification")
@@ -129,17 +148,18 @@ func runScreenshot(options desktopOptions, session *logging.Session, stderr io.W
 }
 
 type screenshotRunner struct {
-	game     *app.Game
-	path     string
-	captured bool
-	err      error
+	game   *app.Game
+	path   string
+	frames int
+	index  int
+	err    error
 }
 
 func (runner *screenshotRunner) Update() error {
 	if runner.err != nil {
 		return runner.err
 	}
-	if runner.captured {
+	if runner.index >= runner.frames {
 		return ebiten.Termination
 	}
 	// The chrome is an ebitenui tree the application builds during Update, so a
@@ -149,7 +169,7 @@ func (runner *screenshotRunner) Update() error {
 
 func (runner *screenshotRunner) Draw(screen *ebiten.Image) {
 	runner.game.Draw(screen)
-	if runner.captured || runner.err != nil {
+	if runner.index >= runner.frames || runner.err != nil {
 		return
 	}
 	bounds := screen.Bounds()
@@ -157,7 +177,7 @@ func (runner *screenshotRunner) Draw(screen *ebiten.Image) {
 	screen.ReadPixels(pixels)
 	frame := image.NewRGBA(bounds)
 	copy(frame.Pix, pixels)
-	file, err := os.Create(runner.path)
+	file, err := os.Create(numberedScreenshotPath(runner.path, runner.index))
 	if err == nil {
 		err = png.Encode(file, frame)
 		closeErr := file.Close()
@@ -165,8 +185,11 @@ func (runner *screenshotRunner) Draw(screen *ebiten.Image) {
 			err = closeErr
 		}
 	}
-	runner.err = err
-	runner.captured = err == nil
+	if err != nil {
+		runner.err = err
+		return
+	}
+	runner.index++
 }
 
 func (runner *screenshotRunner) LayoutF(_, _ float64) (float64, float64) {
