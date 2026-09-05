@@ -10,7 +10,31 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
-const drawerEventLines = 2
+// drawerHiddenEventLines is how many events the hidden bar can show: it is
+// one line tall, so exactly one. The compact and expanded drawers no longer
+// use a fixed count — their events sit in a column whose height decides how
+// many fit (see Panel.drawerEventRows).
+const drawerHiddenEventLines = 1
+
+// Drawer body geometry. The body is split into two side-by-side columns:
+// the note on the left and the event log on the right, rather than the
+// events stacked underneath. drawerEventsColW is sized from the widest
+// event line the domain can produce (the Campanian-eruption summary
+// measures ~301 DIP at 8.5), so a typical line never truncates; anything
+// longer still goes through truncateToWidth against the column's own
+// budget, so the width is safe by construction rather than by hope.
+const (
+	drawerEventsColW = 320.0
+	drawerColGutter  = 12.0
+	drawerBodyPadH   = 12.0
+	drawerBodyPadV   = 6.0
+	drawerColSpacing = 4.0
+	// Font sizes the drawer's own layout arithmetic depends on. They are
+	// named because eventRowsIn and eventColumnTextBudgetPx must measure the
+	// same faces the widgets are actually built with.
+	drawerHeadingSizeDIP = 10.0
+	drawerEventSizeDIP   = 8.5
+)
 
 // notesContent wraps the Field Notes drawer body's wrapped Text and reports
 // a fixed width plus a height floored at minHeightPx, mirroring scrollContent
@@ -107,9 +131,8 @@ func drawerHeight(mode NotesMode) float64 {
 // when hidden.
 func (p *Panel) buildDrawer(state State) widget.PreferredSizeLocateableWidget {
 	t := p.theme
-	events := newestEvents(state.Frame.Events, drawerEventLines)
 	if state.NotesMode == NotesHidden {
-		return p.buildHiddenDrawerBar(state, events)
+		return p.buildHiddenDrawerBar(state, newestEvents(state.Frame.Events, drawerHiddenEventLines))
 	}
 	height := drawerHeight(state.NotesMode)
 	root := widget.NewContainer(widget.ContainerOpts.Layout(fixedLayout{}),
@@ -136,51 +159,116 @@ func (p *Panel) buildDrawer(state State) widget.PreferredSizeLocateableWidget {
 		background, headingColor = colorCelebrate, colorGold
 		heading = "BREAKTHROUGH · " + state.Note.Topic
 	}
-	body := t.column(4, t.insets(6, 12, 12, 6), t.solid(background),
-		widget.WidgetOpts.LayoutData(p.rect(mapLeft, mapBottom-height, mapRight-mapLeft, height)))
-	body.AddChild(t.label(heading, 10, headingColor))
-	noteHeight := height - 24 - 14*float64(min(len(events), drawerEventLines)+1) - 12
-	noteWidthDIP := mapRight - mapLeft - 24
+	// The body is a fixedLayout holding two absolutely-placed columns rather
+	// than one vertical stack. A horizontal RowLayout would not do: its
+	// RowLayoutData.Stretch stretches a child perpendicular to the layout
+	// direction, so it offers no way to say "events take a fixed width, the
+	// note takes the rest". The drawer root already places its children by
+	// explicit rect, so the columns follow the same pattern.
+	bodyTop := mapBottom - height
+	body := widget.NewContainer(
+		widget.ContainerOpts.Layout(fixedLayout{}),
+		widget.ContainerOpts.BackgroundImage(t.solid(background)),
+		widget.ContainerOpts.WidgetOpts(widget.WidgetOpts.LayoutData(p.rect(mapLeft, bodyTop, mapRight-mapLeft, height))),
+	)
+	p.handles.drawerBody = body
+
+	colTop := bodyTop + drawerBodyPadV
+	colHeight := height - 2*drawerBodyPadV
+	eventsLeft := mapRight - drawerBodyPadH - drawerEventsColW
+	notesLeft := mapLeft + drawerBodyPadH
+	notesWidth := eventsLeft - drawerColGutter - notesLeft
+
+	notes := t.column(drawerColSpacing, nil, nil,
+		widget.WidgetOpts.LayoutData(p.rect(notesLeft, colTop, notesWidth, colHeight)))
+	p.handles.notesColumn = notes
+	notes.AddChild(t.label(heading, drawerHeadingSizeDIP, headingColor))
+
+	// Both columns subtract the same heading height, so their bodies start at
+	// the same y whatever the heading face measures. This has to go through
+	// the face rather than the built widget: ebitenui panics on a Text's
+	// PreferredSize before the UI has validated the tree, which a build pass
+	// by definition has not.
+	columnBodyPx := t.px(colHeight) - t.lineHeightPx(drawerHeadingSizeDIP) - t.px(drawerColSpacing)
+
 	noteTextHolder := widget.NewContainer(widget.ContainerOpts.Layout(widget.NewRowLayout(widget.RowLayoutOpts.Direction(widget.DirectionVertical))))
 	noteTextHolder.AddChild(widget.NewText(
 		widget.TextOpts.Text(noteBody(state.Note), t.face(9), colorText),
 		widget.TextOpts.ProcessBBCode(true),
-		widget.TextOpts.MaxWidth(float64(t.px(noteWidthDIP))),
+		widget.TextOpts.MaxWidth(float64(t.px(notesWidth))),
 	))
-	// notesContent floors its reported height at noteHeight (the drawer's
-	// fixed budget for the note body) so a short note still gives the
-	// scroll container the same slot a long one does — RowLayoutData.
-	// MaxHeight below only ever shrinks, never grows, so without this floor
-	// a short note would report a smaller PreferredSize and the RECENT
-	// EVENTS heading would creep up the drawer depending on note length.
-	content := notesContent{Container: noteTextHolder, widthPx: t.px(noteWidthDIP), minHeightPx: t.px(noteHeight)}
+	// notesContent floors its reported height at the column body (the
+	// drawer's budget for the note) so a short note still gives the scroll
+	// container the same slot a long one does — RowLayoutData.MaxHeight below
+	// only ever shrinks, never grows, so without this floor a short note
+	// would report a smaller PreferredSize and leave the column ragged.
+	content := notesContent{Container: noteTextHolder, widthPx: t.px(notesWidth), minHeightPx: columnBodyPx}
 	scroll := widget.NewScrollContainer(
 		widget.ScrollContainerOpts.Content(content),
 		widget.ScrollContainerOpts.StretchContentWidth(),
 		widget.ScrollContainerOpts.Image(&widget.ScrollContainerImage{Idle: t.solid(background), Disabled: t.solid(background), Mask: t.solid(background)}),
-		widget.ScrollContainerOpts.WidgetOpts(widget.WidgetOpts.LayoutData(widget.RowLayoutData{Stretch: true, MaxHeight: t.px(noteHeight)})),
+		widget.ScrollContainerOpts.WidgetOpts(widget.WidgetOpts.LayoutData(widget.RowLayoutData{Stretch: true, MaxHeight: columnBodyPx})),
 	)
 	p.handles.notesScroll = scroll
 	p.wireScrollWheel(scroll, content)
-	body.AddChild(scroll)
-	body.AddChild(t.label("RECENT EVENTS", 8, headingColor))
+	notes.AddChild(scroll)
+	body.AddChild(notes)
+
+	logColumn := t.column(drawerColSpacing, nil, nil,
+		widget.WidgetOpts.LayoutData(p.rect(eventsLeft, colTop, drawerEventsColW, colHeight)))
+	p.handles.eventsColumn = logColumn
+	logColumn.AddChild(t.label("RECENT EVENTS", drawerHeadingSizeDIP, headingColor))
+	events := newestEvents(state.Frame.Events, t.eventRowsIn(columnBodyPx))
 	if len(events) == 0 {
-		body.AddChild(t.label("No campaign events yet.", 8.5, colorDim))
+		logColumn.AddChild(t.label("No campaign events yet.", drawerEventSizeDIP, colorDim))
 	}
+	budget := t.eventColumnTextBudgetPx()
 	for _, event := range events {
 		kind := event.Kind
 		line := widget.NewButton(
 			widget.ButtonOpts.Image(&widget.ButtonImage{Idle: t.solid(background), Hover: t.solid(colorRowOpen), Pressed: t.solid(colorRow)}),
-			widget.ButtonOpts.Text(eventLine(event), t.face(8.5), t.buttonText(colorDim)),
+			widget.ButtonOpts.Text(truncateToWidth(eventLine(event), budget, t.face(drawerEventSizeDIP)), t.face(drawerEventSizeDIP), t.buttonText(colorDim)),
 			widget.ButtonOpts.TextPosition(widget.TextPositionStart, widget.TextPositionCenter),
 			widget.ButtonOpts.ClickedHandler(func(*widget.ButtonClickedEventArgs) { p.emit(Intent{Kind: IntentFocusEvent, Event: kind}) }),
 			widget.ButtonOpts.WidgetOpts(stretch(), widget.WidgetOpts.CursorHovered("pointer")),
 		)
 		p.handles.events = append(p.handles.events, line)
-		body.AddChild(line)
+		logColumn.AddChild(line)
 	}
+	body.AddChild(logColumn)
 	root.AddChild(body)
 	return root
+}
+
+// lineHeightPx is one line's height at sizeDIP, in render pixels. It measures
+// the face directly because ebitenui widgets panic on PreferredSize until the
+// UI has validated them, so a build pass cannot measure its own widgets.
+func (t *theme) lineHeightPx(sizeDIP float64) int {
+	_, height := text.Measure("Ag", *t.face(sizeDIP), 0)
+	return int(height + 0.5)
+}
+
+// eventRowsIn reports how many event rows fit in bodyPx render pixels of
+// column. The rows are built by widget.NewButton directly rather than by
+// theme.button, so they carry no TextPadding and stand exactly one line
+// tall; only the column's own spacing separates them.
+func (t *theme) eventRowsIn(bodyPx int) int {
+	rowPx, gapPx := t.lineHeightPx(drawerEventSizeDIP), t.px(drawerColSpacing)
+	if rowPx+gapPx <= 0 {
+		return 0
+	}
+	// n rows occupy n*rowPx + (n-1)*gapPx, so the trailing gap belongs to the
+	// budget rather than being subtracted from every row.
+	return max((bodyPx+gapPx)/(rowPx+gapPx), 0)
+}
+
+// eventColumnTextBudgetPx is the render-pixel width an event row's text has.
+// The rows carry no padding of their own (see eventRowsIn), so the budget is
+// the column width — but it still goes through truncateToWidth, so a longer
+// summary or a larger face shortens the line instead of spilling it over the
+// note column. Mirrors hiddenBarEventBudgetPx.
+func (t *theme) eventColumnTextBudgetPx() float64 {
+	return float64(t.px(drawerEventsColW))
 }
 
 // hiddenBarControlLabel is the always-present right-hand control on the

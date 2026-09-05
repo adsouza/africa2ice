@@ -7150,9 +7150,11 @@ local-pressure summaries. A co-located sapiens selection lists eligible archaic 
 partners, highlights one deterministic target, uses plain `J` to cycle that highlight and `I` to
 accept it, and makes clear that ordinary co-location exchanges no genes. Preserve passage status,
 migration ranking, established-region display, event feed, and save feedback alongside these stats.
-The Field Notes drawer gives the event feed a persistent two-event newest-first view, including turn,
-typed event kind, and bounded summary. When Field Notes is hidden, its full-width bar retains the
-newest event as clickable text so contextual history does not disappear with the explanatory prose.
+The Field Notes drawer gives the event feed a persistent newest-first view in its own column beside
+the note, including turn, typed event kind, and bounded summary. The column holds as many events as
+its height allows, so expanding the drawer deepens the history as well as the prose. When Field Notes
+is hidden, its full-width bar retains the newest event as clickable text so contextual history does
+not disappear with the explanatory prose.
 
 ### Keyboard reference
 
@@ -7257,12 +7259,14 @@ width so it can show a whole event line rather than a small tab's fragment: the 
 as a clickable button on the left, truncated to whatever width remains once the right-aligned
 `▲ notes · F` control is measured and reserved, and either control reopens the drawer. During a
 breakthrough the bar's background changes and the event text gains a `BREAKTHROUGH · ` prefix.
-Text wrapping uses
-the available inner panel width rather than an artificially narrow text column; the scroll bound is
+The drawer body is two side-by-side columns: the note on the left and the event log in a
+fixed-width column on the right, so neither has to give up vertical space to the other. Text wrapping
+uses the note column's own width rather than an artificially narrow text column; the scroll bound is
 derived from those same wrapped lines. Catalog entries contain no presentation-only line breaks: the
-renderer alone chooses line boundaries for the current layout. Below the note body the drawer lists
-the two newest events, turn-stamped and newest first; each is clickable and focuses that event kind's
-entry.
+renderer alone chooses line boundaries for the current layout. Beside the note body the drawer lists
+the newest events, turn-stamped and newest first, as many as the column's height fits; each is
+clickable and focuses that event kind's entry, and a summary too wide for the column is truncated
+against the column's measured width rather than a fixed rune count.
 
 The displayed entry follows a stable context priority:
 

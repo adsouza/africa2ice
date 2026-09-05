@@ -932,6 +932,136 @@ func TestDrawerHasThreeStatesAndClickableEvents(t *testing.T) {
 	}
 }
 
+// manyEvents builds count distinct events, oldest first, so a test can ask
+// for more lines than any drawer mode will actually show.
+func manyEvents(count int) []gameapi.Event {
+	events := make([]gameapi.Event, 0, count)
+	for index := 0; index < count; index++ {
+		events = append(events, gameapi.Event{Turn: index + 1, Kind: gameapi.EventMigration, Summary: fmt.Sprintf("Band %d migrated.", index+1)})
+	}
+	return events
+}
+
+// drawEverything builds and draws the panel so every widget has been through
+// a layout pass and carries a real Rect. Several drawer assertions below
+// compare rectangles, which are zero until a Draw has run.
+func drawEverything(t *testing.T, panel *Panel, state State) {
+	t.Helper()
+	panel.Update(state)
+	screen := ebiten.NewImage(1280, 720)
+	panel.Draw(screen)
+	screen.Deallocate()
+}
+
+// TestDrawerColumnsSitSideBySide covers the two-column drawer body: Field
+// Notes on the left, RECENT EVENTS in its own right-hand column rather than
+// stacked underneath. The stacked layout spent 42 of compact mode's 102 DIP
+// on the events heading and its rows, leaving the note body a single line;
+// side by side both columns get the drawer's full inner height.
+func TestDrawerColumnsSitSideBySide(t *testing.T) {
+	for _, mode := range []NotesMode{NotesCompact, NotesExpanded} {
+		frame := testFrame(1)
+		frame.Events = manyEvents(30)
+		panel := New()
+		state := testState(frame, 1)
+		state.NotesMode = mode
+		state.Note = render.FieldNote{Topic: "FIRECRAFT", Introduction: "Controlled fire."}
+		drawEverything(t, panel, state)
+
+		notes, events := panel.handles.notesColumn, panel.handles.eventsColumn
+		if notes == nil || events == nil {
+			t.Fatalf("%v: drawer is missing a column (notes %v, events %v)", mode, notes, events)
+		}
+		notesRect, eventsRect := notes.GetWidget().Rect, events.GetWidget().Rect
+		if notesRect.Max.X > eventsRect.Min.X {
+			t.Fatalf("%v: notes column ends at x=%d but events column starts at x=%d, want them side by side without overlap", mode, notesRect.Max.X, eventsRect.Min.X)
+		}
+		if notesRect.Min.Y != eventsRect.Min.Y {
+			t.Fatalf("%v: column tops = %d and %d, want both columns to start at the same y", mode, notesRect.Min.Y, eventsRect.Min.Y)
+		}
+		body := panel.handles.drawerBody.GetWidget().Rect
+		if !notesRect.In(body) || !eventsRect.In(body) {
+			t.Fatalf("%v: columns %v and %v escape the drawer body %v", mode, notesRect, eventsRect, body)
+		}
+	}
+}
+
+// TestDrawerEventColumnFillsItsHeight covers the point of giving events their
+// own column: it holds as many events as fit, so expanding the drawer shows
+// more history rather than just more note. The 30-event frame is deeper than
+// either mode can show, so the counts here are the layout's, not the data's.
+func TestDrawerEventColumnFillsItsHeight(t *testing.T) {
+	counts := map[NotesMode]int{}
+	for _, mode := range []NotesMode{NotesCompact, NotesExpanded} {
+		frame := testFrame(1)
+		frame.Events = manyEvents(30)
+		panel := New()
+		state := testState(frame, 1)
+		state.NotesMode = mode
+		drawEverything(t, panel, state)
+		counts[mode] = len(panel.handles.events)
+
+		if counts[mode] == 0 {
+			t.Fatalf("%v: event column is empty with 30 events available", mode)
+		}
+		body := panel.handles.drawerBody.GetWidget().Rect
+		for index, line := range panel.handles.events {
+			if got := line.GetWidget().Rect; !got.In(body) {
+				t.Fatalf("%v: event row %d at %v escapes the drawer body %v — the column is showing more rows than fit", mode, index, got, body)
+			}
+		}
+		if got, want := panel.handles.events[0].Text().Label, eventLine(frame.Events[len(frame.Events)-1]); got != want {
+			t.Fatalf("%v: first event row = %q, want the newest event %q", mode, got, want)
+		}
+	}
+	if counts[NotesExpanded] <= counts[NotesCompact] {
+		t.Fatalf("event rows: compact %d, expanded %d — want expanding the drawer to show strictly more history", counts[NotesCompact], counts[NotesExpanded])
+	}
+}
+
+// TestDrawerNoteBodyGainsTheEventRowsHeight covers the reason for the
+// rearrangement: with the events beside the note rather than below it, the
+// note body's scroll viewport is taller than the whole events block used to
+// let it be. Compact mode is where the old formula hurt most.
+func TestDrawerNoteBodyGainsTheEventRowsHeight(t *testing.T) {
+	frame := testFrame(1)
+	frame.Events = manyEvents(30)
+	panel := New()
+	state := testState(frame, 1)
+	state.NotesMode = NotesCompact
+	state.Note = render.FieldNote{Topic: "FIRECRAFT", Introduction: strings.Repeat("Controlled fire. ", 40)}
+	drawEverything(t, panel, state)
+
+	// The stacked layout gave the note height-24-14*3-12 = 24 DIP at compact.
+	// Anything at or below that means the events are still eating the column.
+	const stackedNoteHeightDIP = 24.0
+	got := panel.handles.notesScroll.ViewRect().Dy()
+	if want := panel.theme.px(stackedNoteHeightDIP); got <= want {
+		t.Fatalf("compact note viewport = %d render px, want more than the %d px the stacked layout left it", got, want)
+	}
+}
+
+// TestDrawerEventColumnTruncatesLongSummaries mirrors the hidden bar's
+// truncation: the events column has a fixed width, so a summary that would
+// overflow it is shortened rather than drawn over the note column.
+func TestDrawerEventColumnTruncatesLongSummaries(t *testing.T) {
+	frame := testFrame(1)
+	frame.Events = []gameapi.Event{{Turn: 12, Kind: gameapi.EventMigration, Summary: strings.Repeat("x", 300)}}
+	panel := New()
+	state := testState(frame, 1)
+	state.NotesMode = NotesExpanded
+	drawEverything(t, panel, state)
+
+	label := panel.handles.events[0].Text().Label
+	if full := eventLine(frame.Events[0]); !strings.HasSuffix(label, "…") || len([]rune(label)) >= len([]rune(full)) {
+		t.Fatalf("event column line with a long summary = %q, want it shortened and ending in an ellipsis", label)
+	}
+	budget := panel.theme.eventColumnTextBudgetPx()
+	if width, _ := text.Measure(label, *panel.theme.face(8.5), 0); width > budget {
+		t.Fatalf("event column line width = %.1f render px, want at most the %.1f px column budget", width, budget)
+	}
+}
+
 // TestHiddenDrawerSpansTheMapWidth covers D1: the hidden drawer is a
 // full-width bar along the bottom of the map, not a small corner tab, so the
 // collapsed state shares the drawer's left edge and can show a whole event

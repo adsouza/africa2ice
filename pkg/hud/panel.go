@@ -141,6 +141,14 @@ type handles struct {
 	endTurn                *widget.Button
 	drawerTab              *widget.Button
 	drawerMore             *widget.Button
+	// drawerBody is the compact/expanded drawer's background container and
+	// notesColumn/eventsColumn are the two columns inside it: the note on
+	// the left, the event log on the right. Tests reach for all three to
+	// check the columns sit side by side and that no event row escapes the
+	// body it was sized against.
+	drawerBody   *widget.Container
+	notesColumn  *widget.Container
+	eventsColumn *widget.Container
 	// drawerBar and drawerBarEvent are the hidden-mode full-width bar and its
 	// left-hand clickable event text; nil in compact/expanded mode, where the
 	// edge tab (drawerTab/drawerMore above) is what tests and refreshes reach.
