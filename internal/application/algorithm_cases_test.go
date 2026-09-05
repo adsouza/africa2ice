@@ -73,7 +73,7 @@ func bandContext(world *domain.World, band domain.Band) (domain.TileGeography, d
 }
 
 var algorithmCases = []algorithmCase{{
-	field: "GeographyAlgorithm", current: "dispersal-map-v3", unsupported: "dispersal-map-v2",
+	field: "GeographyAlgorithm", current: "dispersal-map-v4", unsupported: "dispersal-map-v3",
 	probe: func(world *domain.World) string {
 		return eachLandTile(world, func(id domain.TileID, geography domain.TileGeography, _ domain.HabitatTile, _ domain.TileState) []any {
 			return []any{geography.Land, geography.Region, geography.X, geography.Y, geography.ElevationKm, geography.BaseMoisture}

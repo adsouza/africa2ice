@@ -5,9 +5,24 @@ import "math"
 type Grid struct {
 	tiles              [TileCount]TileGeography
 	biomes             []Biome
+	lastHabitableTurn  [TileCount]int16
 	escarpments        [MaxEscarpmentEdges]EscarpmentEdge
 	escarpmentCount    int
 	escarpmentEdgeMask [TileCount]uint8
+}
+
+// LastHabitableTurn is the final campaign turn on which a tile has any capacity,
+// or -1 for open water and for land the climate never supports. It is derived
+// alongside the biome history because BaselineK depends on nothing the seed
+// touches: the vegetation index is built from the habitat temperature and the
+// effective moisture, and only LocalTemperatureC carries the per-seed noise.
+// Presentation needs this to distinguish terrain closed for one cold snap from
+// terrain the campaign has finished with.
+func (g *Grid) LastHabitableTurn(id TileID) int {
+	if g == nil || id >= TileCount {
+		return -1
+	}
+	return int(g.lastHabitableTurn[id])
 }
 
 func (g *Grid) Tile(id TileID) (TileGeography, bool) {

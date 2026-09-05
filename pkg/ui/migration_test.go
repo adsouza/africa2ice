@@ -322,3 +322,34 @@ func TestDiagnoseMoveActionsAsksForATargetWhenNoneIsChosen(t *testing.T) {
 		t.Fatalf("unreachable target = %q, want the migration diagnostic %q", unreachable.MoveHere, want)
 	}
 }
+
+// The blocked-terrain message used to promise recovery unconditionally. On the
+// tiles that matter most — the two-column Caucasus land bridge that carries the
+// only eastern route out of the Levant — that promise is false: once long-term
+// cooling drives their vegetation under the cold cutoff they stay dead for the
+// rest of the campaign, and a player who waits for the thaw waits forever.
+func TestUninhabitableMessageDoesNotPromiseRecoveryForAPermanentlyDeadTile(t *testing.T) {
+	frame, band := migrationFixture()
+	frame.Turn = 200
+	frame.Tiles[4].LastHabitableTurn = 72 // died at turn 72 and never recovers
+
+	diagnostic := DiagnoseMigration(frame, band, 4)
+	if diagnostic.Reason != MigrationBlockedUninhabitable {
+		t.Fatalf("DiagnoseMigration() reason = %v, want MigrationBlockedUninhabitable", diagnostic.Reason)
+	}
+	message := MigrationDiagnosticMessage(diagnostic, band)
+	if strings.Contains(message, "later") {
+		t.Errorf("message for a permanently dead tile promises a recovery that never comes: %q", message)
+	}
+}
+
+func TestUninhabitableMessageStillOffersHopeForATileThatRecovers(t *testing.T) {
+	frame, band := migrationFixture()
+	frame.Turn = 200
+	frame.Tiles[4].LastHabitableTurn = 340 // an interstadial reopens it
+
+	message := MigrationDiagnosticMessage(DiagnoseMigration(frame, band, 4), band)
+	if !strings.Contains(message, "later") {
+		t.Errorf("message for a tile that does recover hides that fact: %q", message)
+	}
+}

@@ -32,6 +32,11 @@ const (
 type MigrationDiagnostic struct {
 	Reason  MigrationBlockReason
 	Passage gameapi.PassageID
+	// RecoversLater says whether an uninhabitable destination regains capacity
+	// before the campaign ends. Terrain that is merely closed for this cold snap
+	// is worth waiting beside; terrain the climate has finished with is not, and
+	// telling a player to wait for the second kind costs them the campaign.
+	RecoversLater bool
 }
 
 // MoveMigrationPreview moves a keyboard destination cursor one cardinal tile
@@ -82,7 +87,7 @@ func DiagnoseMigration(frame *gameapi.Frame, band *gameapi.Band, destination gam
 		return MigrationDiagnostic{Reason: MigrationBlockedWater}
 	}
 	if tile.BaselineK <= 0 {
-		return MigrationDiagnostic{Reason: MigrationBlockedUninhabitable}
+		return MigrationDiagnostic{Reason: MigrationBlockedUninhabitable, RecoversLater: tile.LastHabitableTurn > frame.Turn}
 	}
 	if passage, ok := framePassageBetween(frame, band.TileID, destination); ok {
 		status := gameapi.PassageUnavailable
@@ -141,7 +146,10 @@ func MigrationDiagnosticMessage(diagnostic MigrationDiagnostic, band *gameapi.Ba
 		}
 		return "Bands cannot migrate into open water; only named passages cross it, and Coastal Navigation unlocks the Wallacea crossings."
 	case MigrationBlockedUninhabitable:
-		return "This terrain is uninhabitable now; climate change may make it viable later."
+		if diagnostic.RecoversLater {
+			return "This terrain is uninhabitable now; climate change may make it viable later."
+		}
+		return "This terrain is uninhabitable, and the climate never brings it back this campaign; route around it."
 	case MigrationBlockedPassageTechnology:
 		return fmt.Sprintf("%s is locked; research Coastal Navigation to cross it.", diagnostic.Passage)
 	case MigrationBlockedPassageClimate:

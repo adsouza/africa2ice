@@ -67,7 +67,18 @@ var highlands = []highlandFeature{
 	{polygonFeature{"Atlas", []coordinate{c(-10*10, 36*10), c(11*10, 36*10), c(11*10, 28*10), c(-10*10, 28*10)}}, 1.50},
 	{polygonFeature{"EthiopianHighlands", []coordinate{c(33*10, 15*10), c(43*10, 15*10), c(43*10, 4*10), c(33*10, 4*10)}}, 2.00},
 	{polygonFeature{"Zagros", []coordinate{c(43*10, 38*10), c(57*10, 38*10), c(57*10, 27*10), c(43*10, 27*10)}}, 1.50},
-	{polygonFeature{"Caucasus", []coordinate{c(37*10, 46*10), c(51*10, 46*10), c(51*10, 39*10), c(37*10, 39*10)}}, 2.00},
+	// The Caucasus is authored as two massifs rather than one, because between
+	// the Black Sea and the Caspian the land narrows to a few tile columns and a
+	// continuous 2 km front across all of them seals the only eastern route out
+	// of the Levant. Highland tiles are cold-limited: at 2 km the lapse rate
+	// plus LGMCooling drives ThermalSuitability under VegetationColdCutoffC, so
+	// such a front does not merely slow a band down, it reaches BaselineK = 0
+	// and stays there for the rest of the campaign. The gap between the lobes is
+	// the Colchis corridor on the Black Sea shore, the same low coastal approach
+	// that carries the historical route, and it is a deliberate pass in exactly
+	// the sense the escarpment catalog means it.
+	{polygonFeature{"CaucasusWest", []coordinate{c(37*10, 46*10), c(41.5*10, 46*10), c(41.5*10, 39*10), c(37*10, 39*10)}}, 2.00},
+	{polygonFeature{"CaucasusEast", []coordinate{c(43.5*10, 46*10), c(51*10, 46*10), c(51*10, 39*10), c(43.5*10, 39*10)}}, 2.00},
 	{polygonFeature{"HimalayaTibetanPlateau", []coordinate{c(69*10, 37*10), c(105*10, 37*10), c(105*10, 34*10), c(101*10, 34*10), c(101*10, 26*10), c(69*10, 26*10)}}, 3.00},
 	{polygonFeature{"Alps", []coordinate{c(4*10, 49*10), c(17*10, 49*10), c(17*10, 43*10), c(4*10, 43*10)}}, 2.00},
 	{polygonFeature{"Urals", []coordinate{c(54*10, 68*10), c(69*10, 68*10), c(69*10, 50*10), c(54*10, 50*10)}}, 1.25},

@@ -61,6 +61,7 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 			ID: gameapi.TileID(id), X: geography.X, Y: geography.Y, Latitude: geography.Latitude, Longitude: geography.Longitude,
 			Land: geography.Land, ElevationKm: geography.ElevationKm, Explored: service.world.IsExplored(domain.TileID(id)),
 			NaturalShelter: geography.NaturalShelter, BaseMoisture: geography.BaseMoisture,
+			LastHabitableTurn: grid.LastHabitableTurn(domain.TileID(id)),
 		}
 		if geography.Land {
 			macroImpact := domain.MacroImpactAt(geography, date.Turn)

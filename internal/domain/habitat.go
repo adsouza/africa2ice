@@ -26,6 +26,9 @@ type biomeDerivationState struct {
 func (grid *Grid) deriveBiomeHistory() error {
 	grid.biomes = make([]Biome, (MaxCampaignTurn+1)*TileCount)
 	states := [TileCount]biomeDerivationState{}
+	for id := range TileCount {
+		grid.lastHabitableTurn[id] = -1
+	}
 	for turn := 0; turn <= MaxCampaignTurn; turn++ {
 		climate, err := ClimateAt(0, turn)
 		if err != nil {
@@ -63,6 +66,10 @@ func (grid *Grid) deriveBiomeHistory() error {
 				}
 			}
 			grid.biomes[turn*TileCount+id] = state.current
+			// The published biome, not the raw class, is what BaselineK uses.
+			if BaselineK(vegetation, state.current) > 0 {
+				grid.lastHabitableTurn[id] = int16(turn)
+			}
 		}
 	}
 	return nil

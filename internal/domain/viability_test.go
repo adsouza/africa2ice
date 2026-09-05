@@ -261,6 +261,22 @@ func TestDomainViabilityGate(t *testing.T) {
 		t.Errorf("the reference policy retained no turn-400 survival margin of %d sapiens%s",
 			minSurvivingSapiensAtTurn400, report)
 	}
+	// A campaign the harness calls a victory must leave someone standing where
+	// they arrived. Establishment latches permanently, so a band that crosses a
+	// corridor it cannot survive still stamps the achievement on its way out and
+	// the campaign reads as won while the species collapses behind it. Without
+	// this check the gate cannot tell a dispersal from a death march, and a
+	// route whose every tile sits near zero capacity passes it unremarked.
+	for _, outcome := range outcomes {
+		if outcome.Result != CampaignVictory {
+			continue
+		}
+		if outcome.FinalEstablishedBands < 1 {
+			t.Errorf("%s counted seed %d a victory but ended with %d established sapiens bands and %d people, "+
+				"so the destination was reached by a band that could not hold it%s",
+				outcome.Policy.Name, outcome.Seed, outcome.FinalEstablishedBands, outcome.FinalSapiens, report)
+		}
+	}
 	if referenceSubdivided == 0 {
 		t.Errorf("the reference policy ended no campaign with more than the %d founding bands still established, so the model grows its founders in place rather than dispersing%s",
 			foundingSapiensBands(), report)

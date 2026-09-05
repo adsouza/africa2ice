@@ -1176,7 +1176,7 @@ conversion, so a violation reads as a specific edit rather than a category of si
 - **Water/negative polygons:** the Mediterranean, Red Sea, Persian Gulf, Caspian, Black Sea, the
   deep-water Wallacea gaps between Sunda and Sahul, and the Bering Strait. The last two are named
   route gaps rather than coastlines accidentally erased by coarse rasterization.
-- **Height-valued highland polygons:** Atlas, Ethiopian Highlands, Zagros, Caucasus, Himalaya / Tibetan Plateau, Alps,
+- **Height-valued highland polygons:** Atlas, Ethiopian Highlands, Zagros, the two Caucasus massifs, Himalaya / Tibetan Plateau, Alps,
   Urals, Altai, Central Range of New Guinea, and Alaska Range, using the authored kilometre values
   below.
 - **River polylines:** Nile, Niger, Congo, Zambezi, Tigris–Euphrates, Indus, Ganges, Danube, Yellow
@@ -1231,7 +1231,8 @@ Highland rings use the same polygon rule and the heights in the next table:
 | Atlas | `(-10,36), (11,36), (11,28), (-10,28)` |
 | Ethiopian Highlands | `(33,15), (43,15), (43,4), (33,4)` |
 | Zagros | `(43,38), (57,38), (57,27), (43,27)` |
-| Caucasus | `(37,46), (51,46), (51,39), (37,39)` |
+| Caucasus (west massif) | `(37,46), (41.5,46), (41.5,39), (37,39)` |
+| Caucasus (east massif) | `(43.5,46), (51,46), (51,39), (43.5,39)` |
 | Himalaya / Tibetan Plateau | `(69,37), (105,37), (105,34), (101,34), (101,26), (69,26)` |
 | Alps | `(4,49), (17,49), (17,43), (4,43)` |
 | Urals | `(54,68), (69,68), (69,50), (54,50)` |
@@ -1300,13 +1301,14 @@ strict Mountainous Highlands threshold.
 |            0 | Atlas                       |        `1.50` |
 |            1 | Ethiopian Highlands         |        `2.00` |
 |            2 | Zagros                      |        `1.50` |
-|            3 | Caucasus                    |        `2.00` |
-|            4 | Himalaya / Tibetan Plateau |        `3.00` |
-|            5 | Alps                        |        `2.00` |
-|            6 | Urals                       |        `1.25` |
-|            7 | Altai                       |        `2.00` |
-|            8 | Central Range of New Guinea |        `2.50` |
-|            9 | Alaska Range                |        `2.50` |
+|            3 | Caucasus (west massif)      |        `2.00` |
+|            4 | Caucasus (east massif)      |        `2.00` |
+|            5 | Himalaya / Tibetan Plateau |        `3.00` |
+|            6 | Alps                        |        `2.00` |
+|            7 | Urals                       |        `1.25` |
+|            8 | Altai                       |        `2.00` |
+|            9 | Central Range of New Guinea |        `2.50` |
+|           10 | Alaska Range                |        `2.50` |
 
 After land/water rasterization, elevation is evaluated at each tile center:
 
@@ -1317,13 +1319,34 @@ ElevationKm(tile) = 0                                                     if til
 ```
 
 Highland polygons are clipped to land, and maximum rather than sum resolves overlap, so feature
-iteration order cannot change a tile. A land tile is Mountainous Highlands exactly when
-`ElevationKm(tile) > HighlandElevationKm`; a value at the threshold is non-highland. Non-highland
+iteration order cannot change a tile. Because overlap resolves upward, a pass can only be authored
+as a *gap between* polygons; no lower feature can carve one out of a higher one. A land tile is
+Mountainous Highlands exactly when `ElevationKm(tile) > HighlandElevationKm`; a value at the
+threshold is non-highland. Non-highland
 land and all water therefore sit at the model's `0 km` reference. There is no random perturbation,
 interpolation, slope, depression, sea-level change, or separate render-only height field in v1.
 
+**The dispersal corridor invariant.** Between the Black Sea and the Caspian the land narrows to a
+handful of tile columns, and those columns carry the only eastern route out of the Levant. A highland
+front laid continuously across such a neck does not merely make the crossing expensive. Highland
+tiles are cold-limited: at `2.00 km` the lapse rate already spends most of the thermal budget, and
+the campaign's `LGMCooling` then drives `ThermalSuitability` under `VegetationColdCutoffC`, which
+zeroes `V` and therefore `BaselineK` however wet the tile is. Such a neck does not narrow, it shuts,
+permanently, part-way through the campaign, and nothing in the game says so. Authored geography must
+therefore leave at least one column of every dispersal neck below `HighlandElevationKm`, so that its
+capacity answers to moisture and latitude rather than to the cold cutoff. The gap between
+`CaucasusWest` and `CaucasusEast` is the Colchis corridor on the Black Sea shore, the low coastal
+approach the historical route uses.
+
+Two tests hold the invariant from both ends. `TestCaucasusPassCarriesTheEasternCorridor` pins the
+geography, requiring every row of the land bridge to keep one tile habitable for all 401 turns.
+`TestDispersalCorridorStaysOpenUntilTheFinalEra` checks the consequence a player experiences: a band
+leaving East Africa on any turn up to the start of the final era must still be able to reach a
+destination region before turn 400, solved as a time-expanded graph with technology gating ignored so
+that the result is an upper bound on what any player could achieve.
+
 The catalog, strict threshold, land clipping, and maximum-overlap rule belong to
-`GeographyAlgorithm: "dispersal-map-v3"`. The resulting fixed tile elevations drive temperature,
+`GeographyAlgorithm: "dispersal-map-v4"`. The resulting fixed tile elevations drive temperature,
 biome classification, orographic moisture, altitude UV, hypoxia pressure, and the top-down highland
 classification and inspector, but are
 derived geography rather than mutable or serialized campaign state. The Initial values may be tuned
@@ -1357,7 +1380,7 @@ boundaries are deliberate passes, not data gaps.
 generation resolves the 17 entries after land and elevation rasterization and rejects an empty name,
 out-of-bounds endpoint, non-cardinal pair, water endpoint, duplicate boundary, or pair without an
 elevation change. The resulting stable catalog and a checked-in checksum belong to
-`GeographyAlgorithm: "dispersal-map-v3"`; they are reconstructed geography and add no save field.
+`GeographyAlgorithm: "dispersal-map-v4"`; they are reconstructed geography and add no save field.
 The barrier and diagonal-corner interpretation belong to `MovementAlgorithm` below. Changing either
 catalog or interpretation after release requires the corresponding algorithm-version migration.
 
@@ -1550,7 +1573,7 @@ change visible without storing per-tile cave state in the save.
 The rating is immutable geography, independent of world seed, current biome, climate, degradation,
 and resident population. It is not inferred merely from elevation or a biome label: a biome change
 must not create or remove caves. World generation and load reconstruction use projection/land data
-under `GeographyAlgorithm: "dispersal-map-v3"` and shelter catalog/raster rules under
+under `GeographyAlgorithm: "dispersal-map-v4"` and shelter catalog/raster rules under
 `NaturalShelterMaskAlgorithm`, consume no `WorldRNG`, and validate finite in-range ratings. After
 release, changing the table, mask equation, or rating changes the natural-shelter-mask identifier;
 changing projection or land changes both identifiers because it changes the rasterized mask. Either
@@ -6980,6 +7003,12 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   generic “choose an outlined tile” message. `pkg/ui` classifies the frame projection into spent
   spatial action, current tile, unexplored area, open water, currently uninhabitable land, named
   passage technology/climate lock, blocked diagonal, too-distant tile, or no traversable route.
+  The uninhabitable-terrain message distinguishes the two cases the player has to tell apart, using
+  the projected `LastHabitableTurn`: terrain closed for this cold snap invites waiting beside it,
+  while terrain whose capacity never returns before turn 400 says so and asks the player to route
+  around. The distinction is not cosmetic. The tiles most likely to be blocked on a dispersal are
+  the necks of the corridor, and telling a player to wait out a climate that will not relent costs
+  them the campaign in silence.
   The unexplored check precedes terrain inspection so this feedback never reveals whether hidden
   geography is land or water. Bands cannot occupy water tiles: Coastal Navigation unlocks only the
   eligible named land-to-land Wallacea passages, so its water message directs the player to a named
@@ -7489,7 +7518,7 @@ world. No JSON tag, slot ID, schema version, or migration branch appears in `int
 
 `SaveState.SchemaVersion` starts at `1`. The state includes `WorldSeed`,
 `CampaignClockAlgorithm: "four-era-v1"`,
-`GeographyAlgorithm: "dispersal-map-v3"`, `ClimateAlgorithm: "hybrid-abrupt-moisture-v1"`,
+`GeographyAlgorithm: "dispersal-map-v4"`, `ClimateAlgorithm: "hybrid-abrupt-moisture-v1"`,
 `NaturalShelterMaskAlgorithm: "authored-ellipse-v1"`,
 `TemperatureAlgorithm: "lat-elev-offset-v1"`,
 `MacroEventAlgorithm: "bounded-regional-v1"`,
@@ -8253,7 +8282,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    The combined acceptance contract implements §§6–7's clock, climate, habitat, and macro-event
    contracts with their fixtures as specified there: `four-era-v1`'s exact
    80,000/50,000/35,000/25,000/20,000 BP endpoints and 300/150/100/50-year spans;
-   `dispersal-map-v3`'s authored elevation and escarpment catalogs, strict highland threshold,
+   `dispersal-map-v4`'s authored elevation and escarpment catalogs, strict highland threshold,
    stable escarpment checksum, and deliberate pass fixtures;
    `lat-elev-offset-v1` with its 64-row table and checksum; the orbital, seasonal, and precession
    tables under that same bit-pattern, tolerance, and checksum discipline; the abrupt-pulse catalog
@@ -8470,7 +8499,17 @@ stock-unit and conversion values are already selected; step 5 implements and ver
      stochastic model should not land on the same integer 48 times. Dispersal in this model happens by
      splitting, so a campaign that disperses must end more subdivided than it began. The margin is
      scoped to the reference policy, matching the survival margin, because only the reference policy
-     splits its non-route bands and so is the only one that can subdivide by construction. Record extinction and dispersal-failed outcomes as expected possible results,
+     splits its non-route bands and so is the only one that can subdivide by construction.
+
+     The **held-destination margin** applies to every policy, not only the reference one, and
+     requires that no campaign the harness records as a victory ends with zero established sapiens
+     bands. It closes the same latching loophole from the other side. Establishment is permanent, so
+     a band that crosses a corridor it cannot survive still stamps the achievement on the way through
+     and the campaign reads as won while the species collapses behind it. That is not a hypothetical:
+     a continuous highland front across the Caucasus neck once left `toward-frangistan` reporting a
+     victory on all eight corpus seeds while ending each with nine to fifteen people and no
+     established band anywhere. Every other margin in this gate was satisfied. Reaching a destination
+     and holding it are separate claims, and the gate must make both. Record extinction and dispersal-failed outcomes as expected possible results,
      not harness failures. This pass may tune only Appendix C **Initial** domain values and must update
      their owning §7 rules, Appendix B, fixtures, and manifest rows together. It may not relax a
      tighten-only margin or change a **Locked** value to manufacture a win. The gate must be green

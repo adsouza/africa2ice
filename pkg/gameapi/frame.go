@@ -70,22 +70,29 @@ type Escarpment struct {
 }
 
 type Tile struct {
-	ID                 TileID
-	X                  int
-	Y                  int
-	Latitude           float64
-	Longitude          float64
-	Land               bool
-	Region             Region
-	ElevationKm        float64
-	Biome              Biome
-	Explored           bool
-	NaturalShelter     float64
-	LocalTemperatureC  float64
-	MovementCost       float64
-	BaseMoisture       float64
-	VegetationIndex    float64
-	BaselineK          float64
+	ID                TileID
+	X                 int
+	Y                 int
+	Latitude          float64
+	Longitude         float64
+	Land              bool
+	Region            Region
+	ElevationKm       float64
+	Biome             Biome
+	Explored          bool
+	NaturalShelter    float64
+	LocalTemperatureC float64
+	MovementCost      float64
+	BaseMoisture      float64
+	VegetationIndex   float64
+	BaselineK         float64
+	// LastHabitableTurn is the final campaign turn on which this tile has any
+	// capacity at all, or -1 for a tile that never does. Habitability is a pure
+	// function of tile and turn — the seed only perturbs local temperature, not
+	// the vegetation index BaselineK is built from — so the whole trajectory is
+	// known at world generation. The HUD needs it to tell a tile that is closed
+	// for this cold snap apart from one that is finished for the campaign.
+	LastHabitableTurn  int
 	EcologicalK        float64
 	Degradation        float64
 	FloraStock         float64
