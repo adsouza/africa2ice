@@ -608,3 +608,151 @@ func TestNoticeWrapsToBoxWidthByMeasuredPixels(t *testing.T) {
 		t.Fatalf("box height for %d lines = %.1f, not taller than one line %.1f", len(lines), got, noticeBoxHeight(1))
 	}
 }
+
+// haloRenderFrame is a full grid with one explored land tile, so the halo has
+// clean rings to read and nothing else is drawn over them.
+func haloRenderFrame() *gameapi.Frame {
+	frame := &gameapi.Frame{TerrainRevision: 1, Tiles: make([]gameapi.Tile, TerrainGridWidth*TerrainGridHeight)}
+	for y := range TerrainGridHeight {
+		for x := range TerrainGridWidth {
+			id := gameapi.TileID(y*TerrainGridWidth + x)
+			frame.Tiles[id] = gameapi.Tile{ID: id, X: x, Y: y, Land: true, Biome: gameapi.GlacialTundra}
+		}
+	}
+	frame.Tiles[30*TerrainGridWidth+40].Explored = true
+	return frame
+}
+
+// tileCentrePixel reads the screen pixel at the centre of a tile's cell in
+// overview, where the cell is mapTileSize and the origin is fixed.
+func tileCentrePixel(screen *ebiten.Image, x, y int) color.RGBA {
+	at := screen.At(mapOriginX+x*mapTileSize+mapTileSize/2, mapOriginY+y*mapTileSize+mapTileSize/2)
+	red, green, blue, alpha := at.RGBA()
+	return color.RGBA{R: uint8(red >> 8), G: uint8(green >> 8), B: uint8(blue >> 8), A: uint8(alpha >> 8)}
+}
+
+func TestHaloLightensNearbyFogAndLeavesDistantFogAlone(t *testing.T) {
+	screen := renderMapOffscreen(t, haloRenderFrame(), 0, MigrationPreview{}, EndScene{}, "")
+	fog := cieLightness(unexploredTileColor)
+	for ring := 1; ring <= haloRingCount; ring++ {
+		got := cieLightness(tileCentrePixel(screen, 40+ring, 30))
+		if got <= fog {
+			t.Errorf("ring %d tile L* %.2f is not above the flat fog L* %.2f", ring, got, fog)
+		}
+	}
+	if got := cieLightness(tileCentrePixel(screen, 40+haloRingCount+1, 30)); math.Abs(got-fog) > 0.5 {
+		t.Errorf("tile past the last ring has L* %.2f, want flat fog L* %.2f", got, fog)
+	}
+}
+
+func TestHaloNeverReachesAnExploredTilesLightness(t *testing.T) {
+	screen := renderMapOffscreen(t, haloRenderFrame(), 0, MigrationPreview{}, EndScene{}, "")
+	floor := darkestExploredLightness()
+	for ring := 1; ring <= haloRingCount; ring++ {
+		for offset := -ring; offset <= ring; offset++ {
+			if got := cieLightness(tileCentrePixel(screen, 40+ring, 30+offset)); got >= floor {
+				t.Fatalf("halo tile at ring %d offset %d has L* %.2f, at or above the explored floor %.2f", ring, offset, got, floor)
+			}
+		}
+	}
+}
+
+func TestDrawRepaintsWhenTheShimmerStepAdvancesAndSkipsWhenItDoesNot(t *testing.T) {
+	frame := haloRenderFrame()
+	screen := ebiten.NewImage(1280, 720)
+	scene := NewMapScene()
+	scene.Update()
+	if !scene.Draw(screen, frame, 0, MigrationPreview{}, "", EndScene{}, false) {
+		t.Fatal("the first Draw did not paint")
+	}
+	if scene.Draw(screen, frame, 0, MigrationPreview{}, "", EndScene{}, false) {
+		t.Fatal("Draw repainted with nothing changed")
+	}
+	for range shimmerTickStride {
+		scene.Update()
+	}
+	if !scene.Draw(screen, frame, 0, MigrationPreview{}, "", EndScene{}, false) {
+		t.Fatal("Draw did not repaint after the shimmer phase advanced")
+	}
+}
+
+// A frame with everything explored has no fringe, so the shimmer has nothing
+// to animate and must not cost a repaint. This is also what keeps the
+// all-explored performance fixture on its existing idle path.
+func TestShimmerDoesNotRepaintWithNoFringe(t *testing.T) {
+	frame := haloRenderFrame()
+	for index := range frame.Tiles {
+		frame.Tiles[index].Explored = true
+	}
+	screen := ebiten.NewImage(1280, 720)
+	scene := NewMapScene()
+	scene.Update()
+	scene.Draw(screen, frame, 0, MigrationPreview{}, "", EndScene{}, false)
+	for range 4 * shimmerTickStride {
+		scene.Update()
+	}
+	if scene.Draw(screen, frame, 0, MigrationPreview{}, "", EndScene{}, false) {
+		t.Fatal("the shimmer forced a repaint on a fully explored frame")
+	}
+}
+
+// The halo is a paint change and must not become an input change. Picking
+// already resolves a tile ID for any in-bounds pixel; what matters is that a
+// haloed tile still reports as unexplored, which is the bit every caller in
+// pkg/app gates selection and migration on.
+func TestHaloTilesStayUnexploredForPicking(t *testing.T) {
+	frame := haloRenderFrame()
+	for ring := 1; ring <= haloRingCount; ring++ {
+		x := mapOriginX + (40+ring)*mapTileSize + mapTileSize/2
+		y := mapOriginY + 30*mapTileSize + mapTileSize/2
+		id, ok := MapTileAt(Camera{}, frame, 626, x, y)
+		if !ok {
+			t.Fatalf("ring %d tile did not resolve for picking", ring)
+		}
+		if frame.Tiles[id].Explored {
+			t.Fatalf("ring %d tile %d reports as explored; the halo has leaked into input", ring, id)
+		}
+	}
+}
+
+// An unexplored tile must not gain a hover tint just because it is haloed.
+// drawFrame's hover branch already tests Explored; this pins that it keeps
+// doing so now that the tile is no longer flat fog.
+func TestHoverDoesNotTintAHaloTile(t *testing.T) {
+	frame := haloRenderFrame()
+	screen := ebiten.NewImage(1280, 720)
+	scene := NewMapScene()
+	scene.Update()
+	scene.Draw(screen, frame, 0, MigrationPreview{}, "", EndScene{}, false)
+	plain := tileCentrePixel(screen, 41, 30)
+
+	hovered := NewMapScene()
+	hovered.SetTileHover(TileHover{TileID: gameapi.TileID(30*TerrainGridWidth + 41), Visible: true})
+	hovered.Update()
+	hovered.Draw(screen, frame, 0, MigrationPreview{}, "", EndScene{}, false)
+	if got := tileCentrePixel(screen, 41, 30); got != plain {
+		t.Fatalf("hovering an unexplored halo tile changed it: %v then %v", plain, got)
+	}
+}
+
+// The shimmer step stored in the frame key must be the one drawHalo actually
+// rendered with. haloActive used to be set inside drawTerrain's cache-miss
+// block, which runs after the key is built, so on the tick the halo first
+// became active the key held a stale step and forced a needless repaint.
+// Ticking past a stride boundary before the first Draw is what separates the
+// two values; with the cache refreshed ahead of the key, the second Draw is
+// correctly idle.
+func TestShimmerStepInTheKeyMatchesTheOneDrawn(t *testing.T) {
+	frame := haloRenderFrame()
+	screen := ebiten.NewImage(1280, 720)
+	scene := NewMapScene()
+	for range shimmerTickStride {
+		scene.Update()
+	}
+	if !scene.Draw(screen, frame, 0, MigrationPreview{}, "", EndScene{}, false) {
+		t.Fatal("the first Draw did not paint")
+	}
+	if scene.Draw(screen, frame, 0, MigrationPreview{}, "", EndScene{}, false) {
+		t.Fatal("the second Draw repainted: the key's shimmer step disagreed with the one drawHalo used")
+	}
+}
