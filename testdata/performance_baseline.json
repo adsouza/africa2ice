@@ -5,7 +5,7 @@
     "BenchmarkAdvanceTurnMaximumWorkload": {
       "allocs_per_op": 4080,
       "bytes_per_op": 2350000,
-      "ratio_to_calibration": 518
+      "ratio_to_calibration": 600
     },
     "BenchmarkFrameProjectionMaximumWorkload": {
       "allocs_per_op": 2490,

@@ -107,26 +107,36 @@ over. The authoritative five-sample medians below were recorded by the `release-
 2026-09-05 using the GitHub-hosted `ubuntu-24.04` `linux/amd64` runner, image `20260831.293.1`,
 with an Intel Xeon Platinum 8573C:
 
-| benchmark | median ratio to calibration | bytes/op | allocs/op |
-| --- | ---: | ---: | ---: |
-| maximum turn | 414.70 | 1,881,526 | 3,244 |
-| maximum frame projection | 122.26 | 3,777,570 | 1,998 |
+| benchmark | Xeon Platinum 8573C | AMD EPYC 7763 | bytes/op | allocs/op |
+| --- | ---: | ---: | ---: | ---: |
+| maximum turn | 414.70 | 480.32 | 1,881,526 | 3,244 |
+| maximum frame projection | 122.26 | 124.31 | 3,777,570 | 1,998 |
+
+Both runs are authoritative. `NativeBenchmarkReference` pins the image and architecture but not the
+CPU model, so a ceiling is derived from the **slowest observed pool configuration**, not from
+whichever runner a single job happened to draw. Deriving the maximum-turn ceiling from the Xeon
+median alone produced `518`, and the next run read `480.32` against it — under 8% of headroom, well
+inside the run-to-run variance this benchmark shows.
 
 These medians include the current reusable migration-candidate workspace and seed-independent
 world data. The memory ceilings are `2,350,000 B/op` and `4,500,000 B/op`; the allocation ceilings
 are `4,080` and `2,490`; those are counts rather than times and were unaffected by the calibration
-change. The normalized-time ceilings are `518` and `153`, each less than 25% above its
-corresponding authoritative median. For scale, the per-tile band scan removed in `cb5296d` cost
-`2.56x` the current maximum turn, so this margin still catches that regression class several times
-over.
+change. The normalized-time ceilings are `600` and `153`, each less than 25% above the slowest
+authoritative median for its benchmark (`480.32` and `124.31`). For scale, the per-tile band scan
+removed in `cb5296d` cost `2.56x` the current maximum turn, so this margin still catches that
+regression class several times over.
 
-One caveat applies to the maximum-turn ceiling. Its within-pool stability under the new calibration
-rests on a single runner CPU model so far; the reading that prompted the change came from an AMD
-EPYC 9V74, and this baseline from an Intel Xeon Platinum 8573C. The Mac/CI agreement is strong
-evidence (`391` against `414.70`, a `1.06x` spread, where the old calibration produced `1.59x`
-across the same two machines), but if a future run on another pool CPU exceeds `518`, the correct
-response is to record the ratio and the `cpu:` line and judge whether the calibration is still
-failing to normalise — not to raise the ceiling.
+The calibration is doing its job. Across the two pool CPUs the maximum-turn ratio spans `1.16x`
+(`414.70` to `480.32`) where the old calibration spanned `1.97x` on one commit (`1,949` on Xeon
+6973P-C against `3,840` on EPYC 9V74), and frame projection spans `1.02x`. The interactive Mac reads
+`391`, a `1.06x` spread against the Xeon, where the old calibration put the same two machines
+`1.59x` apart.
+
+Residual machine variation is therefore real but bounded, and it is absorbed by deriving ceilings
+from the slowest observed configuration. If a future run exceeds a ceiling, record its ratio and its
+`cpu:` line and check whether that CPU is simply a slower pool member not yet represented above — in
+which case extend the table and re-derive — or whether the workload genuinely regressed. Raising a
+ceiling without a new `cpu:` row to justify it is not a fix.
 
 ### Why the calibration allocates
 
