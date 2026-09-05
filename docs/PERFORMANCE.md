@@ -96,6 +96,40 @@ match for the specified configuration:
 
 Browser verification and profiling pin Playwright `1.62.1` and Chromium `151.0.7922.34`.
 
+### Fog halo benchmark
+
+`testdata/performance_profile_save.json` explores all 6,144 tiles, so it has no fringe: every tile
+is either explored or beyond `haloRingCount`, the halo has nothing to draw, and a fringeless frame
+takes the cache-skip path Task 5 added. The Playwright frame-rate measurement above therefore
+**does not cover the halo at all** — it would report the same 59.88 FPS regardless of how slow that
+feature is. This is a gap, not a clean bill of health.
+
+`BenchmarkMapDrawWithHalo` (`pkg/render/performance_test.go`) closes it with a synthetic worst case
+instead: a diagonal lattice of explored tiles spaced, via `haloBenchmarkSpacing`, so their ring-3
+neighbourhoods tile the grid edge to edge rather than reproducing an in-campaign frame. A tile within
+`haloRingCount` (3) Chebyshev steps of an anchor forms a 7×7 square, and 7×7 squares placed 7 tiles
+apart cover the plane with no gap — reaching 5,940 of the grid's 6,144 tiles (96.7%). It asserts, not
+just measures — `Draw`'s return value is checked and the benchmark fails outright if a frame takes
+the skip path, so it cannot pass by silently measuring nothing.
+
+Measured 2026-09-05 on the interactive reference machine confirmed above (`go test ./pkg/render/
+-run '^$' -bench BenchmarkMapDrawWithHalo -benchtime 200x -v`):
+
+| run | fringe tiles | ns/op |
+| --- | ---: | ---: |
+| 1 | 5,940 of 6,144 | 3,345,176 |
+| 2 | 5,940 of 6,144 | 3,247,770 |
+
+Both samples land at roughly 3.2–3.3 ms per `Draw`, against a 66.7 ms budget for the halo's 15 phase
+steps a second and the tighter 16.7 ms of a single 60 FPS frame that this cost shares with everything
+else drawn that frame. That is comfortably under the 5 ms level at which the spec's cached,
+cross-faded fallback (section 6.1) would need to be considered — this benchmark does not exercise
+that path. This is a native `go test` benchmark, not a browser measurement, so it is not directly
+comparable to the Playwright table above; it exists to give the halo a gate that can fail, not to
+extend that table's own numbers. It is a point measurement rather than a CI gate: no ceiling is
+wired into `tools/check_benchmarks.sh` for it, so a future regression here will not fail a build on
+its own.
+
 ## Native benchmark baseline
 
 The maximum-workload `World.AdvanceTurn` and frame-projection benchmarks exercise exactly 6,144
