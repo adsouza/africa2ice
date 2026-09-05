@@ -31,7 +31,7 @@ type haloRing struct {
 var haloRings = [haloRingCount]haloRing{
 	{landFloor: 12.0, landSpan: 12.0, water: 8.0, jitter: 1.5},
 	{landFloor: 8.0, landSpan: 8.0, water: 6.0, jitter: 1.0},
-	{landFloor: 5.0, landSpan: 4.5, water: 4.2, jitter: 0.6},
+	{landFloor: 5.4, landSpan: 4.1, water: 4.2, jitter: 0.6},
 }
 
 // haloBlendPair is the blend fraction along fog -> terrain at the jittered

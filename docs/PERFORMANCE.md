@@ -103,7 +103,8 @@ Browser verification and profiling pin Playwright `1.62.1` and Chromium `151.0.7
 
 `testdata/performance_profile_save.json` explores all 6,144 tiles, so it has no fringe: every tile
 is either explored or beyond `haloRingCount`, the halo has nothing to draw, and a fringeless frame
-takes the cache-skip path Task 5 added. The Playwright frame-rate measurement above therefore
+takes the cache-skip path that recognizes an empty fringe and leaves the idle-paint-nothing property
+in place. The Playwright frame-rate measurement above therefore
 **does not cover the halo at all** — it would report the same 59.88 FPS regardless of how slow that
 feature is. This is a gap, not a clean bill of health.
 
@@ -132,6 +133,18 @@ comparable to the Playwright table above; it exists to give the halo a gate that
 extend that table's own numbers. It is a point measurement rather than a CI gate: no ceiling is
 wired into `tools/check_benchmarks.sh` for it, so a future regression here will not fail a build on
 its own.
+
+**The wasm fixture that spec §8 also requires has not been run.** §8 asks for two measurements: this Go
+benchmark, and a partially-explored fixture for the wasm harness, sized to maximise fringe perimeter,
+with its own recorded row here held to the same DPR 1 / DPR 2 floors as the table above. Only the
+first exists. The harness itself is in place (`tools/web-e2e/profile.mjs`), but a figure worth
+recording needs the pinned Chromium build CI uses rather than whatever happens to be on this
+machine, and the partially-explored save fixture the measurement would run against does not exist
+yet either. Neither gap is closed here, in keeping with this file's own rule that a partially
+recorded baseline that reads as complete is worse than an empty one. What this leaves unmeasured:
+the browser-side cost of the shipped default, where any halo fringe on screen means the map
+recomposes 15 times a second — the Playwright table above cannot see this cost, by construction,
+since its fixture has no fringe, and no other row in this file covers it either.
 
 ## Native benchmark baseline
 

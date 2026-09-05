@@ -74,7 +74,7 @@ land ladder `[29.4, 79.9]` maps order-preservingly onto each ring's land band. W
 |---|---|---|---|
 | `d = 1` | 12.0 .. 24.0 | 8.0 | 1.5 L\* |
 | `d = 2` | 8.0 .. 16.0 | 6.0 | 1.0 L\* |
-| `d = 3` | 5.0 .. 9.5 | 4.2 | 0.6 L\* |
+| `d = 3` | 5.4 .. 9.5 | 4.2 | 0.6 L\* |
 
 `L*_target(biome, d) = floor(d) + (L*(biome) - 29.4) / (79.9 - 29.4) * span(d)`
 
@@ -83,6 +83,15 @@ levels chroma discrimination has collapsed entirely; hue cannot carry the land/s
 This is the same reasoning the existing palette comment gives for the ladder at 7.6 px.
 
 Resulting brightest halo color anywhere is L\* 24.0, against a 29.4 ceiling — 5.4 L\* of margin.
+
+Ring 3's floor is 5.4 rather than the 5.0 first derived here. At 5.0 the gap between water's target
+and the darkest land's jittered floor was 0.2 L\*, but one 8-bit sRGB channel step at that lightness
+is about 0.27 L\* — quantization swallowed the whole margin and inverted the ordering across
+aridity 0.51 to 0.86, which the three-anchor sampling in the first version of the guard test stepped
+straight over. The band's top is unchanged, so only its floor moved; the surviving margin is
+0.2974 L\*, and the guard now sweeps all 101 aridity samples and logs its worst gap. Any later edit
+to a ring band must re-run that test rather than reason about the nominal figures in this table:
+they are pre-quantization targets, and the invariant lives after the rounding.
 
 ### 4.3 Solving for the blend
 

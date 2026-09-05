@@ -69,7 +69,7 @@ type MapScene struct {
 	haloCached      bool
 	shimmerTick     int
 	// reducedMotion freezes the halo at its ring target instead of animating
-	// the shimmer. The setter arrives in Task 7; drawHalo already reads it.
+	// the shimmer. SetReducedMotion below is the setter; drawHalo reads it.
 	reducedMotion bool
 	// Paints counts every Draw call that actually painted the screen (i.e.
 	// returned true). It exists for pkg/app's tests: unlike pkg/render's own

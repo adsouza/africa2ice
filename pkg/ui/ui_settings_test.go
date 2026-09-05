@@ -97,4 +97,9 @@ func TestSchemaThreeRoundTripsReducedMotion(t *testing.T) {
 	if !settings.ReducedMotion {
 		t.Fatal("ReducedMotion did not survive the round trip")
 	}
+
+	missing := []byte(`{"SchemaVersion":3,"FieldNotesVisible":true,"MasterVolume":0.5,"Muted":false,"GuideDismissed":false,"FieldNotesExpanded":false}`)
+	if _, err := DecodeUISettings(missing); err == nil {
+		t.Fatal("schema 3 payload without ReducedMotion was accepted")
+	}
 }

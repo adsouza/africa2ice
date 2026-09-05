@@ -1,6 +1,7 @@
 package render
 
 import (
+	"math"
 	"testing"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
@@ -77,19 +78,66 @@ func TestHaloPreservesTheBiomeLadderWithinARing(t *testing.T) {
 // At halo lightnesses chroma discrimination has collapsed, so land and sea
 // cannot be told apart by hue. Water therefore sits below every land biome in
 // its own ring, making the coastline a lightness edge.
+//
+// This compares water's brightest attainable colour (noise = 1, its ring
+// target) against each biome's darkest attainable colour (noise = 0, its
+// jittered floor): the worst case that can appear on screen at once. Three
+// anchor aridities are not enough to trust this — water is continuous in
+// AridityIndex, and an intermediate blend can land nearer a biome than either
+// endpoint does, exactly as biome_contrast_test.go's waterGradeSamples comment
+// explains — so this sweeps aridity at that same density instead. haloColor
+// returns a color.RGBA, whose channels are already rounded to 8-bit sRGB by
+// interpolateChannel, so cieLightness of its output is already a quantised
+// comparison; no separate rounding step is needed here.
 func TestHaloWaterIsDarkerThanEveryLandBiomeInTheSameRing(t *testing.T) {
+	worstGap, worstRing, worstAridity, worstBiome := math.Inf(1), 0, 0.0, ""
 	for ring := range haloRingCount {
-		for _, aridity := range []float64{0, 0.5, 1} {
+		for sample := range waterGradeSamples {
+			aridity := float64(sample) / float64(waterGradeSamples-1)
 			water := EpochGrade(aridity).Water
 			wet := cieLightness(haloColor(water, haloWaterBlend(water)[ring], 1))
 			for biome := range gameapi.Biome(gameapi.BiomeCount) {
 				swatch := climateBiomeColor(biome, 0)
 				dry := cieLightness(haloColor(swatch, haloLandBlend[biome][ring], 0))
-				if wet >= dry {
-					t.Errorf("ring %d aridity %.1f: water L* %.2f is not below %s L* %.2f", ring, aridity, wet, biome.String(), dry)
+				if gap := dry - wet; gap < worstGap {
+					worstGap, worstRing, worstAridity, worstBiome = gap, ring, aridity, biome.String()
 				}
 			}
 		}
+	}
+	t.Logf("worst water-vs-land gap: ring %d aridity %.4f biome %s, water below land by %.4f L*",
+		worstRing, worstAridity, worstBiome, worstGap)
+	if worstGap <= 0 {
+		t.Fatalf("ring %d aridity %.4f: water is not darker than %s (gap %.4f L*)", worstRing, worstAridity, worstBiome, worstGap)
+	}
+}
+
+// TestHaloWaterRingsDimWithDistance sweeps the same cross-ring ordering that
+// TestHaloRingsDimWithDistance checks for biomes, but for water: at every
+// aridity, a ring's darkest attainable water colour (noise = 0, its jittered
+// floor) must stay above the next ring's brightest attainable water colour
+// (noise = 1, its target) -- the worst case across independent shimmer phases
+// for two different rings' tiles. Nothing else in this test file swept water
+// across rings; TestHaloRingsDimWithDistance only loops biomes.
+func TestHaloWaterRingsDimWithDistance(t *testing.T) {
+	worstGap, worstRing, worstAridity := math.Inf(1), 0, 0.0
+	for sample := range waterGradeSamples {
+		aridity := float64(sample) / float64(waterGradeSamples-1)
+		water := EpochGrade(aridity).Water
+		blend := haloWaterBlend(water)
+		for ring := 0; ring < haloRingCount-1; ring++ {
+			nearFloor := cieLightness(haloColor(water, blend[ring], 0))
+			farTarget := cieLightness(haloColor(water, blend[ring+1], 1))
+			if gap := nearFloor - farTarget; gap < worstGap {
+				worstGap, worstRing, worstAridity = gap, ring, aridity
+			}
+		}
+	}
+	t.Logf("worst cross-ring water gap: ring %d floor vs ring %d target at aridity %.4f, margin %.4f L*",
+		worstRing, worstRing+1, worstAridity, worstGap)
+	if worstGap <= 0 {
+		t.Fatalf("ring %d's darkest water is not above ring %d's brightest water at aridity %.4f (margin %.4f L*)",
+			worstRing, worstRing+1, worstAridity, worstGap)
 	}
 }
 
