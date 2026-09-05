@@ -290,7 +290,7 @@ func (world *World) advanceTurn() error {
 		}
 		if occurred {
 			band.LastMortality.Acute = loss
-			world.appendEvent(Event{Turn: nextTurn, Kind: EventAcuteIncident, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d suffered a %s incident.", band.ID, eventKindName(kind))})
+			world.appendEvent(Event{Turn: nextTurn, Kind: EventAcuteIncident, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d suffered %s.", band.ID, acuteIncidentPhrase(kind))})
 		}
 		band.LastOutcomeReport.AcuteDiseaseHealthLoss = float64(healthBeforeAcute - band.Health)
 		band.LastOutcomeReport.EndingPopulation = band.Population
@@ -307,11 +307,17 @@ func (world *World) advanceTurn() error {
 		researchGains[band.ID] = work[index].researchGain
 		selectionDeltas[band.ID] = work[index].selection
 	}
+	// This filter is the one place a band leaves the world, so it is also the
+	// only place that can report the loss: without a line here a band the
+	// player was watching simply stopped existing.
 	live := nextBands[:0]
 	for _, band := range nextBands {
 		if band.Population > 0 {
 			live = append(live, band)
+			continue
 		}
+		geography, _ := world.grid.Tile(band.TileID)
+		world.appendEvent(Event{Turn: nextTurn, Kind: EventExtinction, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: extinctionSummary(band)})
 	}
 	nextBands = live
 	preGainBands := append([]Band(nil), nextBands...)

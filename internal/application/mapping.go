@@ -230,6 +230,8 @@ func mapEventKind(value domain.EventKind) gameapi.EventKind {
 		return gameapi.EventMacroEpisode
 	case domain.EventAchievement:
 		return gameapi.EventAchievement
+	case domain.EventExtinction:
+		return gameapi.EventExtinction
 	default:
 		panic("unmapped event kind")
 	}

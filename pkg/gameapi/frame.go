@@ -221,11 +221,12 @@ const (
 	EventAcuteIncident
 	EventMacroEpisode
 	EventAchievement
+	EventExtinction
 	EventKindCount
 )
 
 func (v EventKind) String() string {
-	return enumString(int(v), []string{"Migration", "Split", "Technology", "Interbreeding", "Acute Incident", "Macro Episode", "Achievement"}, "EventKind")
+	return enumString(int(v), []string{"Migration", "Split", "Technology", "Interbreeding", "Acute Incident", "Macro Episode", "Achievement", "Extinction"}, "EventKind")
 }
 
 type Event struct {
