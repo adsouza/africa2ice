@@ -16,7 +16,7 @@ hominin bands are computer-controlled ecological competitors. Both populations g
 carrying capacity, compete for shared resources, degrade their tiles, split under crowding, and
 migrate into new biomes as the climate turns against them. Band-level heritable variation responds
 to environment and local contact; the player may actively interbreed a sapiens band with a
-co-located archaic band, while a persistent Field Notes panel explains the evidence, abstraction,
+co-located archaic band, while a persistent Field Notes drawer explains the evidence, abstraction,
 and strategic consequences. Long-cycle climate, irregular multi-century warm/cold pulses, and rare
 major eruptions create shared environmental pressure without granting a random event permission to
 erase an entire region. The world beyond East Africa begins beneath persistent exploration fog
@@ -72,8 +72,8 @@ Capitalized lifecycle terms in this register — **Locked**, **Initial**, **Poli
 | The two hominin species could both be read as player-managed                                                                                            | **The player controls only Homo sapiens; a deterministic computer policy controls archaic bands**                                                                                                                                                                                                                                                                                                                                                                                                                    | Explicit product clarification. Archaics remain dynamic ecological competitors without becoming a second player faction or introducing combat and diplomacy.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | There is no heritable-adaptation model                                                                                                                  | **Band-level heritable state:** six bounded continuous values change through deterministic selection and local gene flow, plus rare seeded mutation; technology remains a separate acquired-knowledge system                                                                                                                                                                                                                                                                                                         | This permits environmental adaptation, inherited tradeoffs, and introgression without simulating individuals or confusing biological inheritance with research. Splits copy exact values and v1 omits background random drift.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Contact with archaic hominins has no player-directed genetic action                                                                                     | **`Interbreed` is an active sapiens spatial action:** target one co-located archaic band; reciprocal whole-catalog gene flow resolves simultaneously for the next turn                                                                                                                                                                                                                                                                                                                                               | Ordinary co-location still means resource competition only. The action does not transfer technology or change species identity, and the player cannot cherry-pick a trait.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Historical/scientific explanation has no persistent UI home                                                                                             | **A visible-by-default, toggleable Field Notes panel** with historical context, explicit game-abstraction copy, hints, and compact sources                                                                                                                                                                                                                                                                                                                                                                           | Players can understand the evidence and the model without leaving the game. Its visibility is a locally persisted UI preference, never campaign state or a simulation input.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Campaign progress has no persistent spatial indicator                                                                                                   | **A thin, non-interactive timeline rail directly below the top bar:** 80,000 BP to 20,000 BP, with elapsed fill, a current-date marker, and 10,000-year major ticks                                                                                                                                                                                                                                                                                                                                                  | Campaign position stays visible without competing with the lower-edge Field Notes panel. The rail is derived UI only; its dates are chronological tick labels, not development-roadmap or campaign phases. Starting 80,000 BP provides lead-in to the key 70,000–60,000 BP dispersal interval.                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Historical/scientific explanation has no persistent UI home                                                                                             | **A visible-by-default, toggleable Field Notes drawer** with historical context, explicit game-abstraction copy, hints, and compact sources                                                                                                                                                                                                                                                                                                                                                                           | Players can understand the evidence and the model without leaving the game. Its visibility is a locally persisted UI preference, never campaign state or a simulation input.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Campaign progress has no persistent spatial indicator                                                                                                   | **A thin, non-interactive, full-width timeline rail above the map and panel:** 80,000 BP to 20,000 BP, with elapsed fill, a current-date marker, and 10,000-year major ticks                                                                                                                                                                                                                                                                                                                                                  | Campaign position stays visible without competing with the Field Notes drawer. The rail is derived UI only; its dates are chronological tick labels, not development-roadmap or campaign phases. Starting 80,000 BP provides lead-in to the key 70,000–60,000 BP dispersal interval.                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Five workforce categories are named, with neither their effects nor their allocation lifecycle                                                          | **Five distinct deterministic roles with persisted proportions:** save five basis-point shares totaling 100%; derive workers from start-of-turn population; population changes preserve the shares and splits copy them                                                                                                                                                                                                                                                                                              | This creates real allocation tradeoffs without an idle-worker state or repetitive reassignment after demographic change, while keeping work inside the existing bounded band, resource, research, and hazard systems. §7's foraging, hunting, and megafauna tables select the collection coefficients; shelter, work-risk, and research coefficients remain separate decisions.                                                                                                                                                                                                                                                                                                                               |
 | The resource label "Flora" can be read as all vegetation                                                                                                | **Flora means plant food people can forage, not all vegetation**                                                                                                                                                                                                                                                                                                                                                                                                                                                     | The stock measures forageable plant food, not total plant biomass or herbivore fodder. Low flora can coexist with abundant fauna; initial capacities and collection rates are defined in §7 and Appendix B.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Food quantities have no defined common unit                                                                                                             | **One food unit (FU) sustains one person for one game turn; one normalized flora or fauna harvest unit converts to 1 FU before source-specific modifiers**                                                                                                                                                                                                                                                                                                                                                           | Flora and fauna remain separately conserved environmental stocks, but their stock units share one edible-yield baseline. Plant, Animal, and Aquatic sources therefore start comparable; ordinary terrestrial hunting and megafauna tracking both feed Animal before its one source modifier. Collection rate, access, and explicit source-specific modifiers create differences rather than hidden unit scales. The compressed campaign clock still does not imply literal calorie or monthly-ration accounting.                                                                                                                                                                                                                                                                      |
@@ -85,7 +85,7 @@ Capitalized lifecycle terms in this register — **Locked**, **Initial**, **Poli
 | Outbreak health damage has no magnitude or severity rule                                                                                                | **Initially 5–15 health percentage points before technology or heritable mitigation, interpolated linearly using the same severity draw as direct deaths**                                                                                                                                                                                                                                                                                                                                                           | Apply once to survivors in phase 5. Hygiene changes outbreak probability, not the conditional hit; only explicitly applicable acquired technology or heritable effects mitigate health damage.                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Starvation was defined from extracted food, with no reserve accounting                                                                                  | **Apply its squared-shortfall curve directly:** raw loss is start-of-turn population times `StarvationCoefficient = 0.10` times the post-reserve deficit fraction squared                                                                                                                                                                                                                                                                                                                                            | The coefficient is an approved initial playtest default: no food gives 10% raw loss; a 50% shortfall gives 2.5%, before mortality caps. There is no health gate, grace period, or health multiplier.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Hunger's effect on positive population growth is unspecified                                                                                            | **Scale only positive logistic growth by the fraction of food needs met:** multiply it by `1 - FoodDeficitFraction`                                                                                                                                                                                                                                                                                                                                                                                                  | Half-fed means half the positive growth; no food means no positive growth. Zero or negative logistic growth is unchanged, so starvation cannot reduce crowding-driven decline. Growth remains separate from the existing mortality causes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Turn metrics are named without a specified UI location                                                                                                  | **Stats grouped by scope:** population/clock/season in the top bar, population/health in the selected-band header, food/mortality/workforce/research below, and environment in the tile inspector                                                                                                                                                                                                                                                                                                                    | Essential stats stay visible alongside their controls. Both species remain inspectable; food actuals use the bounded last-turn report below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Turn metrics are named without a specified UI location                                                                                                  | **Stats grouped by scope:** population/clock/season in the panel header, population/health in the band line, food/mortality/workforce/research in the details disclosure and THIS TURN checklist, and environment in the Move row's HERE/TARGET comparison                                                                                                                                                                                                                                                                                                                    | Essential stats stay visible alongside their controls. Both species remain inspectable; food actuals use the bounded last-turn report below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | Food-panel timing and freshness are unspecified                                                                                                         | **Last completed turn's actuals:** show required, consumed, and missing FU plus the unmet percentage, labeled “Last turn” with the turn number                                                                                                                                                                                                                                                                                                                                                                       | One display-only report per living band survives save/load, stays unchanged during ordinary planning, and clears on both sides of a split. Unavailable is not zero; the panel is not a forecast.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Carried-food capacity has no scaling rule                                                                                                               | **Population-scaled storage:** capacity is current population times `FoodStorageTurns = 3`, an approved initial playtest default                                                                                                                                                                                                                                                                                                                                                                                     | Larger bands carry proportionally more FU; splits create no aggregate capacity. Spoilage means a full reserve does not guarantee three fed turns without harvest. Overflow uses the end-of-turn rule below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Food can exceed carrying capacity after harvesting or population loss                                                                                   | **Discard overflow at turn end:** after consumption and all demographic/acute population changes, retain at most final population times `FoodStorageTurns`                                                                                                                                                                                                                                                                                                                                                           | The cap follows survivors without removing food before it can meet this turn's requirement. Excess is lost, not cached, transferred, or returned to tile stocks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
@@ -132,7 +132,7 @@ Capitalized lifecycle terms in this register — **Locked**, **Initial**, **Poli
 | §7's tables say "closed before implementation" while §12 tunes them later                                                                               | **Structure before values:** shape and validation close before the consumer; Locked and Initial values ship with that consumer, the step-5e viability gate may tune Initial domain values, and step 12 performs final calibration; only an explicitly Open row may wait for step 12 to select its first release value                                                                                                                                                                                                     | Consumers remain implementable and testable without placeholder release data. Appendix C currently has no Open rows, so neither pass is allowed to invent a missing contract or retune a Locked value.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | A layer-complete roadmap could defer its riskiest integrations and whole-campaign feedback until the end                                                | **Required green substeps, an early desktop/browser walking skeleton after the public contract, a domain-only viability gate immediately after the full turn loop, and final release closure after calibration**                                                                                                                                                                                                                                                                                                      | Clean Architecture still governs dependencies, but implementation proceeds in reviewable increments and proves platform boot and campaign viability before persistence, presentation, and publication multiply the cost of correcting a model or integration failure.                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | Victory, an entire destination, and the chronic cap rested on unassigned constants                                                                      | **`MinEstablishedBand`, `BeringiaOpenFraction`, and `MaxChronicRate` have approved initial playtest values; `BeringiaOpenTemp` is derived from the fraction and `LGM_cooling`**                                                                                                                                                                                                                                                                                                                                      | The three independent inputs were referenced but never given values or listed in §12's otherwise exhaustive tuning pass, and the establishment threshold plus derived Beringian threshold independently determine whether the campaign is winnable. Deriving the latter from the campaign's own cooling depth means tuning `LGM_cooling` cannot silently strand or permanently open the bridge, and the derived value is never tuned separately.                                                                                                                                                                                                                                                           |
-| The `gameapi.Frame` band contract omitted fields §7/§8 behavior requires                                                                                | **Add `BandID`, `Species`, `TileID`, `Stress`, and `SpatialActionUsed` to the projected band, plus a `TerrainRevision` cache key to the frame**                                                                                                                                                                                                                                                                                                                                                        | Build step 2 constructs `pkg/gameapi` from §4, and the enumeration there could not drive the specified UI: species markers, the sapiens-only top-bar sum, the `Stress > SplitStressThreshold` split gate, and disabling movement after an accepted `Interbreed` all need projected state. `WorldRevision` cannot key terrain caches because it increments on every `SetAssignment`.                                                                                                                                                                                                                                                                                                                        |
+| The `gameapi.Frame` band contract omitted fields §7/§8 behavior requires                                                                                | **Add `BandID`, `Species`, `TileID`, `Stress`, and `SpatialActionUsed` to the projected band, plus a `TerrainRevision` cache key to the frame**                                                                                                                                                                                                                                                                                                                                                        | Build step 2 constructs `pkg/gameapi` from §4, and the enumeration there could not drive the specified UI: species markers, the sapiens-only panel-header population sum, the `Stress > SplitStressThreshold` split gate, and disabling movement after an accepted `Interbreed` all need projected state. `WorldRevision` cannot key terrain caches because it increments on every `SetAssignment`.                                                                                                                                                                                                                                                                                                                        |
 | The heritable catalog carried `HbS`, whose value was gated to the campaign's final tenth                                                                | **Cut `HbS` from v1:** `HeritableTraitCount` drops to 6, and the allele, its Hardy-Weinberg genotype shares, the malaria/anemia tradeoff, and the region × biome `FalciparumPressure` table move to §14                                                                                                                                                                                                                                                                                                              | Published age estimates run from roughly 22,000 years ago to a Holocene origin, so even the most permissive reading made it eligible only from turn 360 of 400, it was tuned to be rare enough to miss entirely, and Field Notes had to call its appearance partly counterfactual. It nonetheless cost a trait slot, genotype-share derivation, a fully authored pressure table with its own validation, and separate anemia health and mortality components — all on the critical path through the balance pass. It was the last enum entry and nothing else read it, so removal shifts no ordinal. It also removes genotype decomposition and the only date gate from the genetics subsystem.            |
 | Constant values were restated across the rule, its fixtures, §9, §12, and §13                                                                           | **Appendix C is the authoritative configuration manifest:** selected value or source, lifecycle status, and owning contract in one place; owning rules may repeat values for clarity but must agree                                                                                                                                                                                                                                                                                                                  | A survey found 126 value restatements across dozens of named constants, so retuning one number took several consistent edits and a missed one drifted silently — the mechanism that left 19 stale "calibration remains open" notes after a single decision moved. The manifest gives §12 a finishable checklist while retaining the rule sections as the behavioral contracts. Naming things it had to list surfaced `SplitStressThreshold`, which gated the player's split verb as a bare `0.9` in nine semantic places.                                                                                                                                                                                  |
 | Test specifications were restated as build work in §12 and again as verification in §13          | **One question per section:** §7 owns the rule and the fixtures that pin its numbers, §12 owns placement and integration-scale assertions, §13 owns the CI gate and the display- or human-required checks; each cites the others rather than repeating them | The same list written three times drifts three ways, and roughly a quarter of the document was that list. The rule also makes placement decidable for a new test instead of leaving it to whichever section the author was editing. A step that re-enumerates a contract's fixtures is now a defect, the same way a value disagreeing with Appendix C is.                                                                                                                                                                                                                                            |
@@ -349,14 +349,13 @@ pkg/audio/               stdlib + Ebitengine audio only
   synth.go               PCM tone generation (enveloped sine/square)
   manager.go             SoundManager, lazily constructed with persisted master settings
 
-pkg/render/              DRAWING ADAPTER — gameapi + Ebitengine; no domain/application/ui
+pkg/render/              DRAWING ADAPTER — gameapi + Ebitengine; no domain/application/ui/hud
   palette.go             water and UI-chrome colors from the three-anchor epoch grade
-  map.go                 scalable top-down terrain, fog, picking, markers, routes, HUD, and viewport transforms
-  tile_info.go           legend and current/candidate tile summaries
-  band_window.go         scrollable visible-band window
+  map.go                 scalable top-down terrain, fog, camera, picking, markers, routes, and viewport transforms
+  legend.go              map legend entries
+  camera.go              two-state camera geometry
   timeline.go            campaign timeline presentation derivations
   interbreed.go          interbreeding candidate presentation
-  outcome.go             population/health change explanations
   end_scene.go           terminal outcome presentation
 
 pkg/ui/                  DRIVING PRESENTATION ADAPTER — gameapi + render + audio; no domain/application
@@ -365,10 +364,23 @@ pkg/ui/                  DRIVING PRESENTATION ADAPTER — gameapi + render + aud
   toast.go               two-second queued success/error notifications
   field_notes.go         bundled sourced entries keyed by gameapi context values; no domain imports
   migration.go           migration-preview movement and terrain diagnostics
+  bands.go               attention order, warning tiers, and the Move-row Done predicate
+  checklist.go           Move/Research/Workforce row predicates, summaries, default-open rule, End-turn gate
+  liveability.go         HERE/TARGET tile liveability rows and presentation tiers (spec §5.4)
+  guide.go               first-turn guide state machine (spec §7)
   ui_settings.go         versioned local-preference record and store interface
   ui_settings_file.go    desktop JSON preference store                    (//go:build !js)
   ui_settings_idb_js.go  separate web IndexedDB preference store          (//go:build js)
   end_scene.go           victory / extinction / dispersal-failed result
+
+pkg/hud/                 EBITENUI CHROME ADAPTER — gameapi + ui + render + ebitenui; no application/domain
+  state.go, intent.go    derived State in, Intent out; comparable so the tree rebuilds only on change
+  theme.go               palette, DIP→px, scaled font faces
+  fixed_layout.go        absolute DIP-rect layout for the chrome regions
+  panel.go               Panel lifecycle; header.go chips.go details.go move_row.go research_row.go workforce_row.go end_turn.go
+  drawer.go              Field Notes drawer (hidden/compact/expanded) with clickable events
+  guide_card.go          first-turn guide card
+  overlays.go, end_scene.go  title/menu/storage/settings windows and the New Campaign button
 
 pkg/app/                 Ebitengine HOST + COMPOSITION ROOT — outermost driving adapter
   game.go                Ebiten host, input/scenes, workforce draft, storage UI, current Frame, and audio cues
@@ -565,7 +577,7 @@ into the `World`.
 Each band value carries three groups of fields. **Identity and position:** `BandID`, `Species`, and
 current `TileID`. These are not optional presentation details — §7 restricts every player command to
 a `HomoSapiens` actor, and §8 requires species-distinct markers, the “Computer controlled” label, and
-a top-bar population sum over sapiens bands only. **Persisted state:** current whole-person
+a panel-header population sum over sapiens bands only. **Persisted state:** current whole-person
 `Population uint32`, normalized
 `Health float64` in `[0, 1]`, `StoredFood`, fixed five-role basis-point allocation, acquired-tech
 bitset, research target/progress, the fixed six-value heritable state, the value-typed
@@ -598,7 +610,7 @@ renderer reads `ElevationKm` directly rather than importing or rerasterizing geo
 not band-specific yield predictions or animal
 counts. The inspector explains shelter efficiency and local prey opportunities from the frame,
 without importing domain tables or deriving its own geography/ecology rules. The stats layout in
-§8 places these values in the top bar and band/tile inspectors. `LastFoodReport` and
+§8 places these values in the panel header and the Move row's HERE/TARGET comparison. `LastFoodReport` and
 `LastOutcomeReport` are bounded, persisted display records specified in §7, not future-turn previews
 or simulation inputs. Frame projection copies them without recomputing consumption, demographics,
 health, or history from current state; UI and rendering only format their values. Projection requires
@@ -896,6 +908,18 @@ linters:
             - "github.com/hajimehoshi/ebiten/v2"
             - "golang.org/x/image"
 
+        hud-adapter-dependencies:
+          list-mode: strict
+          files: ["**/pkg/hud/**/*.go"]
+          allow:
+            - "$gostd"
+            - "github.com/adsouza/africa2ice/pkg/gameapi"
+            - "github.com/adsouza/africa2ice/pkg/ui"
+            - "github.com/adsouza/africa2ice/pkg/render"
+            - "github.com/hajimehoshi/ebiten/v2"
+            - "github.com/ebitenui/ebitenui"
+            - "golang.org/x/image"
+
         ui-adapter-dependencies:
           list-mode: strict
           files: ["**/pkg/ui/**/*.go"]
@@ -932,8 +956,10 @@ linters:
             - "github.com/adsouza/africa2ice/pkg/gameapi"
             - "github.com/adsouza/africa2ice/pkg/render"
             - "github.com/adsouza/africa2ice/pkg/ui"
+            - "github.com/adsouza/africa2ice/pkg/hud"
             - "github.com/adsouza/africa2ice/pkg/audio"
             - "github.com/hajimehoshi/ebiten/v2"
+            - "github.com/ebitenui/ebitenui"
 
     forbidigo:
       analyze-types: true
@@ -958,8 +984,8 @@ Four details make these rules architectural rather than cosmetic:
   `.../internal/domain` therefore also denies any future domain subpackage. The global deny rule
   exempts only `internal/domain` itself and `internal/application`; even the composition root cannot
   bypass the application use cases.
-- The `gameapi`, domain, application, storage, logging, render, UI, audio, verification, and host
-  rules are **strict allowlists**.
+- The `gameapi`, domain, application, storage, logging, render, HUD, UI, audio, verification, and
+  host rules are **strict allowlists**.
   Every import not matched by an explicit architectural dependency or `$gostd` is denied, so a
   framework, storage adapter, or UI dependency cannot silently enter the wrong layer.
   `pkg/gameapi` is a top-level
@@ -1092,7 +1118,7 @@ two targets do not differ by an ULP; they differ by an arbitrary amount.
 
 Mortality estimates, worker counts, food, and water remain continuous quantities. Actual population
 is `type Population uint32`, bounded by `MaxPopulation = 2^32 - 1`; `gameapi.Band.Population` and
-`BandSave.Population` are also `uint32`. Per-tile, save-metadata, and top-bar population totals use
+`BandSave.Population` are also `uint32`. Per-tile, save-metadata, and panel-header population totals use
 `uint64`, whose capacity exceeds `MaxBands * MaxPopulation`. A migration candidate's destination
 population is likewise a `uint64` count; scoring converts that already-bounded total to `float64`
 only at the formula call.
@@ -5645,8 +5671,21 @@ Once a terminal result is set, `AdvanceTurn()` rejects further turns, the result
 `pkg/app` opens `end_scene.go` by reading `Frame.CampaignResult`; the UI never infers a result from
 turn or population. The modal end scene names the outcome, exact turn/date, final sapiens and
 archaic populations and band counts, all established campaign destinations, and the corresponding
-one/two-to-four/five-destination breadth label. It blocks every planning command while leaving
-Ctrl/Cmd+S available for preserving the final state. A prominent **New Campaign** button and the
+one/two-to-four/five-destination breadth label. Its panel is confined to the top-down map area and
+centred on that area's own centre, rather than the screen, so it never runs under the right-hand
+chrome column. The map-corner Overview/Focus camera toggle is hidden for as long as the dialog is up,
+since the two would otherwise overlap. It blocks every planning command while leaving
+Ctrl/Cmd+S available for preserving the final state. The dialog is a genuine modal `widget.Window` in
+the chrome layer, not a plain button drawn over the terminal presentation: a modal window's
+full-screen input layer wins over every other elevated layer beneath it, so **New Campaign** always
+receives the click regardless of what else is on screen (an expanded Field Notes drawer, the chip
+overflow list, an open checklist row) instead of losing it to whichever widget happens to sit above
+it in the tree. Every checklist action control also goes visibly dead once the campaign is no
+longer `Ongoing` — see "THIS TURN checklist" below — so nothing on the panel looks live and silently
+does nothing. Reopening a session that quit with the dialog
+showing lands on the title scene first; the title takes precedence and suppresses the end scene
+underneath it, so the player sees one dialog rather than two stacked on top of each other, and the
+end scene reappears as soon as Continue leaves the title. A prominent **New Campaign** button and the
 terminal-only `N` shortcut invoke the application `NewCampaign` use case. That use case replaces the
 aggregate with a turn-0 world using the next deterministic seed derived from the completed world's
 seed, resets `WorldRevision` to `1`, advances the long-lived `TerrainRevision`, and leaves existing
@@ -6616,10 +6655,11 @@ and reload.
 ### Top-down terrain: one grid-aligned cached surface
 
 The gameplay map is a fixed top-down **96 × 64** tile grid. Its logical rectangle starts at
-`(20, 74)` in the 1280 × 720 presentation surface; each tile owns an 8 × 8 cell and draws a 7.6 ×
-7.6 colored rectangle at the cell's upper-left corner. The resulting 768 × 512 terrain layer leaves
-a persistent lower strip for research and selected-band reports. The sub-pixel gap keeps adjacent
-biomes legible without creating a second geometric interpretation of the world.
+`(20, 74)` in the 1280 × 720 presentation surface; each tile owns an 8 × 8 cell in the overview
+camera and draws a 7.6 × 7.6 colored rectangle at the cell's upper-left corner. The map area is
+864 × 626 logical pixels (x 20–884, y 74–700); the terrain layer occupies its top-left 768 × 512 in
+overview. A two-state camera (below) may show the grid at 3× within the same area. The sub-pixel
+gap keeps adjacent biomes legible without creating a second geometric interpretation of the world.
 
 `map.go` keeps one physical-resolution Ebitengine image for the terrain layer, sized
 `ceil(768 × PresentationScale) × ceil(512 × PresentationScale)`. Whenever the accepted frame's
@@ -6631,14 +6671,38 @@ physical presentation frame is separately cached until frame, UI-local presentat
 target geometry changes.
 
 Elevation remains load-bearing simulation and inspector data, but does not displace pixels. There
-are no side walls, lighting, depth targets, 3D camera, orbit/pan/zoom controls, colliders, or terrain-
-detail modes. This is deliberate: a highland tile must never create a dark shape that resembles an
-unexplored or impassable tile, and the visual route between two cells must match the migration graph
-rather than perspective geometry.
+are no side walls, lighting, depth targets, 3D camera, free pan, or terrain-detail modes; the only
+view change is the uniform two-state camera, which preserves both properties below. This is
+deliberate: a highland tile must never create a dark shape that resembles an unexplored or
+impassable tile, and the visual route between two cells must match the migration graph rather than
+perspective geometry.
 
 Terrain, exploration, escarpment and passage overlays, reachable highlights, migration arrows, and band markers
 all use the same cell formula. A tile's marker point is the center of its 8 × 8 cell. Rendering and
 picking therefore cannot disagree because of elevation or view angle.
+
+#### Two-state camera
+
+`render.Camera{Mode, CenterTile, Progress}` is UI-local presentation state owned by `pkg/app`, never
+serialized and never a simulation input.
+
+- **Overview**: the whole 96 × 64 grid at 8 px cells from origin `(20, 74)`, as above.
+- **Focus**: 3× scale (24 px cells) centered on the selected band's tile, clamped so the visible
+  window (about 36 × 26 tiles) stays inside the grid.
+- Focus is requested when the Move row is open and the selected sapiens band's spatial action is
+  still available. It follows selection changes and returns to Overview when the row closes or the
+  action is consumed. `Z` and a map-corner `Overview · Z` / `Focus · Z` button toggle a per-selection
+  override that inverts this automatic choice and resets whenever the selection changes. The button
+  itself is omitted while the campaign-terminal end scene is showing, so it never draws over that
+  dialog.
+- Transitions interpolate scale and center over 15 update ticks (250 ms at 60 TPS).
+- The camera's visible window is computed against the map area above the Field Notes drawer: the
+  map area's full `626` logical-pixel height, minus `20`, `102`, or `300` for the drawer's hidden,
+  compact, or expanded state respectively. `tilePoint` and `MapTileAt` are camera-aware; every
+  overlay and pick goes through them, so hover and click both resolve tiles through the live camera
+  rather than a fixed overview grid. The 1× terrain cache is drawn scaled with nearest-neighbour
+  filtering, which is exact for flat cells. Every map layer is clipped to the map area; hover and
+  clicks over the drawer or the right panel never reach the map.
 
 ### High-DPI viewport and coordinate spaces
 
@@ -6785,11 +6849,11 @@ Build step 8 implements and screenshot-reviews these values but does not select 
 is a presentation contract rather than a cross-platform simulation-hash input; the exact anchor and
 midpoint fixtures still prevent an accidental palette change. The grade reads the continuous index,
 not the discrete epoch, so it never steps at a boundary; the epoch name changes only the caption.
-`map.go`, `tile_info.go`, and the timeline read colors from the same function. Appendix C marks the
+`map.go`, `legend.go`, and the timeline read colors from the same function. Appendix C marks the
 anchor table Locked and points here without duplicating its values; the two epoch thresholds and
 the hysteresis margin are climate configuration and appear separately in C.11.
 
-Color is never the sole cue. The current recurring climate-epoch name appears as text in the top bar
+Color is never the sole cue. The current recurring climate-epoch name appears as text in the panel header
 without a date range; the separate campaign era carries its fixed date range. The timeline marker's
 shape, position, and textual date communicate progress without color. `AridityIndex` rides the frame alongside the existing climate
 components so render never reimplements the curve.
@@ -6830,43 +6894,45 @@ they are not player-facing discovery paths.
 
 The same 2D HUD layout applies on desktop and web around the top-down map:
 
-- **Persistent top bar:** total living `HomoSapiens` population across all player bands, campaign
-  turn/year, campaign era with its fixed date range, season, and current climate epoch name without
-  a date range, plus any current or player-relevant warned macro episode. Climate epochs can recur
-  and therefore must never be displayed as though each owns one chronological interval. The total excludes
-  archaic bands and does not change merely because a different band or tile is selected. A thin
-  campaign timeline runs immediately beneath this bar.
-- **Selected-band inspector header:** the selected band's population and current health.
-  Health is per band, not a global average. Both species are inspectable; archaic bands retain
-  the “Computer controlled” label and expose no player commands.
-- **Band-selection keys and attention order:** living sapiens bands are ordered by the existing
-  presentation-only warning tiers — suffering before danger before stable — then by lower current
-  health, larger last-turn food-deficit fraction, higher projected seasonal-plus-chronic mortality
-  rate, larger proportional last-turn population loss, and finally ascending `BandID`. Accepted
-  planning actions are deliberately absent from this key, so applying an action does not make rows
-  move underneath the player. At the start of a new campaign, after a load, and after every completed
-  turn, the highest-priority living sapiens band becomes selected automatically. `Tab` and
-  `Shift+Tab` select the next and previous band in this attention order, respectively, wrapping at
-  either end. Both clear any UI-local keyboard migration preview before changing selection, and the
-  persistent controls legend names both directions. The compact side panel labels the order as
-  priority order, reserves five band rows, and renders the five-row page containing the selected band;
-  selecting the first band on another page replaces the visible page immediately. Its header shows
-  the one-based visible range and total (for example, `Priority 6–10/17`), so later bands are
-  never silently hidden and the selected band is always visible. Archaic bands count in neither the
-  range nor the total. This page is derived from the selected ID and accepted frame and adds no
-  independent scroll position or saved UI state.
-  A fixed right-aligned `ACTION` column makes every visible band's planning state scannable without
-  selecting it: `READY` means the spatial action remains available, `MOVE SET` means a migration is
-  queued, `INTERBREED` names that accepted intent, and `DONE` means another spatial action has
-  already been consumed. The first two accepted states come only from their projected presence/value
-  pairs; `DONE` deliberately does not infer an action type from `SpatialActionUsed`. Text labels make
-  the distinction independent of their supporting colors.
-  The same rows reserve a fixed warning gutter: `!! SUFFERING` with a dark-red row tint means the
-  latest completed turn lost population or health, had a food shortfall, or current health is below
-  `0.50`; `! DANGER` with an amber tint means health is below `0.80` or the projected sum of current
-  seasonal and chronic mortality rates is at least `0.004`. Suffering takes precedence over danger.
-  These are presentation-only interpretations of projected values, not simulation inputs, stored
-  flags, forecasts of acute events, or guarantees that an unmarked band is safe.
+- **Task-oriented right panel:** a fixed-position column at `x = 908`, width `352`, `y = 68` to
+  `700`. Top to bottom it draws a header, the band chips, a one-line band identity with a details
+  toggle, the optional details disclosure, the first-turn guide card while not dismissed, the THIS
+  TURN checklist, the End turn button, and a footer hint line (`Space ends the turn · Tab next band
+  · ? shortcuts`). Free vertical space left after the guide is dismissed goes to the open checklist
+  row. The panel receives the current `render.Viewport`/`render.PresentationTransform` and rebuilds
+  its widget tree only when the derived `hud.State` value changes.
+- **Panel header:** the title, a `Menu · Esc` button, the clock line (`76,400 BP · Turn 12/400`),
+  the era/season/epoch line, a macro warning line when present, and total living `HomoSapiens`
+  population across all player bands plus band and established-region counts. Climate epochs can
+  recur and therefore must never be displayed as though each owns one chronological interval. The
+  total excludes archaic bands and does not change merely because a different band or tile is
+  selected. A thin, full-width campaign timeline rail runs above both the map and the panel.
+- **Band chips and attention order:** one chip per living sapiens band, labeled `B<id>`, in the
+  existing presentation-only attention order — suffering before danger before stable — then by
+  lower current health, larger last-turn food-deficit fraction, higher projected
+  seasonal-plus-chronic mortality rate, larger proportional last-turn population loss, and finally
+  ascending `BandID`. Accepted planning actions are deliberately absent from this key, so applying
+  an action does not make a chip move underneath the player. At the start of a new campaign, after a
+  load, and after every completed turn, the highest-priority living sapiens band becomes selected
+  automatically. `Tab` and `Shift+Tab` select the next and previous band in this attention order,
+  respectively, wrapping at either end; both clear any UI-local keyboard migration preview before
+  changing selection. A chip's outline is gold while its Move predicate (below) is not done and
+  green once it is done, so a chip and its checklist row can never disagree about Move status; the
+  selected chip additionally carries a filled highlight and a 2 px border regardless of that status.
+  `!!` (dark red text) and `!` (amber text) prefixes reproduce the existing warning tiers inside the
+  chip label so color is never the only cue: suffering (`!!`) means the latest completed turn lost
+  population or health, had a food shortfall, or current health is below `0.50`; danger (`!`) means
+  health is below `0.80` or the projected sum of current seasonal and chronic mortality rates is at
+  least `0.004`; suffering takes precedence over danger. These are presentation-only interpretations
+  of projected values, not simulation inputs, stored flags, forecasts of acute events, or guarantees
+  that an unmarked band is safe. The chip row sizes its column count to the widest chip label
+  currently in play, from four to eight columns. Row 1 pins the first `columns` bands in attention
+  order, so the most urgent bands never move or disappear; row 2 windows the remaining bands so the
+  band the player is acting on is always visible there once it falls outside row 1. Once both rows
+  still cannot fit every band, a trailing `+N` chip takes row 2's last cell and opens a modal,
+  attention-ordered list of every living sapiens band with its marker, population, health, and
+  Move-row summary, so later bands are never silently hidden and the selected band is always
+  reachable.
 - **Persistent terrain legend:** the strip immediately above the map shows a swatch and a short
   liveability explanation for each of the six biome classes, plus open water, unexplored terrain,
   and the ochre escarpment-edge mark.
@@ -6883,7 +6949,9 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   in its authoritative `MigrationCandidates` list receives a cyan outline and the first-ranked
   candidate receives a gold outline. A persistent legend explains both colors, and turn-0 Field
   Notes call out the outlines explicitly. The overlay disappears after the spatial action is spent;
-  it never marks merely adjacent but currently ineligible tiles.
+  it never marks merely adjacent but currently ineligible tiles. Any hovered explored
+  tile — reachable or not — additionally receives a filled tint, and the Move row's TARGET column
+  names that tile's liveability, so pointer feedback does not depend on the outline color alone.
 - **Queued-migration marker:** after a sapiens migration is accepted and before the next turn
   resolves it, draw a thin red arrow from the band's current tile center to the queued destination
   center. The arrow shape and persistent “red arrow: queued” legend make the meaning non-color-only.
@@ -6899,8 +6967,9 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   the band's origin also clears it, and ending the turn is blocked until the player confirms or
   clears an outstanding choice. The preview is UI-local and never enters `World`, `Frame`, or a save;
   the existing red arrow remains frame-driven after confirmation. Pointer clicks still queue an
-  eligible destination immediately, and non-adjacent named passages remain clickable. The persistent
-  controls legend names the arrow, `Enter`, and `Esc` bindings.
+  eligible destination immediately, and non-adjacent named passages remain clickable. The Move row's
+  hint line and the `?` shortcut sheet name the arrow, `Enter`, and `Esc` bindings; arrows and
+  `Enter` belong to whichever checklist row is open.
 - **Keyboard splitting:** plain `N` sends `SplitBand` toward the selected band's first-ranked
   eligible ordinary-land candidate. Named passages are never split destinations. The domain still
   owns population, stress, spatial-action, band-cap, adjacency, and habitability validation; a
@@ -6917,33 +6986,116 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   passage endpoint rather than implying arbitrary sea movement. Beringia's message instead explains
   its climate gate. These diagnostics explain the current accepted frame; the candidate list remains
   the sole authority for whether `QueueMigration` may be sent.
-- **Band details below the header:** current food reserves and the “Last turn” food report,
-  the last completed turn's starvation/seasonal/chronic/macro/acute mortality breakdown, workforce
-  assignments, and research.
-  For sapiens, keep the five-role editor and research controls alongside the stats they help explain.
-- **Persistent research-key legend:** list all nine numbered technologies by name. For the selected
-  sapiens band, color available targets normally, the current target gold, acquired technologies
-  green, and prerequisite-locked technologies grey. These states come from the frame's projected
-  `ResearchOptions`, not a prerequisite table duplicated in presentation code. The legend remains
-  visible even when Field Notes are hidden, and a compact text key explicitly maps gold/current,
-  green/learned, white/available, and grey/locked. Pressing `1`–`9` with no selected band asks the
-  player to select a sapiens band; only an actually selected archaic band receives the read-only
-  computer-research explanation.
-- **Tile inspector and migration comparison:** one persistent column describes the selected band's
-  current tile and a second describes the UI-local arrow-key destination cursor, or the accepted
-  queued destination when no cursor is active. Each known, habitable land column shows biome,
-  region, local temperature, combined and source-split food stocks, water stock/cap, current
-  `EcologicalK`, degradation, natural shelter, movement cost, and the selected band's projected
-  seasonal/chronic mortality rates for that tile. It also exposes the current regional abrupt-climate
-  anomaly, current visible macro-impact factors, and the already-specified regional prey summary in
-  the expanded inspector. Distinguish undegraded `BaselineK` from current `EcologicalK`; neither is
-  an extra population resource. The compact comparison labels the cursor destination reachable only
-  when it appears in the authoritative `MigrationCandidates`; invalid water and uninhabitable land
-  explain their state. An unexplored destination says only that its details are hidden and must not
-  reveal land, water, biome, resource, hazard, or passage information.
+- **Band line and details:** the selected band's identity line, `Band <id> · Pop <n> · Health
+  <pct>%`, where `<n>` is the band's current population followed by the last completed turn's
+  population change in parentheses whenever that turn changed the population (e.g. `Band 3 · Pop 68
+  (+1) · Health 100%`), and a `details ▼` / `details ▲` toggle (`▲`/`▼` are plain-text glyphs, chosen
+  because the bundled Go Regular font lacks the outline triangles used elsewhere in the wider
+  ecosystem).
+  Archaic selection appends `· Computer controlled · read only` and disables every action button.
+  The details disclosure, collapsed by default and expanding in place, shows: the last completed
+  turn's food line (required, eaten, short FU and its unmet percentage, labeled by turn); the last
+  completed turn's starvation/seasonal/chronic/macro/acute mortality breakdown; current stored food;
+  the six heritable variants as a 2×3 grid of focus buttons, each showing its current value and the
+  local pressure driving it (temperature, elevation, biome, moisture, latitude, diet), clickable to
+  open that trait's Field Note — `G` cycles the same focus by keyboard. Whichever variant's Field
+  Note is currently displayed, whether reached by click or by `G`, has its cell outlined and
+  relabeled in gold; the highlight clears once the drawer moves on to any other note (a technology,
+  an event, a band). And, for a co-located sapiens selection, its eligible archaic interbreeding
+  partners, with consequence text once one is accepted.
+- **First-turn guide card:** while not dismissed, a card sits between the details disclosure and the
+  THIS TURN checklist. Its title reads `FIRST TURN · STEP N OF 4 · <STEP>` for the four numbered
+  steps — Move, Research, Workforce, End turn — beside a four-segment progress bar filled up to the
+  current step, followed by a fifth, closing card titled `FIRST TURN · THAT'S A FULL TURN` whose
+  body explains Tab, chip colors, and the ×. A step advances when its own row's Done predicate flips
+  true (Move, Research) or a turn completes (End turn), or on `Next ►` at any time; Workforce
+  advances only on `Next ►`, which is present on every open step but absent from the closing card.
+  Body copy names real controls — the Move step's text says to click the gold-outlined tile or
+  `Best tile` below — and, only during the Move step, the map draws a dashed gold rectangle around
+  the selected band's reachable cluster. The `×` in the card's corner is the only way to dismiss it;
+  dismissal persists as `GuideDismissed` in `UISettings`, and Settings' `Show first-turn guide`
+  clears that flag and resets the machine to the Move step. The card never blocks input or changes
+  Field Notes focus priority, and ending turns does not dismiss it.
+- **THIS TURN checklist:** three accordion rows — Move, Research, Workforce — of which exactly one
+  is open (below). Each row header shows its number, title, and a one-line summary; the header
+  turns gold while open, and its badge is green once the row's Done predicate is true (Workforce
+  never shows the gold not-done badge, because it is optional and never blocks End turn):
+
+  | Row | Done when | Summary |
+  |---|---|---|
+  | Move | `SpatialActionUsed` ∨ `HasQueuedMigration` ∨ `HasInterbreedTarget` | queued tile's biome and compass direction; "Split queued"; "Interbreeding with B*n*"; otherwise "Choose a destination" |
+  | Research | `HasResearchTarget` ∨ every `gameapi.Tech` acquired | `Firecraft 66/80 · +5.8/turn`; "All technologies learned" once every technology is acquired with no active target; otherwise "No target · choose one" |
+  | Workforce | optional; never blocks | collapsed role summary `F 35 · H 30 · T 15 · M 5 · S 15` (Foraging, Hunting and Fishing, Toolcraft, Megafauna Tracking, Shelter); "Unapplied changes" while the draft is dirty |
+
+  The Move predicate is the same one chip coloring reads, so a chip and its row can never disagree.
+- **Disclosure:** exactly one row is open at a time. On selection change, a load, a new campaign, or
+  a completed turn, the open row resets to the first of Move/Research not yet done, falling back to
+  Move; Workforce is never chosen by this default because it never blocks. Clicking a row header,
+  `Shift+Up`/`Shift+Down`, or `PgUp`/`PgDn` opens a row explicitly. Details, the band-chip overflow
+  list, and the camera override are independent transient toggles that reset with selection; Field
+  Notes drawer visibility and height persist as a local preference instead.
+- **Move row, open:** a HERE/TARGET comparison grid — Biome, Food, Capacity (with degradation),
+  Water, Shelter, Mortality (seasonal · chronic), Route (cost multiplier, turns), Archaic presence.
+  The TARGET header names its source in precedence order — `cursor`, then `queued`, then `hover` —
+  or reads "hover or click an outlined tile" when none applies. Relative `▲`/`▼` marks compare
+  TARGET to HERE (green/red) wherever both sides are available and no absolute tier already colors
+  the cell; absolute coloring applies to both columns:
+
+  | Row | Amber | Red |
+  |---|---|---|
+  | Food | stock < 1.5 × band's last-turn `RequiredFU` | stock < last-turn `RequiredFU` |
+  | Water | stock < 0.5 × cap | stock < 0.25 × cap |
+  | Capacity | degradation ≥ 0.25 | degradation ≥ 0.5 |
+  | Mortality | seasonal + chronic ≥ 0.004 (existing danger tier) | ≥ 0.008 |
+  | Shelter | natural shelter < 0.3 | — |
+  | Archaic | any archaic band present | — |
+
+  These tiers are presentation-only Policy values, never simulation inputs. Below the grid,
+  `Move here · Enter` is enabled (cyan) only while the Move predicate is not yet done and the cursor
+  or hovered tile names a reachable candidate; `Best tile · B` moves to the first-ranked ordinary-land
+  candidate; `Split · N`; and `Interbreed · I`, with a partner picker when more than one archaic band
+  qualifies. While the choice is live, the row also names the focused partner (the picker's
+  selection when shown, defaulting to the first candidate) beneath the interbreed controls, with its
+  population and a 2×3 grid of the six heritable traits — self value then the partner's, colored
+  green/dim where the partner is higher/lower — so choosing among several candidates is not blind.
+  All four disable once the Move predicate is done or, for Best tile/Interbreed, when no candidate
+  exists. The row has three visible states: idle (no cursor/hover/queue), cursor (a destination is
+  named but not yet confirmed), and set (a migration is already queued and the button disabled). The
+  default-open rule moves off this row once set, except when `Best tile`/`B` queued the migration:
+  that destination was the game's choice, not the player's, so the row stays open and pinned instead,
+  showing the queued summary and the chosen tile's TARGET figures.
+- **Research row, open:** the nine technologies as a numbered list — name, progress/cost, and a
+  state suffix: `learned` (green, acquired), `current` (gold, the active target), `available`
+  (selectable), `computer` (dim, read-only for an archaic selection), or `needs <prerequisites>`
+  (dim, locked). Available rows are buttons; the prerequisite graph is indented "needs" text rather
+  than a drawn DAG. `Up`/`Down` highlight a row, `Enter` chooses the highlighted one, and `1`–`9`
+  choose directly.
+- **Workforce row, open:** five rows — role label, `−` button, a draggable 0–100% track, `+`
+  button, and the resulting percentage — with a `›` marker on the selected role. Below them: a
+  `Total` line (red, with "reduce N% to apply" or "add N% to apply" when the sum is not 100%);
+  `Apply · A / Enter` (disabled unless the draft is dirty and valid); and `Discard · D`. Editing
+  rules, the dirty-draft guard, and the inline "Apply or discard workforce changes" End-turn block
+  are unchanged from before this redesign. `Up`/`Down` pick the selected role; `Left`/`Right` or
+  `−`/`+` step it by 1 percentage point, `Shift` by 5.
+- **End turn:** hard blocks disable the button and name the first blocker in its label — a dirty
+  workforce draft (`End turn · apply or discard workforce changes`) takes precedence over a pending
+  arrow-key cursor (`End turn · queue or clear the arrow-key choice`). With neither hard block, the
+  button reads `End turn · Space` when every sapiens band's Move predicate is done. Otherwise it is
+  a soft block: the button stays enabled but turns amber and reads `End turn · N bands still need a
+  move` (or "1 band" for the singular case); a second click in the same turn, or `Space` at any
+  time, ends the turn anyway and the label becomes `End turn now · Space` while armed. The button is
+  hidden once the campaign is no longer `Ongoing`.
+- **Campaign over:** once `Frame.CampaignResult` is no longer `Ongoing`, `hud.State.CampaignOver`
+  disables every band-action control instead of leaving it live to silently refuse the click: the
+  Move row's `Move here`/`Best tile`/`Split`/`Interbreed` buttons, every Research technology
+  button, and the Workforce row's sliders, `−`/`+`, `Apply`, and `Discard`. The rows still show
+  their data — the last accepted allocation, research progress, the HERE/TARGET comparison — only
+  the controls go dead, and `CampaignOver` participates in the panel's ordinary structural
+  comparison like every other `hud.State` field, so no refresh path needs to know about it
+  separately.
 
 Display current population, `Health`, `StoredFood`, and environmental values from the accepted
-frame. The top-bar population is a display-only sum over at most `MaxBands = 256` band values;
+frame. The panel-header population is a display-only sum over at most `MaxBands = 256` band values;
 it adds no saved aggregate or second source of truth. Health displays `100 * Health` as a labeled
 0–100% condition score, using the frame's normalized `float64` value. For example, `0.375` means
 37.5% health; it does not mean 37.5% of the band is alive or healthy. Display rounding/decimal
@@ -6956,18 +7108,14 @@ base; splitting clears that breakdown under the existing split rule.
 Population labels use no fractional digits because the frame contract permits only whole-person
 values; this is direct formatting, not presentation rounding that conceals fractional state.
 
-Each visible band row appends the exact signed last-turn population change and the health change in
-percentage points when `LastOutcomeReport.Turn != 0`; current health uses one fractional percentage
-digit so a small real decline is not rounded back to an unexplained `100%`. For the selected band,
-show a persistent explanation for each negative net change. Population causes rank negative
-logistic growth as **crowding / habitat limits** alongside the saved starvation, seasonal, chronic,
-macro-event, and acute mortality actuals. Health causes rank negative nutrition as **food shortage**
-alongside water shortage, endemic disease, adaptation trade-offs, macro-event, and outbreak health
-losses. Display the two largest positive cause magnitudes in stable order and append “+N more” when
-needed. The signed net changes come only from the report's endpoints; never sum rounded cause labels
-to reconstruct them. Omit a cause line when that metric did not decline. Population mortality and
-health are independent channels, so `Health = 1` must not hide or contradict seasonal, chronic,
-macro, or acute population loss.
+Current health is displayed to the nearest whole percent (`100 * Health`, no fractional digit)
+everywhere it appears — the band line, a chip's warning marker computation, and the attention-order
+popover — because the underlying `float64` value, not the rounded label, is what condition and
+warning tiers read. For the selected band, the details disclosure shows the last completed turn's
+full starvation/seasonal/chronic/macro/acute mortality breakdown as five raw magnitudes rather than
+ranking the two largest causes; it is presentation of `LastMortality` and never reconstructs a cause
+from survivors or reserves. Population mortality and health are independent channels, so `Health = 1`
+must not hide or contradict seasonal, chronic, macro, or acute population loss recorded there.
 
 For an available `LastFoodReport` in the frame — one whose `Turn` is nonzero — label the food
 subsection **“Last turn · Turn N”** using its recorded turn. Show **Required**, **Consumed**, and
@@ -6991,33 +7139,81 @@ Selection, hover, and drawing only inspect the frame. Dirty workforce drafts
 leave accepted stats unchanged; refreshing a frame follows the existing Apply/Discard and load
 guards. Completed-turn outcomes appear only after the full turn, not during phase 3. Panel
 placement/sizing and responsive details remain presentation work except for the Field Notes contract
-below; the top bar, band header, band details, and tile-inspector grouping above are required.
-While the pointer is over an explored map tile, that tile fills the target side of the inspector.
-An active arrow-key migration cursor takes precedence, followed by an already queued migration, then
-pointer hover; merely moving the pointer therefore cannot conceal or alter explicit planning intent.
-Moving over fog or outside the map clears hover details and never reveals an unexplored tile.
+below; the panel header, band line, details disclosure, and the Move row's HERE/TARGET grouping
+above are required. While the pointer is over an explored map tile, that tile fills the TARGET side
+of the Move row's comparison. An active arrow-key migration cursor takes precedence, followed by an
+already queued migration, then pointer hover; merely moving the pointer therefore cannot conceal or
+alter explicit planning intent. Moving over fog or outside the map clears hover details and never
+reveals an unexplored tile.
 The selected-band details include all six heritable values with plain-language current-effect and
 local-pressure summaries. A co-located sapiens selection lists eligible archaic interbreeding
 partners, highlights one deterministic target, uses plain `J` to cycle that highlight and `I` to
 accept it, and makes clear that ordinary co-location exchanges no genes. Preserve passage status,
 migration ranking, established-region display, event feed, and save feedback alongside these stats.
-The Field Notes panel gives the event feed a persistent two-row newest-first view, including turn,
-typed event kind, and bounded summary. When Field Notes is hidden, its tab area retains the newest
-event so contextual history does not disappear with the explanatory prose.
+The Field Notes drawer gives the event feed a persistent two-event newest-first view, including turn,
+typed event kind, and bounded summary. When Field Notes is hidden, its full-width bar retains the
+newest event as clickable text so contextual history does not disappear with the explanatory prose.
+
+### Keyboard reference
+
+Every mouse action documented above has a keyboard alias; the two paths converge on the same
+`pkg/app` methods (§3.4), so a hotkey and its equivalent button can never diverge.
+
+**Global**, checked every tick regardless of which checklist row is open:
+
+| Key | Action |
+|---|---|
+| `Space` | End turn (soft-block override) |
+| `Tab` / `Shift+Tab` | Select next / previous band in attention order |
+| `Esc` | Peel one layer: clear cursor → close popover (partner picker, `+N` list, shortcut sheet) → open menu |
+| `F` / `Shift+F` | Toggle the Field Notes drawer hidden/shown; `Shift+F` toggles compact/expanded |
+| `N` | Split toward the first-ranked ordinary-land candidate |
+| `I` | Interbreed with the focused archaic partner |
+| `J` | Cycle the interbreed partner focus |
+| `G` | Cycle the focused heritable-trait Field Note |
+| `B` | Move to the best tile — the same method the `Best tile · B` button calls |
+| `D` | Toggle the band details disclosure — except while the Workforce row is open, where `D` is row-owned instead (Row-owned, below) |
+| `1`–`9` | Choose the numbered research target |
+| `M` | Mute/unmute |
+| `Z` | Toggle the camera override (Two-state camera, above) |
+| `Shift+/` (`?`) | Toggle the shortcut sheet |
+| `PgUp`/`PgDn`, `Shift+Up`/`Shift+Down` | Change the open checklist row |
+| `Ctrl`/`Cmd+S` | Quick-save |
+| `F1`–`F3` | Manual save to slot 1–3; `Shift+F1`–`Shift+F3` loads it |
+
+The Field Notes drawer body is a wrapped `widget.Text` inside a `pkg/hud`-owned `ScrollContainer`
+(the same construction the panel's own scrollable middle uses), so it scrolls with the mouse wheel;
+the spec's `Shift+PgUp`/`Shift+PgDn` drawer-scroll binding is still not implemented. `PgUp`/`PgDn`
+and `Shift+Up`/`Shift+Down` change the open row regardless.
+
+**Row-owned** (arrows, `Enter`, and Workforce's `−`/`+`/`A`/`D`, active only while their row is open):
+
+| Open row | Arrows | Enter | `−`/`+` |
+|---|---|---|---|
+| Move | steer the destination cursor | queue the cursor tile | — |
+| Research | `Up`/`Down` highlight a technology | choose the highlighted technology | — |
+| Workforce | `Up`/`Down` select a role | apply (same as `A`); `D` discards instead of toggling band details | step the selected role ±1% (`Shift` ±5%) |
+
+**Removed from gameplay:** `W`, `[`, and `]` are unbound everywhere; the `−`/`=` volume keys remain
+bound only in Settings and no longer act while a campaign is in progress.
+
+**No tooltips.** The redesign drops hover tooltips entirely, on the map and in the panel alike: a
+control the player may not use is drawn disabled, and the Move row's hint line — with the tile
+comparison above it — carries the explanation a tooltip would have held.
 
 ### Campaign timeline rail
 
 The timeline is a thin, persistent, full-width rail inside the gameplay HUD's safe horizontal
-insets, directly below the top bar and above the map/inspector content. It contains a quiet base
+insets, above both the map and the right panel's header. It contains a quiet base
 track, a subtle elapsed fill, the seven major ticks and four low-contrast era segments defined by
 the campaign clock, and a distinct current-position marker with a compact `CurrentYearBP` label. Its
-purpose is chronological orientation, not precision turn selection; the top bar remains the exact
+purpose is chronological orientation, not precision turn selection; the panel header remains the exact
 turn/year/era readout. `CalendarProgress = 0` maps to the left 80,000 BP endpoint and
 `CalendarProgress = 1` maps to the right 20,000 BP endpoint. The marker is linearly interpolated
 between them, and the elapsed fill runs from the left endpoint to the marker.
 
 Era boundaries at 50,000, 35,000, and 25,000 BP may be thinner than the 10,000-year tick marks, but
-the active segment and its date range remain readable in the top bar without calling an era a
+the active segment and its date range remain readable in the panel header without calling an era a
 development phase. The rail is strictly display-only. It has no hit target, hover requirement,
 focus state, drag or scrub behavior, time-skip command, forecast, selection side effect, RNG use,
 revision increment, or saved field. It reads the frame's projected `CurrentYearBP`,
@@ -7035,12 +7231,12 @@ endpoint. When the current date exactly equals a
 major tick, one shared label serves both the current marker and that tick rather than drawing
 duplicate text. The elapsed fill is not the sole cue:
 marker shape/position and the textual current date communicate progress without color. The rail
-never shifts to the lower edge or overlaps the lower-edge Field Notes panel, whether that panel is
-open, hidden to its tab, or presented as a narrow-screen drawer.
+never shifts to the lower edge or overlaps the Field Notes drawer, whether that drawer is hidden,
+compact, or expanded.
 
 When a macro episode becomes active, the rail draws one small non-interactive glyph at its calendar
 date and retains it as elapsed historical context. It does not reveal future catalog entries; the
-one-turn player-relevant warning appears as a top-bar alert and on already explored affected tiles
+one-turn player-relevant warning appears as a panel-header alert and on already explored affected tiles
 instead. Glyphs and warnings come from the accepted frame, have text/icon redundancy, and add no
 timeline hit target, simulation action, or saved timeline state.
 When the campaign crosses `73,880 BP`, the rail similarly adds the Toba context glyph from the
@@ -7051,15 +7247,22 @@ future pulse is drawn and exact regional magnitude remains in the explored tile 
 
 ### Field Notes: context, abstraction, and hints
 
-A persistently available **Field Notes** text panel is visible by default and docked along the lower
-edge of the gameplay HUD. It has a capped responsive height and its own scroll position, and it must
-not cover the top bar, selected-band controls, tile inspector, or required alerts. The top bar has a
-book-button toggle; plain `F` performs the same action when no text-editing control has keyboard
-focus. Hiding the panel leaves a small labeled tab that can restore it. On narrow windows, the panel
-may become a lower drawer, but it retains the same visible/hidden states and never replaces a
-simulation inspector. Text wrapping uses the available inner panel width rather than an artificially
-narrow text column; the scroll bound is derived from those same wrapped lines. Catalog entries contain
-no presentation-only line breaks: the renderer alone chooses line boundaries for the current layout.
+A persistently available **Field Notes** drawer is visible by default and docked over the lower edge
+of the map area in one of three states: hidden (a full-width one-line bar, 20 logical px), compact
+(102 logical px), or expanded (300 logical px). The chosen height is a local UI preference. It never
+covers the timeline rail or the right panel. Compact and expanded keep the small edge tab with hide
+and more/less controls; plain `F` performs the same action when no text-editing control has keyboard
+focus, and `Shift+F` toggles compact and expanded. Hidden, the drawer instead spans the map's full
+width so it can show a whole event line rather than a small tab's fragment: the newest event sits
+as a clickable button on the left, truncated to whatever width remains once the right-aligned
+`▲ notes · F` control is measured and reserved, and either control reopens the drawer. During a
+breakthrough the bar's background changes and the event text gains a `BREAKTHROUGH · ` prefix.
+Text wrapping uses
+the available inner panel width rather than an artificially narrow text column; the scroll bound is
+derived from those same wrapped lines. Catalog entries contain no presentation-only line breaks: the
+renderer alone chooses line boundaries for the current layout. Below the note body the drawer lists
+the two newest events, turn-stamped and newest first; each is clickable and focuses that event kind's
+entry.
 
 The displayed entry follows a stable context priority:
 
@@ -7138,19 +7341,27 @@ save payload, or any action queue.
 
 Presentation preferences persist locally across application sessions in a versioned `UISettings`
 record; they are intentionally absent from `SaveState`, slot metadata, campaign hashes, and
-cloud/export semantics. The unreleased v1 record has four required JSON fields:
-`SchemaVersion = 1`, `FieldNotesVisible bool`, `MasterVolume float64`, and `Muted bool` (§11).
+cloud/export semantics. The current record is schema `2`, with six required JSON fields:
+`SchemaVersion`, `FieldNotesVisible bool`, `MasterVolume float64`, `Muted bool`,
+`GuideDismissed bool`, and `FieldNotesExpanded bool` (§11 for the audio fields' behavior).
 Desktop stores it in
 `os.UserConfigDir()/africa2ice/ui_settings.json`; web stores one record in a separate
 `africa2ice-ui` IndexedDB database so world-save locking and migrations remain independent.
 
-Defaults are **per record, not per field**: an absent, malformed, or unsupported-future-version
-record supplies all three preferences at once — Field Notes visible, `MasterVolume` `0.5`, `Muted`
-false — and a v1 record is accepted only when all four required fields are present, non-null, have the exact JSON
-types above, and `SchemaVersion == 1`. Unknown extra fields are ignored. A syntactically valid object
-with a missing, null, or wrongly typed required field is malformed and defaults as a whole; ordinary
-Go zero-value decoding is not presence validation. Because v1 is unreleased, an older development
-record containing only `FieldNotesVisible` is deliberately defaulted rather than migrated.
+Defaults are **per record, not per field**: an absent, malformed, or unsupported-schema record
+supplies all five preferences at once — Field Notes visible, `MasterVolume` `0.5`, `Muted` false,
+`GuideDismissed` false, `FieldNotesExpanded` false. A schema-2 record is accepted only when all
+six required fields are present, non-null, and have the exact JSON types above. A schema-1
+record — `SchemaVersion`, `FieldNotesVisible`, `MasterVolume`, and `Muted` only, predating the
+first-turn guide and the drawer's compact/expanded height — is still accepted when those four
+original fields are present, non-null, and correctly typed; `GuideDismissed` and
+`FieldNotesExpanded` are not required for it and decode as `false`. Either accepted schema is
+normalized to the current `SchemaVersion == 2` before it reaches the caller, so a decoded
+schema-1 record's next write persists it as schema 2 — decoding upgrades the in-memory record in
+place rather than rewriting the file as a separate migration step. Any other `SchemaVersion`
+value falls back to the whole-record default rather than partially decoding. Unknown extra fields
+are ignored. A syntactically valid object with a missing, null, or wrongly typed required field is
+malformed and defaults as a whole; ordinary Go zero-value decoding is not presence validation.
 `MasterVolume` must be finite and is clamped to `[0, 1]` on both read and write, so a hand-edited
 preference file cannot produce negative or above-unity gain. Field Notes defaults toward _visible_
 and audio defaults toward _quiet_: an unreadable preference must not surprise the player with
@@ -7171,9 +7382,11 @@ otherwise become idle. Thus rapid slider/toggle input is bounded and last-value-
 completion order is delayed. Failure shows one toast but does not revert the current preference;
 the next user change supplies the next retry.
 
-Until the initial read settles, presentation renders the three defaults but every preference-
-mutating control — the Field Notes visibility toggles, master-volume slider, and mute checkbox — is
-disabled with a compact “Loading preferences…” label. The completion atomically installs either the
+Until the initial read settles, presentation renders the defaults but all three preference-
+mutating Settings controls — the master-volume slider, the mute toggle, and show-first-turn-guide —
+are disabled under a compact “Loading preferences…” label. Field Notes visibility is no longer a
+Settings control (the drawer's own `F`/`Shift+F` and edge controls are its only toggle), so it is
+unaffected by this gate. The completion atomically installs either the
 validated stored record or the complete default record before enabling those controls. A write can
 therefore never race the initial read or overwrite stored preferences that the player had not yet
 seen.
@@ -8443,10 +8656,11 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    discards the retained sound for stored `Muted == true`, and applies stored settings or whole-record
    defaults before any emission. UI copy tests cover every player-visible `gameapi.ErrorCode`, including
    “computer-controlled band,” “band limit reached,” and “missing technology prerequisite,” without
-   importing the domain. Verify the §8 stats layout: the persistent top bar sums only sapiens
-   populations and shows turn/year/era/season independently of selection; each band header shows that
-   band's population/health, with food/mortality/workforce/research below; environmental stats
-   appear in the tile inspector. Verify the campaign timeline marker, era, and date at turns 0, 100,
+   importing the domain. Verify the §8 stats layout: the panel header sums only sapiens
+   populations and shows turn/year/era/season independently of selection; the band line shows the
+   selected band's population/health, with food/mortality/workforce/research in the details
+   disclosure and THIS TURN checklist rows; environmental stats appear in the Move row's
+   HERE/TARGET comparison. Verify the campaign timeline marker, era, and date at turns 0, 100,
    200, 300, and 400, including exact endpoint placement, all seven fixed 10,000-year labels, and
    the three era boundaries. Confirm early turns move the marker by 300 years while final-era turns
    move it by 50. An early-extinction
@@ -8456,7 +8670,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    no selection, draft, revision, frame, or save payload. Field Notes open/hidden/drawer states do
    not move or cover the rail, and save/load of the same turn reproduces identical timeline content.
    Current macro episodes add non-interactive dated glyphs; player-relevant one-turn warnings appear
-   in the top bar and on explored affected tiles without exposing a hidden epicenter or hidden archaic
+   in the panel header and on explored affected tiles without exposing a hidden epicenter or hidden archaic
    impact. Confirm warning/current/elapsed states, text alternatives, no future-catalog disclosure,
    and zero action/RNG/revision/save mutation from their presentation.
    During a warning, each explored migration-candidate row displays its warned impact and explains
@@ -8556,8 +8770,12 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    loaded historical feeds request none. Choice-sound fixtures cover accepted enabled discrete
    activations and reject disabled/repeated/slider/hover paths; save-sound fixtures key exactly once
    by successful manual/quick-save operation ID and keep autosave/load/delete/failure silent.
-   Implement and test Field Notes in this step: visible by default; lower-edge capped/scrollable
-   layout; top-bar book button, plain-`F` toggle, and hidden restore tab; stable context priority for
+   Implement and test Field Notes in this step: visible by default; hidden (20 px, full-width
+   bar)/compact (102 px)/expanded (300 px) drawer states docked over the lower edge of the map area;
+   compact/expanded's edge tab with its `hide notes · F` and `▲ more`/`▼ less` controls, and
+   hidden's own full-width `▲ notes · F` control; `F` toggles visibility and `Shift+F` toggles
+   compact/expanded; the hidden bar retains the newest event as its own clickable text; stable
+   context priority for
    explicit trait/technology/passage/interbreeding focus, newly established region, current/warned
    macro context, band, region/biome, event, and campaign topics; and all
    three required text blocks, including sourced abrupt-climate, active Campanian, and no-effect Toba
@@ -8571,10 +8789,12 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    into a 40 ka fishhook or stone-trap claim. At minimum width/height it must not cover required inspectors or
    alerts. Catalog completeness and reference tests cover every closed enum/context key. Toggling,
    focusing, and scrolling leave selection, draft, action batch, revision, RNG, and frame untouched.
-   Exercise absent/malformed/future-version `UISettings`, local cross-session persistence of all
-   three preferences, whole-record defaulting (Field Notes visible, `MasterVolume` `0.5`, `Muted`
-   false), required-field presence, null and wrong-type rejection, an obsolete one-field development
-   record, `MasterVolume` clamping on read and write, write failure, and campaign load/delete
+   Exercise absent/malformed/unsupported-schema `UISettings`, local cross-session persistence of all
+   five preferences, whole-record defaulting (Field Notes visible, `MasterVolume` `0.5`, `Muted`
+   false, `GuideDismissed` false, `FieldNotesExpanded` false), required-field presence for both
+   schema 1 (three fields) and schema 2 (five fields), null and wrong-type rejection, decoding a
+   schema-1 record and re-stamping it schema 2, `MasterVolume` clamping on read and write, write
+   failure, and campaign load/delete
    independence on desktop and the separate web database. With the initial read pending, all three
    preference controls render disabled and issue no write; installing either a valid result or the
    whole-record defaults enables them atomically. This step owns `ui_settings_file.go` and
@@ -9061,9 +9281,9 @@ labels must not clip, and the viewport may change without a simulation revision 
 rebuild. Record logical size, render size, and render scale beside any screenshot kept for
 comparison.
 
-*Layout under real constraints.* Confirm the timeline sits directly beneath the top bar, keeps its
-tick spacing and era boundaries, ignores clicks and drags, and is never moved or covered when Field
-Notes opens, hides to its tab, or becomes a narrow-window drawer. At minimum width the endpoint and
+*Layout under real constraints.* Confirm the timeline rail sits above both the map and the panel
+header, keeps its tick spacing and era boundaries, ignores clicks and drags, and is never moved or
+covered as the Field Notes drawer moves between hidden, compact, and expanded. At minimum width the endpoint and
 current-date labels must stay legible while intermediate labels may drop. Field Notes must not cover
 a required inspector or alert at any size.
 
@@ -9169,6 +9389,11 @@ these exclusions prevent those archives from being mistaken for signed installer
 - **Ebitengine v2.9.10.** The v2.9 API differs from older v2 releases in ways this design depends
   on: `text/v2` replaces the old `text` package (`Draw`, `Measure`, `NewGoTextFaceSource`), and
   `vector` provides `DrawFilledRect` / `StrokeRect` / `DrawFilledCircle`.
+- **ebitenui v0.7.3.** Widgets lay out and hit-test in the coordinates of the image they draw to;
+  the chrome therefore lays out in render pixels with sizes multiplied by the presentation scale.
+  The dependency skeleton measured it at +169 KB Brotli over Ebitengine alone; the shipped release
+  build with the chrome in it is 3,263,360 B Brotli against the 3,600,000 B ceiling, leaving
+  336,640 B of slack.
 - Ebitengine's [`LayoutF`](https://pkg.go.dev/github.com/hajimehoshi/ebiten/v2@v2.9.10#LayoutFer)
   receives outside dimensions in device-independent pixels and returns the game's logical screen
   dimensions; its actual image dimensions round up. The current monitor exposes
@@ -9718,7 +9943,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | Autosave interval fallback                 | `5` minutes of monotonic running time                          | Policy                                          | §9    |
 | Toast display duration                     | `2` seconds                                                    | Policy                                          | §9    |
 | Toast FIFO capacity                        | `4` entries                                                    | Policy                                          | §9    |
-| `UISettings.SchemaVersion`                 | `1`; all three preference fields required                      | Locked                                          | §8    |
+| `UISettings.SchemaVersion`                 | `2`; see "UI settings schema" below for the required fields per version | Locked                          | §8    |
 | `UISettings` `FieldNotesVisible` default   | `true`                                                         | Policy                                          | §8    |
 | `UISettings` `MasterVolume` default        | `0.5`                                                          | Policy                                          | §8    |
 | `UISettings` `MasterVolume` range          | `[0, 1]`                                                       | Locked                                          | §8    |
@@ -9741,8 +9966,13 @@ one that may rise on demand is a number that records whatever the build happens 
 | GitHub Pages source                        | GitHub Actions repository-project site; no custom domain       | Locked                                          | §10   |
 | GitHub Pages publish trigger               | With step-13 publication wiring present: successful push to `main` after `native` + `web-release` + `cross-target-determinism` + `release-readiness`; no PR | Locked | §10/§12 |
 | Native release trigger and payload         | Annotated SemVer tag; three unsigned portable OS/architecture archives + `SHA256SUMS` | Locked                 | §12   |
-| Top-down map rectangle                     | origin `(20, 74)`; `96 × 64` cells of `8 × 8` logical pixels  | Locked                                          | §8    |
-| Top-down drawn tile extent                 | `7.6 × 7.6` logical pixels within each cell                    | Locked                                          | §8    |
+| Top-down map area                          | origin `(20, 74)`; `864 × 626` logical pixels; `96 × 64` grid  | Locked                                          | §8    |
+| Overview cell and drawn tile extent        | `8 × 8` cell; `7.6 × 7.6` drawn                                 | Locked                                          | §8    |
+| Terminal end-scene dialog rect             | origin `(60, 70)`; `784 × 508` logical pixels; centred on the top-down map area | Policy                          | §8    |
+| Focus camera scale and transition          | `3×`; `15` update ticks; clamped to the map area above the drawer | Policy                                        | §8    |
+| Field Notes drawer heights                 | hidden `20`, compact `102`, expanded `300` logical px           | Policy                                          | §8    |
+| Liveability tiers (presentation only)      | food red `< RequiredFU`, amber `< 1.5 × RequiredFU`; water red `< 0.25 cap`, amber `< 0.5 cap`; degradation amber `≥ 0.25`, red `≥ 0.5`; mortality amber `≥ 0.004`, red `≥ 0.008`; shelter amber `< 0.3`; archaic present amber | Initial | §8 |
+| UI settings schema                         | `2`: `FieldNotesVisible`, `MasterVolume`, `Muted`, `GuideDismissed`, `FieldNotesExpanded`; schema 1 decodes with the new fields false | Policy | §8 |
 | `MaxRenderScale`                           | `2.0`                                                          | Policy                                          | §8    |
 | Minimum gameplay viewport                  | `1,280 × 720 DIPs`                                             | Policy                                          | §8    |
 | Sapiens band warning thresholds            | suffering: latest decline/food shortfall or `Health < 0.50`; danger: `Health < 0.80` or seasonal + chronic rate `>= 0.004` | Policy | §8 |

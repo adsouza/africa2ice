@@ -1,7 +1,6 @@
 package domain
 
 const (
-	MaxBands              = 256
 	MaxArchaicBands       = 96
 	AllocationBasisPoints = 10_000
 	FoodStorageTurns      = 3.0

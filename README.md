@@ -3,51 +3,79 @@
 A turn-based eco-strategy game about the dispersal of *Homo sapiens* from East Africa between 80,000 and 20,000 years before present.
 
 The repository contains the deterministic Go simulation, Ebitengine desktop/WebAssembly host,
-climate-coloured exploration map, bands, passages, campaign timeline, status panel, Field Notes,
-filesystem/IndexedDB saves, and automated native/browser release gates.
+climate-coloured exploration map, bands, passages, campaign timeline, a mouse-driven right-hand
+task panel, the Field Notes drawer, filesystem/IndexedDB saves, and automated native/browser
+release gates.
 
 Current controls:
 
 - the title scene offers Continue, New Campaign, and explicit checkpoint loading; the Game Menu's
   T shortcut returns there without changing the current campaign;
-
-- click a cyan- or gold-outlined reachable tile to migrate the selected sapiens band (gold is the current recommendation);
-- use the arrow keys to move a destination cursor anywhere in the band's one-turn neighborhood, including corners; Enter queues the selected migration and Esc clears it (named passages remain clickable);
-- a red arrow marks the keyboard-selected or queued migration until it is cleared or the next turn resolves it;
+- the right-hand task panel drives the turn: band chips along the top (a +N chip opens the full
+  list), the selected band's line with a details disclosure, and the THIS TURN checklist — Move,
+  Research, Workforce — above the End turn button, whose label names whatever is blocking it;
+- everything is clickable: chips, checklist row headers, the Move/Research/Workforce buttons, the
+  workforce sliders, the drawer, and every menu and settings row. Each control has a keyboard alias
+  that runs the same code, so the two paths can never disagree;
+- click a cyan- or gold-outlined reachable tile to migrate the selected sapiens band (gold is the
+  current recommendation); hovering any explored tile tints it and fills the Move row's TARGET
+  column with that tile's liveability, while an arrow-key or queued choice keeps precedence over
+  the pointer;
+- use the arrow keys to move a destination cursor anywhere in the band's one-turn neighborhood,
+  including corners; Enter queues the selected migration and Esc clears it (named passages remain
+  clickable);
+- a red arrow marks the keyboard-selected or queued migration until it is cleared or the next turn
+  resolves it;
 - the fixed top-down map keeps every tile aligned with its grid location; biome color, fog, reachable
   outlines, band markers, migration arrows, and ochre impassable-escarpment edges share that one
-  unambiguous surface;
-- band rows show last-turn population and health changes, while the selected band names the leading causes of any decline;
-- click any other map tile to see why it is not currently reachable, including water, uninhabitable
-  terrain, steep escarpments, and locked passages;
-- Tab/Shift+Tab selects the next/previous sapiens band, with wraparound;
-- Space ends the turn;
-- 1–9 selects the named research shown in the persistent prerequisite DAG, and N splits a band;
-- W cycles the workforce roles, [ and ] adjust the highlighted share by one percentage point,
-  A applies an exact 100% draft, and D discards it; changing bands or ending the turn is blocked while
-  a draft is dirty;
-- I interbreeds with a co-located archaic band; the option is offered only when one shares the
-  selected band's tile, where a violet ring marks it on the map and the panel names it, and pressing
-  I otherwise explains why it is unavailable; when several are eligible, J cycles the highlighted target;
-- completing a technology triggers a breakthrough toast and updates Field Notes with context, its game effect, and a hint;
-- F or the top-bar Notes button toggles the Field Notes panel; the mouse wheel and Page Up/Page Down
-  scroll longer entries, whose historical context includes compact references; the two newest
-  campaign events remain visible in the panel (and the newest remains visible when it is hidden);
-- hovering an explored map tile shows its liveability in the target inspector; an arrow-key target
-  or queued migration takes precedence so pointer motion cannot conceal an explicit plan;
-- G cycles contextual Field Notes for the selected band's six heritable traits;
-- M toggles mute, while - and + adjust the synthesized-effect master volume in 10% steps;
-- Ctrl+S (Cmd+S on macOS) quick-saves to the desktop filesystem or browser IndexedDB.
-- F1–F3 save Manual 1–3, and Shift+F1–F3 load them; loading is blocked until any dirty workforce
-  draft is applied or discarded.
+  unambiguous surface, and clicking any other tile explains why it is not currently reachable;
+- band chips and the selected band's line show last-turn population and health changes, and the
+  details disclosure names the leading causes of any decline;
+- the Field Notes drawer sits over the lower edge of the map in three states — hidden (a full-width
+  one-line bar that still carries the newest campaign event), compact, and expanded. F hides or
+  shows it, Shift+F switches compact and expanded, the drawer tab and its ▲ more control do the
+  same with the mouse, and the wheel scrolls longer entries, whose historical context includes
+  compact references;
+- Z, or the map-corner button, switches the camera between the whole-map overview and a close view
+  of the selected band;
+- a first-turn guide card appears in the panel on a new campaign; Next steps through it, × dismisses
+  it for good, and Settings' "Show first-turn guide" brings it back;
+- gameplay hotkeys: Space ends the turn; Tab/Shift+Tab select the next/previous band; Esc peels one
+  layer (cursor, then popover, then the Game Menu); N splits a band; I interbreeds with a co-located
+  archaic band and J cycles the highlighted partner — while the choice is live, the Move row shows
+  the focused partner's heritable traits next to the band's own; G cycles the heritable-trait Field
+  Notes, and whichever variant's cell is currently showing (clicked or reached with G) is outlined
+  and relabeled in gold until the drawer moves on to another note; B moves to the best tile and
+  leaves the Move row open so the chosen destination stays visible; D toggles the band details
+  disclosure; 1–9 choose a research target; M mutes; ? opens the
+  shortcut sheet (which also documents D's global meaning and its Workforce-row override); PgUp/PgDn
+  or Shift+Up/Shift+Down change the open checklist row; Ctrl+S (Cmd+S on macOS) quick-saves; F1–F3
+  save Manual 1–3 and Shift+F1–F3 load them;
+- arrows, Enter and −/+ belong to whichever checklist row is open: Move steers and queues the
+  destination cursor, Research highlights and chooses, and Workforce picks a role, steps it by one
+  percentage point (Shift by five), and applies. A and D are row-owned there too — A applies an
+  exact 100% draft and D discards it instead of toggling details — so both act only while Workforce
+  is open; changing bands, loading, or ending the turn is blocked while a draft is dirty. W, [ and ]
+  are no longer bound;
+- completing a technology triggers a breakthrough toast and updates Field Notes with context, its
+  game effect, and a hint;
 - Esc opens the Game Menu; S opens grouped Save/Delete slots, L opens grouped Load/Delete slots,
-  and O opens settings for sound and Field Notes. Settings supports a pointer-driven volume slider
-  and mute/Field Notes checkboxes as well as the listed keyboard controls.
+  and O opens settings for sound and the first-turn guide (Field Notes is always reachable via F/
+  Shift+F and the drawer's own controls, so the menu and Settings no longer duplicate it). Settings
+  offers a pointer-driven volume slider alongside its own M mute and − / + volume keys, which act
+  there only.
   The browser lists Manual 1–3, Quick Save, and rolling Auto 1–3 together.
 
 Victory, extinction, and turn-400 dispersal failure open a campaign epilogue with final
-population, destination, and geographic-breadth results. Planning then stops, but Ctrl/Cmd+S can
-still save the final state. Click **New Campaign** or press N to begin again with a fresh world.
+population, destination, and geographic-breadth results. The dialog is a true modal window that
+blocks every click to the chrome beneath it — the band chips, checklist rows, and drawer — not just
+the planning commands they would have sent, and every checklist action control (Move, Research,
+Workforce) is disabled rather than left live and silently doing nothing. Planning then stops, but
+Ctrl/Cmd+S can still save the final state. Click **New Campaign** or press N to begin again with a
+fresh world.
+
+A band that has researched every technology shows its Research row as done — a green header and
+"All technologies learned" — instead of reading as an outstanding to-do forever.
 
 Desktop and web builds automatically resume the newest committed Quick or Auto 1–3 save on their
 next launch; manual slots remain explicit checkpoints. If the window is closed while a quick-save is
@@ -72,8 +100,9 @@ go run .
 The desktop window initially fills up to 90% of the current monitor while preserving the game's
 16:9 layout. It remains resizable and can be maximized using the normal window controls.
 
-Desktop saves are written beneath `os.UserConfigDir()/africa2ice/saves`; Field Notes visibility,
-master volume, and mute state are stored separately in `os.UserConfigDir()/africa2ice/ui_settings.json`.
+Desktop saves are written beneath `os.UserConfigDir()/africa2ice/saves`; Field Notes visibility and
+drawer height, whether the first-turn guide has been dismissed, master volume, and mute state are
+stored separately in `os.UserConfigDir()/africa2ice/ui_settings.json`.
 Every desktop session writes a fresh JSONL diagnostic log in the system temporary directory and prints
 its path on startup.
 

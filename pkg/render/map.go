@@ -2,7 +2,7 @@ package render
 
 import (
 	"bytes"
-	"fmt"
+	"image"
 	"image/color"
 	"math"
 	"strings"
@@ -14,71 +14,24 @@ import (
 )
 
 const (
-	TerrainGridWidth     = 96
-	TerrainGridHeight    = 64
-	mapOriginX           = 20
-	mapOriginY           = 74
-	mapTileSize          = 8
-	mapPixelWidth        = TerrainGridWidth * mapTileSize
-	mapPixelHeight       = TerrainGridHeight * mapTileSize
-	mapLegendOriginY     = 48
-	mapLegendHeight      = 25
-	hudPanelX            = 908
-	hudPanelWidth        = 352
-	fieldNotesPanelX     = hudPanelX + 14
-	fieldNotesPanelWidth = 324
-	// Event lines are measured against the room actually left in their panel
-	// rather than cut at a rune count tuned for an average glyph width.
-	fieldNotesEventLineWidth = fieldNotesPanelWidth - 2*14
-	hudEventLineWidth        = hudPanelWidth - 2*18
-	eventLineFontSize        = 7.2
-	hudEventLineFontSize     = 7.6
-	fieldNotesToggleX        = hudPanelX + 273
-	fieldNotesToggleY        = 78
-	fieldNotesToggleWidth    = 65
-	fieldNotesToggleHeight   = 24
-	bandListOriginY          = 230
-	bandRowHeight            = 16
-	bandOutcomeOriginY       = 310
-	tileInspectorOriginY     = 340
-	tileInspectorHeight      = 116
-	tileInspectorTextSize    = 7.4
-	tileInspectorRowGap      = 8.8
-	// Text in either inspector column must stay narrower than the gap between
-	// the column origins (167) less the separator inset on both sides (8).
-	tileInspectorColumnWidth = 151
-	interbreedPanelLineY     = 446
-	fieldNotesPanelOriginY   = 462
-	fieldNotesPanelHeight    = 138
-	fieldNoteWrapLimit       = 78
-	noticeBoxX               = 28
-	noticeBoxY               = 82
-	noticeBoxWidth           = 650
-	noticeBoxMinHeight       = 30
-	noticeTextX              = 40
-	noticeTextY              = 89
-	noticeFontSize           = 14
-	noticeTextMaxWidth       = noticeBoxWidth - 2*(noticeTextX-noticeBoxX)
-	textLineSpacing          = 1.35
-	visibleFieldNoteLines    = 5
-	workforcePanelOriginY    = 604
-	workforceRoleOriginY     = 612
-	workforceRoleRowGap      = 9
-	controlsDividerY         = 641
-	controlsReferenceY       = 645
-	controlsReferenceGap     = 13
-	bottomInspectorOriginY   = 590
-	bottomInspectorHeight    = 118
-	menuOverlayX             = 340
-	menuOverlayY             = 150
-	menuOverlayWidth         = 600
-	menuOverlayHeight        = 420
-	menuRowHitOffsetY        = 73
-	menuRowTextOffsetY       = 78
-	menuRowHeight            = 36
-	settingsSliderLeft       = 650
-	settingsSliderRight      = 870
-	settingsSliderY          = 239
+	TerrainGridWidth   = 96
+	TerrainGridHeight  = 64
+	mapOriginX         = 20
+	mapOriginY         = 74
+	mapTileSize        = 8
+	mapPixelWidth      = TerrainGridWidth * mapTileSize
+	mapPixelHeight     = TerrainGridHeight * mapTileSize
+	mapLegendOriginY   = 48
+	mapLegendHeight    = 25
+	noticeBoxX         = 28
+	noticeBoxY         = 82
+	noticeBoxWidth     = 650
+	noticeBoxMinHeight = 30
+	noticeTextX        = 40
+	noticeTextY        = 89
+	noticeFontSize     = 14
+	noticeTextMaxWidth = noticeBoxWidth - 2*(noticeTextX-noticeBoxX)
+	textLineSpacing    = 1.35
 )
 
 var (
@@ -102,27 +55,32 @@ type MapScene struct {
 	frameHeight     int
 	frameScale      float64
 	frameCached     bool
-	workforce       WorkforceDraft
-	overlay         MenuOverlay
-	fieldNoteScroll int
-	interbreedFocus gameapi.BandID
 	hover           TileHover
+	camera          Camera
+	visibleHeight   float64
+	guideHighlight  bool
+	chromeRevision  uint64
+	// Paints counts every Draw call that actually painted the screen (i.e.
+	// returned true). It exists for pkg/app's tests: unlike pkg/render's own
+	// package, pkg/app has no TestMain running inside an ebiten game loop, so
+	// (*ebiten.Image).At — the screen-sentinel technique this package's own
+	// skip test uses — panics there. Exported so it stays outside
+	// golangci-lint's unused check; production code never reads it.
+	Paints int
 }
 
 type mapFrameKey struct {
-	frame             *gameapi.Frame
-	selectedBand      gameapi.BandID
-	preview           MigrationPreview
-	hover             TileHover
-	notice            string
-	fieldNote         FieldNote
-	fieldNotesVisible bool
-	fieldNoteScroll   int
-	interbreedFocus   gameapi.BandID
-	ending            EndScene
-	workforce         WorkforceDraft
-	resizeRequired    bool
-	overlay           MenuOverlay
+	frame          *gameapi.Frame
+	selectedBand   gameapi.BandID
+	preview        MigrationPreview
+	hover          TileHover
+	notice         string
+	ending         EndScene
+	resizeRequired bool
+	camera         Camera
+	visibleHeight  float64
+	guideHighlight bool
+	chromeRevision uint64
 }
 
 type MigrationPreview struct {
@@ -138,32 +96,6 @@ type TileHover struct {
 	Visible bool
 }
 
-// WorkforceDraft is UI-local editor state. Accepted allocations continue to
-// come from the frame until the complete draft is explicitly applied.
-type WorkforceDraft struct {
-	Visible      bool
-	BandID       gameapi.BandID
-	Population   uint32
-	AllocationBP [gameapi.AssignmentCount]uint16
-	SelectedRole gameapi.WorkforceRole
-	Dirty        bool
-	Valid        bool
-}
-
-type MenuOverlay struct {
-	Visible           bool
-	Heading           string
-	Help              string
-	Lines             [8]string
-	LineCount         int
-	Selected          int
-	Settings          bool
-	SettingsDisabled  bool
-	MasterVolume      float64
-	Muted             bool
-	FieldNotesVisible bool
-}
-
 // FieldNote is UI-local presentation content. It is never simulation or save
 // state; the renderer only lays out the already-selected entry.
 type FieldNote struct {
@@ -174,12 +106,12 @@ type FieldNote struct {
 	Hint         string
 	References   string
 	Celebration  bool
-}
-
-// FieldNoteMaxScroll returns the greatest meaningful scroll offset for the
-// renderer's current Field Notes layout.
-func FieldNoteMaxScroll(note FieldNote) int {
-	return max(0, len(fieldNoteLines(note))-visibleFieldNoteLines)
+	// Trait and HasTrait identify the heritable variant this note is about,
+	// so pkg/hud's details grid can highlight the matching cell. Only
+	// ui.TraitFieldNote sets HasTrait true; every other constructor leaves
+	// it false and clears the highlight by construction.
+	Trait    gameapi.HeritableTrait
+	HasTrait bool
 }
 
 func NewMapScene() *MapScene {
@@ -192,32 +124,71 @@ func NewMapScene() *MapScene {
 
 func (scene *MapScene) Update() {}
 
-func (scene *MapScene) SetWorkforceDraft(draft WorkforceDraft) { scene.workforce = draft }
-func (scene *MapScene) SetMenuOverlay(overlay MenuOverlay)     { scene.overlay = overlay }
-func (scene *MapScene) SetFieldNoteScroll(scroll int) {
-	scene.fieldNoteScroll = max(0, scroll)
-}
-func (scene *MapScene) SetInterbreedFocus(target gameapi.BandID) { scene.interbreedFocus = target }
-func (scene *MapScene) SetTileHover(hover TileHover)             { scene.hover = hover }
+func (scene *MapScene) SetTileHover(hover TileHover) { scene.hover = hover }
 
-func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, fieldNote FieldNote, fieldNotesVisible bool, ending EndScene, resizeRequired bool) {
+// SetCamera records the presentation camera and the map area's visible height
+// (in DIPs, above the drawer) for the next Draw.
+func (scene *MapScene) SetCamera(camera Camera, visibleHeight float64) {
+	scene.camera = camera
+	scene.visibleHeight = visibleHeight
+}
+
+// SetGuideHighlight toggles the dashed rectangle drawn around the selected
+// band's migration candidates.
+func (scene *MapScene) SetGuideHighlight(on bool) { scene.guideHighlight = on }
+
+// SetChromeRevision records an opaque revision of pkg/hud's chrome for the
+// next Draw. pkg/render must not import pkg/hud, so the caller (pkg/app)
+// hashes whatever it knows changes the chrome's appearance into this
+// uint64. Including it in mapFrameKey is what makes Draw repaint when only
+// the chrome changed (details collapsing, the drawer shrinking, a settings
+// window closing) even though nothing about the map itself did — those
+// changes vacate pixels that only this scene's frame image can restore,
+// since pkg/hud draws over it and production leaves an unpainted screen
+// exactly as ebiten last left it.
+func (scene *MapScene) SetChromeRevision(revision uint64) { scene.chromeRevision = revision }
+
+// effectiveVisibleHeight defaults an unset visible height to the full map
+// area, so a scene that never called SetCamera behaves as it always has.
+func (scene *MapScene) effectiveVisibleHeight() float64 {
+	if scene.visibleHeight <= 0 {
+		return mapAreaHeight
+	}
+	return scene.visibleHeight
+}
+
+// geometry resolves this scene's camera against one frame's tiles.
+func (scene *MapScene) geometry(frame *gameapi.Frame) MapGeometry {
+	return CameraGeometry(scene.camera, frame, scene.effectiveVisibleHeight())
+}
+
+// Draw renders the map, its overlays, and the terminal scene, returning
+// whether it painted the screen this call. Every piece of interactive
+// chrome now belongs to pkg/hud, which draws over this image — so the
+// screen must be repainted whenever the map's own key changed OR the
+// chrome changed (SetChromeRevision, folded into frameKey), and skipped
+// only when neither did. Production disables Ebitengine's automatic screen
+// clear (SetScreenClearedEveryFrame(false)) precisely so that skip is safe:
+// an idle frame does nothing, which is the performance floor (DESIGN.md
+// §8). Repainting on a chrome-only change matters because pkg/hud draws
+// over this image; when chrome shrinks or closes (details collapsing, the
+// drawer compacting, a settings window closing) the vacated region needs
+// this frame's pixels blitted back over it, and nothing else will.
+func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, ending EndScene, resizeRequired bool) bool {
 	if frame == nil {
 		screen.Fill(color.RGBA{R: 15, G: 22, B: 29, A: 255})
-		return
+		scene.Paints++
+		return true
 	}
 	key := mapFrameKey{
 		frame: frame, selectedBand: selectedBand, preview: preview, hover: scene.hover, notice: notice,
-		fieldNote: fieldNote, fieldNotesVisible: fieldNotesVisible, ending: ending,
-		fieldNoteScroll: scene.fieldNoteScroll,
-		interbreedFocus: scene.interbreedFocus,
-		workforce:       scene.workforce, resizeRequired: resizeRequired, overlay: scene.overlay,
+		ending: ending, resizeRequired: resizeRequired,
+		camera: scene.camera, visibleHeight: scene.visibleHeight, guideHighlight: scene.guideHighlight,
+		chromeRevision: scene.chromeRevision,
 	}
 	width, height := screen.Bounds().Dx(), screen.Bounds().Dy()
 	if scene.frameCached && scene.frameKey == key && scene.frameWidth == width && scene.frameHeight == height {
-		// Production disables Ebitengine's automatic screen clear. Leaving an
-		// unchanged screen untouched lets the engine skip GPU work entirely for
-		// this turn-based presentation.
-		return
+		return false
 	}
 	if scene.frameImage != nil {
 		scene.frameImage.Deallocate()
@@ -227,7 +198,7 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 	contentHeight := max(1, int(math.Ceil(PresentationHeight*transform.Scale)))
 	scene.frameImage = ebiten.NewImage(contentWidth, contentHeight)
 	canvas := newLogicalCanvas(scene.frameImage, transform.Scale)
-	scene.drawFrame(canvas, frame, selectedBand, preview, notice, fieldNote, fieldNotesVisible, ending)
+	scene.drawFrame(canvas, frame, selectedBand, preview, notice, ending)
 	if resizeRequired {
 		scene.drawResizeOverlay(canvas)
 	}
@@ -240,6 +211,8 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(transform.OffsetX, transform.OffsetY)
 	screen.DrawImage(scene.frameImage, op)
+	scene.Paints++
+	return true
 }
 
 func (scene *MapScene) drawResizeOverlay(screen logicalCanvas) {
@@ -248,14 +221,29 @@ func (scene *MapScene) drawResizeOverlay(screen logicalCanvas) {
 	scene.drawText(screen, "Resize to at least 1280 × 720 to continue", 440, 360, 15, color.White)
 }
 
-func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, fieldNote FieldNote, fieldNotesVisible bool, ending EndScene) {
+func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, ending EndScene) {
 	screen.image.Fill(color.RGBA{R: 15, G: 22, B: 29, A: 255})
 	grade := EpochGrade(frame.Climate.AridityIndex)
 	scene.drawTimeline(screen, frame, grade)
 	scene.drawMapLegend(screen, frame.Climate.AridityIndex)
-	scene.drawTerrain(screen, frame)
-	scene.drawReachableTiles(screen, frame, selectedBand)
-	scene.drawEscarpments(screen, frame)
+
+	geometry := scene.geometry(frame)
+	visibleHeight := float64(geometry.visibleHeight)
+	s := float64(screen.scale)
+	clip := image.Rect(round(mapOriginX*s), round(mapOriginY*s), round((mapOriginX+mapAreaWidth)*s), round((mapOriginY+visibleHeight)*s)).Intersect(screen.image.Bounds())
+	mapCanvas := logicalCanvas{image: screen.image.SubImage(clip).(*ebiten.Image), scale: screen.scale}
+
+	markerScale := geometry.Cell / mapTileSize
+	scene.drawTerrain(mapCanvas, geometry, frame)
+	scene.drawReachableTiles(mapCanvas, geometry, frame, selectedBand)
+	scene.drawGuideHighlight(mapCanvas, geometry, frame, selectedBand)
+	// The pointer's tile is tinted on the map itself now that the bottom
+	// inspector is gone; the panel reads the same hover for its detail lines.
+	if scene.hover.Visible && int(scene.hover.TileID) < len(frame.Tiles) && frame.Tiles[scene.hover.TileID].Explored {
+		x, y := geometry.TilePoint(frame.Tiles[scene.hover.TileID])
+		vector.FillRect(mapCanvas, x-geometry.Cell/2+0.7, y-geometry.Cell/2+0.7, geometry.Cell-1.8, geometry.Cell-1.8, color.RGBA{R: 87, G: 211, B: 211, A: 70}, false)
+	}
+	scene.drawEscarpments(mapCanvas, geometry, frame)
 	for _, passage := range frame.Passages {
 		lineColor, visible := passageColorForRender(frame, passage)
 		if !visible {
@@ -264,14 +252,14 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 		switch kind, anchor := passageOverlayForRender(frame, passage); kind {
 		case passageOverlayLine:
 			from, to := frame.Tiles[passage.From], frame.Tiles[passage.To]
-			fromX, fromY := scene.tilePoint(from)
-			toX, toY := scene.tilePoint(to)
-			vector.StrokeLine(screen, fromX, fromY, toX, toY, 2, lineColor, false)
+			fromX, fromY := geometry.TilePoint(from)
+			toX, toY := geometry.TilePoint(to)
+			vector.StrokeLine(mapCanvas, fromX, fromY, toX, toY, 2, lineColor, false)
 		case passageOverlayGlyph:
 			// A lone explored shore marks that a crossing starts here without
 			// drawing a line into fog toward the hidden far endpoint.
-			x, y := scene.tilePoint(frame.Tiles[anchor])
-			drawPassageGlyph(screen, x, y, lineColor)
+			x, y := geometry.TilePoint(frame.Tiles[anchor])
+			drawPassageGlyph(mapCanvas, x, y, markerScale, lineColor)
 		}
 	}
 	var interbreedTiles map[gameapi.TileID]bool
@@ -284,24 +272,21 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 			continue
 		}
 		tile := frame.Tiles[band.TileID]
-		centreX, centreY := scene.tilePoint(tile)
-		vector.FillCircle(screen, centreX, centreY, 3.6, marker, true)
+		centreX, centreY := geometry.TilePoint(tile)
+		vector.FillCircle(mapCanvas, centreX, centreY, 3.6*markerScale, marker, true)
 		// An archaic band the selected band can interbreed with gets its own
 		// ring, so the option is visible on the map rather than only discovered
 		// by pressing the key and hoping.
 		if band.Species == gameapi.ArchaicHominin && interbreedTiles[band.TileID] {
-			vector.StrokeCircle(screen, centreX, centreY, 6.4, 1.5, interbreedMarkerColor, true)
+			vector.StrokeCircle(mapCanvas, centreX, centreY, 6.4*markerScale, 1.5, interbreedMarkerColor, true)
 		}
 		if band.ID == selectedBand {
-			vector.StrokeCircle(screen, centreX, centreY, 5.2, 1.5, color.White, true)
+			vector.StrokeCircle(mapCanvas, centreX, centreY, 5.2*markerScale, 1.5, color.White, true)
 		}
 	}
-	scene.drawQueuedMigrations(screen, frame)
-	scene.drawMigrationPreview(screen, frame, preview)
-	scene.drawHUD(screen, frame, selectedBand, preview, fieldNote, fieldNotesVisible)
-	scene.drawResearchKeys(screen, frame, selectedBand)
+	scene.drawQueuedMigrations(mapCanvas, geometry, frame)
+	scene.drawMigrationPreview(mapCanvas, geometry, frame, preview)
 	scene.drawEndScene(screen, ending)
-	scene.drawMenuOverlay(screen)
 	if notice != "" {
 		// Long diagnostics wrap and grow the box downward over the map rather
 		// than running past its right edge.
@@ -311,7 +296,76 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 	}
 }
 
-func (scene *MapScene) drawEscarpments(screen logicalCanvas, frame *gameapi.Frame) {
+// round rounds to the nearest physical pixel for SubImage clip rectangles.
+func round(value float64) int {
+	return int(math.Round(value))
+}
+
+// drawGuideHighlight strokes a dashed rectangle around the selected band's
+// migration candidates. Task 16 is the first caller to turn it on.
+func (scene *MapScene) drawGuideHighlight(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame, selectedBand gameapi.BandID) {
+	if !scene.guideHighlight {
+		return
+	}
+	band := selectedBandInFrame(frame, selectedBand)
+	if band == nil || len(band.MigrationCandidates) == 0 {
+		return
+	}
+	var minX, minY, maxX, maxY float32
+	found := false
+	for _, candidate := range band.MigrationCandidates {
+		if int(candidate.TileID) >= len(frame.Tiles) {
+			continue
+		}
+		x, y := geometry.TilePoint(frame.Tiles[candidate.TileID])
+		if !found {
+			minX, maxX, minY, maxY = x, x, y, y
+			found = true
+			continue
+		}
+		minX, maxX = min(minX, x), max(maxX, x)
+		minY, maxY = min(minY, y), max(maxY, y)
+	}
+	if !found {
+		return
+	}
+	margin := geometry.Cell
+	left, top := minX-margin, minY-margin
+	right, bottom := maxX+margin, maxY+margin
+	drawDashedRect(screen, left, top, right-left, bottom-top, color.RGBA{R: 245, G: 202, B: 92, A: 220})
+}
+
+// drawDashedRect strokes a rectangle's outline as alternating 6px-on/4px-off
+// segments so a guide highlight reads as an overlay rather than solid chrome.
+func drawDashedRect(screen logicalCanvas, x, y, width, height float32, dashColor color.Color) {
+	corners := [][4]float32{
+		{x, y, x + width, y},
+		{x + width, y, x + width, y + height},
+		{x + width, y + height, x, y + height},
+		{x, y + height, x, y},
+	}
+	for _, edge := range corners {
+		drawDashedLine(screen, edge[0], edge[1], edge[2], edge[3], dashColor)
+	}
+}
+
+func drawDashedLine(screen logicalCanvas, fromX, fromY, toX, toY float32, dashColor color.Color) {
+	const dashOn, dashOff = float32(6), float32(4)
+	dx, dy := toX-fromX, toY-fromY
+	length := float32(math.Hypot(float64(dx), float64(dy)))
+	if length <= 0 {
+		return
+	}
+	unitX, unitY := dx/length, dy/length
+	for travelled := float32(0); travelled < length; travelled += dashOn + dashOff {
+		segmentEnd := min(travelled+dashOn, length)
+		startX, startY := fromX+unitX*travelled, fromY+unitY*travelled
+		endX, endY := fromX+unitX*segmentEnd, fromY+unitY*segmentEnd
+		vector.StrokeLine(screen, startX, startY, endX, endY, 1.2, dashColor, false)
+	}
+}
+
+func (scene *MapScene) drawEscarpments(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame) {
 	for _, edge := range frame.Escarpments {
 		if int(edge.First) >= len(frame.Tiles) || int(edge.Second) >= len(frame.Tiles) {
 			continue
@@ -320,7 +374,7 @@ func (scene *MapScene) drawEscarpments(screen logicalCanvas, frame *gameapi.Fram
 		if !first.Explored || !second.Explored {
 			continue
 		}
-		fromX, fromY, toX, toY, ok := escarpmentLine(first, second)
+		fromX, fromY, toX, toY, ok := escarpmentLine(geometry, first, second)
 		if !ok {
 			continue
 		}
@@ -329,19 +383,19 @@ func (scene *MapScene) drawEscarpments(screen logicalCanvas, frame *gameapi.Fram
 	}
 }
 
-func escarpmentLine(first, second gameapi.Tile) (float32, float32, float32, float32, bool) {
+func escarpmentLine(geometry MapGeometry, first, second gameapi.Tile) (float32, float32, float32, float32, bool) {
 	dx, dy := second.X-first.X, second.Y-first.Y
 	if absRenderInt(dx)+absRenderInt(dy) != 1 {
 		return 0, 0, 0, 0, false
 	}
-	left := mapOriginX + float32(min(first.X, second.X)*mapTileSize)
-	top := mapOriginY + float32(min(first.Y, second.Y)*mapTileSize)
+	left := geometry.OriginX + float32(min(first.X, second.X))*geometry.Cell
+	top := geometry.OriginY + float32(min(first.Y, second.Y))*geometry.Cell
 	if dx != 0 {
-		x := left + mapTileSize
-		return x, top, x, top + mapTileSize, true
+		x := left + geometry.Cell
+		return x, top, x, top + geometry.Cell, true
 	}
-	y := top + mapTileSize
-	return left, y, left + mapTileSize, y, true
+	y := top + geometry.Cell
+	return left, y, left + geometry.Cell, y, true
 }
 
 func absRenderInt(value int) int {
@@ -351,74 +405,12 @@ func absRenderInt(value int) int {
 	return value
 }
 
-func (scene *MapScene) drawMenuOverlay(screen logicalCanvas) {
-	if !scene.overlay.Visible {
-		return
-	}
-	const x, y, width, height = float32(menuOverlayX), float32(menuOverlayY), float32(menuOverlayWidth), float32(menuOverlayHeight)
-	vector.FillRect(screen, x, y, width, height, color.RGBA{R: 10, G: 17, B: 22, A: 248}, false)
-	vector.StrokeRect(screen, x, y, width, height, 2, color.RGBA{R: 203, G: 172, B: 104, A: 255}, false)
-	scene.drawText(screen, scene.overlay.Heading, x+28, y+24, 25, color.RGBA{R: 239, G: 220, B: 178, A: 255})
-	for index := 0; index < scene.overlay.LineCount && index < len(scene.overlay.Lines); index++ {
-		lineY := y + menuRowTextOffsetY + float32(index)*menuRowHeight
-		lineColor := color.RGBA{R: 220, G: 225, B: 218, A: 255}
-		prefix := "  "
-		if index == scene.overlay.Selected {
-			vector.FillRect(screen, x+20, lineY-5, width-40, 29, color.RGBA{R: 35, G: 51, B: 58, A: 255}, false)
-			lineColor = color.RGBA{R: 245, G: 202, B: 92, A: 255}
-			prefix = "› "
-		}
-		scene.drawText(screen, prefix+scene.overlay.Lines[index], x+36, lineY, 14, lineColor)
-	}
-	if scene.overlay.Settings {
-		disabledColor := color.RGBA{R: 92, G: 106, B: 109, A: 255}
-		activeColor := color.RGBA{R: 203, G: 172, B: 104, A: 255}
-		chromeColor := color.RGBA{R: 91, G: 110, B: 117, A: 255}
-		if scene.overlay.SettingsDisabled {
-			activeColor, chromeColor = disabledColor, disabledColor
-		}
-		const sliderLeft, sliderRight, sliderY = float32(settingsSliderLeft), float32(settingsSliderRight), float32(settingsSliderY)
-		vector.StrokeLine(screen, sliderLeft, sliderY, sliderRight, sliderY, 4, chromeColor, false)
-		knobX := sliderLeft + float32(clampRender(scene.overlay.MasterVolume))*(sliderRight-sliderLeft)
-		vector.FillCircle(screen, knobX, sliderY, 7, activeColor, true)
-		for row, checked := range []bool{scene.overlay.Muted, scene.overlay.FieldNotesVisible} {
-			boxY := float32(267 + row*36)
-			vector.StrokeRect(screen, 650, boxY, 16, 16, 1.5, chromeColor, false)
-			if checked {
-				vector.StrokeLine(screen, 653, boxY+8, 657, boxY+13, 2, activeColor, false)
-				vector.StrokeLine(screen, 657, boxY+13, 664, boxY+3, 2, activeColor, false)
-			}
-		}
-	}
-	scene.drawText(screen, scene.overlay.Help, x+28, y+height-42, 11, color.RGBA{R: 167, G: 184, B: 181, A: 255})
-}
-
-func MenuOverlayRowAt(x, y, lineCount int) int {
-	if x < menuOverlayX+20 || x >= menuOverlayX+menuOverlayWidth-20 || y < menuOverlayY+menuRowHitOffsetY {
-		return -1
-	}
-	row := (y - (menuOverlayY + menuRowHitOffsetY)) / menuRowHeight
-	if row < 0 || row >= lineCount || y >= menuOverlayY+menuRowHitOffsetY+(row+1)*menuRowHeight {
-		return -1
-	}
-	return row
-}
-
-// SettingsVolumeAt projects a settings-overlay pointer position onto the
-// volume slider using the same geometry as drawing.
-func SettingsVolumeAt(x, y int) (float64, bool) {
-	if MenuOverlayRowAt(x, y, 3) != 0 {
-		return 0, false
-	}
-	return clampRender(float64(x-settingsSliderLeft) / float64(settingsSliderRight-settingsSliderLeft)), true
-}
-
 // drawTerrain caches the immutable top-down tile layer until either its coarse
 // terrain revision or its continuously graded water color changes. Commands
 // that reveal terrain (including a successful split) advance that revision;
 // other planning-only frames can reuse it without stale exploration, biome,
 // macro-impact, or climate colors.
-func (scene *MapScene) drawTerrain(screen logicalCanvas, frame *gameapi.Frame) {
+func (scene *MapScene) drawTerrain(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame) {
 	if !scene.terrainCached || scene.terrainRevision != frame.TerrainRevision || scene.terrainAridity != frame.Climate.AridityIndex || scene.terrainScale != screen.scale {
 		if scene.terrainImage != nil {
 			scene.terrainImage.Deallocate()
@@ -434,8 +426,14 @@ func (scene *MapScene) drawTerrain(screen logicalCanvas, frame *gameapi.Frame) {
 		scene.terrainCached = true
 		scene.terrainRebuilds++
 	}
+	// The cache stays a fixed 8 px-per-tile image keyed only by revision,
+	// aridity, and physical scale; the camera's zoom is applied here, at draw
+	// time, by scaling and translating it into place.
+	cellScale := float64(geometry.Cell) / float64(mapTileSize)
 	options := &ebiten.DrawImageOptions{}
-	options.GeoM.Translate(float64(mapOriginX)*float64(screen.scale), float64(mapOriginY)*float64(screen.scale))
+	options.GeoM.Scale(cellScale, cellScale)
+	options.GeoM.Translate(float64(geometry.OriginX)*float64(screen.scale), float64(geometry.OriginY)*float64(screen.scale))
+	options.Filter = ebiten.FilterNearest
 	screen.image.DrawImage(scene.terrainImage, options)
 }
 
@@ -454,15 +452,7 @@ func (scene *MapScene) drawFlatTerrain(screen logicalCanvas, frame *gameapi.Fram
 	}
 }
 
-func (scene *MapScene) tilePoint(tile gameapi.Tile) (float32, float32) {
-	return mapOriginX + float32(tile.X*mapTileSize) + mapTileSize/2, mapOriginY + float32(tile.Y*mapTileSize) + mapTileSize/2
-}
-
-func (scene *MapScene) PickTile(x, y int) (gameapi.TileID, bool) {
-	return MapTileAt(x, y)
-}
-
-func (scene *MapScene) drawMigrationPreview(screen logicalCanvas, frame *gameapi.Frame, preview MigrationPreview) {
+func (scene *MapScene) drawMigrationPreview(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame, preview MigrationPreview) {
 	if !preview.Visible || int(preview.TileID) >= len(frame.Tiles) {
 		return
 	}
@@ -471,13 +461,13 @@ func (scene *MapScene) drawMigrationPreview(screen logicalCanvas, frame *gameapi
 		return
 	}
 	origin, destination := frame.Tiles[band.TileID], frame.Tiles[preview.TileID]
-	fromX, fromY := scene.tilePoint(origin)
-	toX, toY := scene.tilePoint(destination)
+	fromX, fromY := geometry.TilePoint(origin)
+	toX, toY := geometry.TilePoint(destination)
 	drawMigrationArrow(screen, fromX, fromY, toX, toY, color.RGBA{R: 255, G: 74, B: 74, A: 255})
-	vector.StrokeCircle(screen, toX, toY, 4.2, 1.2, color.RGBA{R: 255, G: 126, B: 106, A: 255}, true)
+	vector.StrokeCircle(screen, toX, toY, 4.2*geometry.Cell/mapTileSize, 1.2, color.RGBA{R: 255, G: 126, B: 106, A: 255}, true)
 }
 
-func (scene *MapScene) drawQueuedMigrations(screen logicalCanvas, frame *gameapi.Frame) {
+func (scene *MapScene) drawQueuedMigrations(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame) {
 	for _, band := range frame.Bands {
 		if band.Species != gameapi.HomoSapiens || !band.HasQueuedMigration || int(band.TileID) >= len(frame.Tiles) || int(band.QueuedMigration) >= len(frame.Tiles) {
 			continue
@@ -486,8 +476,8 @@ func (scene *MapScene) drawQueuedMigrations(screen logicalCanvas, frame *gameapi
 		if !origin.Explored || !destination.Explored {
 			continue
 		}
-		fromX, fromY := scene.tilePoint(origin)
-		toX, toY := scene.tilePoint(destination)
+		fromX, fromY := geometry.TilePoint(origin)
+		toX, toY := geometry.TilePoint(destination)
 		drawMigrationArrow(screen, fromX, fromY, toX, toY, queuedMigrationColor)
 	}
 }
@@ -507,7 +497,7 @@ func drawMigrationArrow(screen logicalCanvas, fromX, fromY, toX, toY float32, ar
 	vector.StrokeLine(screen, toX, toY, baseX-perpendicularX, baseY-perpendicularY, 1.8, arrowColor, true)
 }
 
-func (scene *MapScene) drawReachableTiles(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID) {
+func (scene *MapScene) drawReachableTiles(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame, selectedBand gameapi.BandID) {
 	band := selectedBandInFrame(frame, selectedBand)
 	if band == nil || band.SpatialActionUsed {
 		return
@@ -517,12 +507,12 @@ func (scene *MapScene) drawReachableTiles(screen logicalCanvas, frame *gameapi.F
 			continue
 		}
 		tile := frame.Tiles[candidate.TileID]
-		x, y := scene.tilePoint(tile)
+		x, y := geometry.TilePoint(tile)
 		highlight := reachableTileColor(index)
-		x -= mapTileSize / 2
-		y -= mapTileSize / 2
-		vector.FillRect(screen, x+0.7, y+0.7, mapTileSize-1.8, mapTileSize-1.8, color.RGBA{R: highlight.R, G: highlight.G, B: highlight.B, A: 48}, false)
-		vector.StrokeRect(screen, x+0.7, y+0.7, mapTileSize-1.8, mapTileSize-1.8, 1.35, highlight, false)
+		x -= geometry.Cell / 2
+		y -= geometry.Cell / 2
+		vector.FillRect(screen, x+0.7, y+0.7, geometry.Cell-1.8, geometry.Cell-1.8, color.RGBA{R: highlight.R, G: highlight.G, B: highlight.B, A: 48}, false)
+		vector.StrokeRect(screen, x+0.7, y+0.7, geometry.Cell-1.8, geometry.Cell-1.8, 1.35, highlight, false)
 	}
 }
 
@@ -564,15 +554,6 @@ func reachableTileColor(candidateIndex int) color.RGBA {
 		return color.RGBA{R: 245, G: 202, B: 92, A: 255}
 	}
 	return color.RGBA{R: 87, G: 211, B: 211, A: 255}
-}
-
-func MapTileAt(x, y int) (gameapi.TileID, bool) {
-	gridX := (x - mapOriginX) / mapTileSize
-	gridY := (y - mapOriginY) / mapTileSize
-	if x < mapOriginX || y < mapOriginY || gridX < 0 || gridX >= TerrainGridWidth || gridY < 0 || gridY >= TerrainGridHeight {
-		return 0, false
-	}
-	return gameapi.TileID(gridY*96 + gridX), true
 }
 
 func (scene *MapScene) drawTimeline(screen logicalCanvas, frame *gameapi.Frame, grade GradeColors) {
@@ -642,211 +623,6 @@ func (scene *MapScene) drawMapLegend(screen logicalCanvas, aridity float64) {
 	}
 }
 
-func (scene *MapScene) drawHUD(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, fieldNote FieldNote, fieldNotesVisible bool) {
-	const panelX = float32(hudPanelX)
-	vector.FillRect(screen, panelX, 68, hudPanelWidth, 626, color.RGBA{R: 25, G: 35, B: 42, A: 238}, false)
-	scene.drawText(screen, "Africa 2 Ice", panelX+18, 88, 24, color.RGBA{R: 239, G: 220, B: 178, A: 255})
-	vector.FillRect(screen, fieldNotesToggleX, fieldNotesToggleY, fieldNotesToggleWidth, fieldNotesToggleHeight, color.RGBA{R: 35, G: 51, B: 58, A: 255}, false)
-	scene.drawText(screen, "▣ NOTES", fieldNotesToggleX+9, fieldNotesToggleY+6, 8.5, color.RGBA{R: 203, G: 172, B: 104, A: 255})
-	scene.drawText(screen, fmt.Sprintf("%d BP  ·  Turn %d/400", frame.YearBP, frame.Turn), panelX+18, 124, 16, color.White)
-	scene.drawText(screen, campaignEraLabel(frame.Era), panelX+18, 147, 11.5, color.RGBA{R: 183, G: 199, B: 194, A: 255})
-	scene.drawText(screen, frame.Season.String()+"  ·  "+frame.Climate.Epoch.String(), panelX+18, 164, 11.5, color.RGBA{R: 183, G: 199, B: 194, A: 255})
-	if warning := macroWarningLabel(frame.MacroEpisodes); warning != "" {
-		scene.drawText(screen, warning, panelX+18, 180, 9.5, color.RGBA{R: 239, G: 151, B: 104, A: 255})
-	}
-	var totalPopulation uint64
-	for _, band := range frame.Bands {
-		if band.Species == gameapi.HomoSapiens {
-			totalPopulation += uint64(band.Population)
-		}
-	}
-	scene.drawText(screen, fmt.Sprintf("Homo sapiens: %d", totalPopulation), panelX+18, 195, 15, color.RGBA{R: 245, G: 202, B: 92, A: 255})
-	bandWindow := visibleSapiensBandWindow(frame.Bands, selectedBand)
-	scene.drawText(screen, fmt.Sprintf("%s  ·  Regions %d", bandWindow.label(), len(frame.SapiensEstablishedRegions)), panelX+18, 215, 11.5, color.White)
-	scene.drawText(screen, "! DANGER  !! SUFFERING", panelX+178, 217, 7.5, color.RGBA{R: 224, G: 173, B: 112, A: 255})
-	scene.drawText(screen, "ACTION", panelX+286, 217, 8, color.RGBA{R: 203, G: 172, B: 104, A: 255})
-	y := float32(bandListOriginY)
-	for row := 0; row < bandWindow.count; row++ {
-		band := &frame.Bands[bandWindow.indices[row]]
-		condition := conditionForSapiensBand(*band)
-		conditionMarker := ""
-		conditionColor := color.RGBA{R: 167, G: 184, B: 181, A: 255}
-		switch condition {
-		case bandConditionDanger:
-			conditionMarker = "!"
-			conditionColor = color.RGBA{R: 237, G: 176, B: 84, A: 255}
-			vector.FillRect(screen, panelX+14, y-2, 266, 14, color.RGBA{R: 91, G: 64, B: 30, A: 100}, false)
-		case bandConditionSuffering:
-			conditionMarker = "!!"
-			conditionColor = color.RGBA{R: 247, G: 137, B: 119, A: 255}
-			vector.FillRect(screen, panelX+14, y-2, 266, 14, color.RGBA{R: 92, G: 38, B: 35, A: 120}, false)
-		}
-		if band.ID == selectedBand {
-			scene.drawText(screen, "›", panelX+18, y, 10.5, color.White)
-		}
-		if conditionMarker != "" {
-			scene.drawText(screen, conditionMarker, panelX+28, y, 8.5, conditionColor)
-		}
-		summary := summarizeBandOutcome(band)
-		populationChange, healthChange := "", ""
-		if summary.available && summary.populationDelta != 0 {
-			populationChange = fmt.Sprintf(" (%+d)", summary.populationDelta)
-		}
-		if summary.available && math.Abs(summary.healthDeltaPoints) >= 0.005 {
-			healthChange = " (" + formatHealthDelta(summary.healthDeltaPoints) + ")"
-		}
-		scene.drawText(screen, fmt.Sprintf("B%d  Pop %d%s  Health %.1f%%%s", band.ID, band.Population, populationChange, band.Health*100, healthChange), panelX+42, y, 10.5, color.White)
-		actionLabel := sapiensBandActionLabel(*band)
-		actionColor := color.RGBA{R: 167, G: 184, B: 181, A: 255}
-		switch actionLabel {
-		case bandActionMoveSet:
-			actionColor = queuedMigrationColor
-		case bandActionInterbreed:
-			actionColor = interbreedMarkerColor
-		case bandActionDone:
-			actionColor = color.RGBA{R: 245, G: 202, B: 92, A: 255}
-		}
-		scene.drawText(screen, actionLabel, panelX+286, y+1, 8, actionColor)
-		y += bandRowHeight
-	}
-	if band := selectedBandInFrame(frame, selectedBand); band != nil {
-		summary := summarizeBandOutcome(band)
-		outcomeY := float32(bandOutcomeOriginY)
-		lossColor := color.RGBA{R: 239, G: 174, B: 151, A: 255}
-		if summary.populationDelta < 0 {
-			scene.drawText(screen, fmt.Sprintf("Pop %+d: %s", summary.populationDelta, formatOutcomeCauses(summary.populationLossCauses, 2)), panelX+18, outcomeY, 9.5, lossColor)
-			outcomeY += 14
-		}
-		if summary.healthDeltaPoints < -0.005 {
-			scene.drawText(screen, fmt.Sprintf("Health %s: %s", formatHealthDelta(summary.healthDeltaPoints), formatOutcomeCauses(summary.healthLossCauses, 2)), panelX+18, outcomeY, 9.5, lossColor)
-		}
-	}
-	scene.drawTileInspector(screen, frame, selectedBand, preview)
-	scene.drawWorkforceDraft(screen)
-	if fieldNotesVisible {
-		panelColor, headingColor := fieldNotePanelColors(fieldNote.Celebration)
-		heading := "FIELD NOTES"
-		if fieldNote.Topic != "" {
-			heading += " · " + fieldNote.Topic
-		}
-		if fieldNote.Celebration {
-			heading = "BREAKTHROUGH · " + fieldNote.Topic
-		}
-		vector.FillRect(screen, fieldNotesPanelX, fieldNotesPanelOriginY, fieldNotesPanelWidth, fieldNotesPanelHeight, panelColor, false)
-		if fieldNote.Celebration {
-			vector.StrokeRect(screen, fieldNotesPanelX, fieldNotesPanelOriginY, fieldNotesPanelWidth, fieldNotesPanelHeight, 2, headingColor, false)
-		}
-		headingSuffix := "  [F to hide]"
-		if fieldNote.Celebration {
-			headingSuffix = "  [F]"
-		}
-		scene.drawText(screen, heading+headingSuffix, fieldNotesPanelX+14, fieldNotesPanelOriginY+9, 10, headingColor)
-		lines := fieldNoteLines(fieldNote)
-		scroll := min(scene.fieldNoteScroll, FieldNoteMaxScroll(fieldNote))
-		visibleEnd := min(len(lines), scroll+visibleFieldNoteLines)
-		scene.drawText(screen, strings.Join(lines[scroll:visibleEnd], "\n"), fieldNotesPanelX+14, fieldNotesPanelOriginY+29, 8.2, color.RGBA{R: 202, G: 210, B: 206, A: 255})
-		if len(lines) > visibleFieldNoteLines {
-			scene.drawText(screen, fmt.Sprintf("SCROLL %d/%d · wheel or PgUp/PgDn", scroll+1, len(lines)-visibleFieldNoteLines+1), panelX+147, fieldNotesPanelOriginY+91, 7, color.RGBA{R: 145, G: 163, B: 161, A: 255})
-		}
-		scene.drawText(screen, "RECENT EVENTS", fieldNotesPanelX+14, fieldNotesPanelOriginY+104, 7.5, headingColor)
-		eventLines := recentEventLines(frame.Events, 2)
-		for index := range eventLines {
-			eventLines[index] = scene.truncateTextToWidth(eventLines[index], eventLineFontSize, fieldNotesEventLineWidth)
-		}
-		scene.drawText(screen, strings.Join(eventLines, "\n"), fieldNotesPanelX+14, fieldNotesPanelOriginY+116, eventLineFontSize, color.RGBA{R: 184, G: 198, B: 194, A: 255})
-	} else {
-		label := "F: show Field Notes"
-		labelColor := color.RGBA{R: 203, G: 172, B: 104, A: 255}
-		if fieldNote.Celebration {
-			label = "BREAKTHROUGH: " + fieldNote.Topic + " · F for details"
-			labelColor = color.RGBA{R: 255, G: 213, B: 92, A: 255}
-		}
-		scene.drawText(screen, "RECENT EVENT", panelX+18, 548, 8.5, color.RGBA{R: 167, G: 184, B: 181, A: 255})
-		scene.drawText(screen, scene.truncateTextToWidth(recentEventLines(frame.Events, 1)[0], hudEventLineFontSize, hudEventLineWidth), panelX+18, 562, hudEventLineFontSize, color.RGBA{R: 202, G: 210, B: 206, A: 255})
-		scene.drawText(screen, label, panelX+18, 584, 10.5, labelColor)
-	}
-	scene.drawControlsReference(screen, frame, selectedBand)
-}
-
-func (scene *MapScene) drawControlsReference(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID) {
-	const panelX = float32(hudPanelX)
-	vector.StrokeLine(screen, panelX+14, controlsDividerY, panelX+338, controlsDividerY, 1, color.RGBA{R: 58, G: 76, B: 82, A: 210}, false)
-	scene.drawText(screen, "Click: migrate · Arrows: choose · Enter: queue", panelX+18, controlsReferenceY, 10.5, color.White)
-	scene.drawText(screen, "Tab/Shift+Tab: priority bands · Space: turn", panelX+18, controlsReferenceY+controlsReferenceGap, 10.5, color.White)
-	spatialHint := "N: split"
-	if actor := selectedBandInFrame(frame, selectedBand); actor != nil {
-		spatialHint = spatialControlHint(interbreedStatus(*actor))
-	}
-	scene.drawText(screen, spatialHint+" · G: genetics · Esc: menu", panelX+18, controlsReferenceY+2*controlsReferenceGap, 9.6, color.White)
-	scene.drawText(screen, "Quick-save Ctrl/Cmd+S · Manual F1–F3 · Shift+F1–F3 load", panelX+18, controlsReferenceY+3*controlsReferenceGap, 8.2, color.White)
-}
-
-func fieldNoteLines(note FieldNote) []string {
-	body := "SUMMARY · " + note.Introduction
-	if note.Context != "" {
-		body += "\nHISTORICAL CONTEXT · " + note.Context
-	}
-	if note.GameEffect != "" {
-		body += "\nGAME ABSTRACTION · " + note.GameEffect
-	}
-	if note.Hint != "" {
-		body += "\nHINT · " + note.Hint
-	}
-	if note.References != "" {
-		body += "\nREFERENCES · " + note.References
-	}
-	return wrapTextLines(body, fieldNoteWrapLimit)
-}
-
-// recentEventLines formats the newest events first and leaves fitting them to
-// the caller, which knows its panel width and font size.
-func recentEventLines(events []gameapi.Event, limit int) []string {
-	if limit <= 0 {
-		return nil
-	}
-	lines := make([]string, 0, limit)
-	for index := len(events) - 1; index >= 0 && len(lines) < limit; index-- {
-		event := events[index]
-		summary := strings.TrimSpace(event.Summary)
-		if summary == "" {
-			summary = event.Kind.String()
-		}
-		lines = append(lines, fmt.Sprintf("T%d · %s · %s", event.Turn, event.Kind, summary))
-	}
-	if len(lines) == 0 {
-		lines = append(lines, "No campaign events yet.")
-	}
-	return lines
-}
-
-// truncateTextToWidth keeps the longest prefix of value that, with a trailing
-// ellipsis, measures within maxWidth logical pixels at the given font size.
-// Text that already fits is returned unchanged.
-func (scene *MapScene) truncateTextToWidth(value string, size, maxWidth float32) string {
-	face := &text.GoTextFace{Source: scene.faceSource, Size: float64(size)}
-	fits := func(candidate string) bool {
-		width, _ := text.Measure(candidate, face, 0)
-		return float32(width) <= maxWidth
-	}
-	if fits(value) {
-		return value
-	}
-	runes := []rune(value)
-	for keep := len(runes) - 1; keep > 0; keep-- {
-		if candidate := strings.TrimRight(string(runes[:keep]), " ") + "…"; fits(candidate) {
-			return candidate
-		}
-	}
-	return "…"
-}
-
-func wrapTextLines(value string, limit int) []string {
-	if limit <= 0 {
-		return strings.Split(value, "\n")
-	}
-	return wrapWords(value, func(line string) bool { return len([]rune(line)) <= limit })
-}
-
 // wrapTextToWidth wraps at measured pixel widths for the given font size, so
 // proportional glyphs cannot push a line past its box the way a rune count can.
 func (scene *MapScene) wrapTextToWidth(value string, size, maxWidth float32) []string {
@@ -885,334 +661,6 @@ func wrapWords(value string, fits func(string) bool) []string {
 // drawText line spacing for each further wrapped line.
 func noticeBoxHeight(lines int) float32 {
 	return noticeBoxMinHeight + float32(max(lines, 1)-1)*noticeFontSize*textLineSpacing
-}
-
-func FieldNotesToggleContains(x, y int) bool {
-	return x >= fieldNotesToggleX && x < fieldNotesToggleX+fieldNotesToggleWidth &&
-		y >= fieldNotesToggleY && y < fieldNotesToggleY+fieldNotesToggleHeight
-}
-
-func FieldNotesPanelContains(x, y int) bool {
-	return x >= fieldNotesPanelX && x < fieldNotesPanelX+fieldNotesPanelWidth &&
-		y >= fieldNotesPanelOriginY && y < fieldNotesPanelOriginY+fieldNotesPanelHeight
-}
-
-func (scene *MapScene) drawWorkforceDraft(screen logicalCanvas) {
-	if !scene.workforce.Visible {
-		return
-	}
-	const panelX = float32(fieldNotesPanelX)
-	labels := [...]string{"Foraging", "Hunt/fish", "Toolcraft", "Megafauna", "Shelter/care"}
-	parts := [gameapi.AssignmentCount]string{}
-	for role, points := range scene.workforce.AllocationBP {
-		marker := " "
-		if gameapi.WorkforceRole(role) == scene.workforce.SelectedRole {
-			marker = "›"
-		}
-		workers := float64(scene.workforce.Population) * float64(points) / 10_000
-		parts[role] = fmt.Sprintf("%s%s %.0f%% · %.1fp", marker, labels[role], float64(points)/100, workers)
-	}
-	status, statusColor := workforceDraftStatus(scene.workforce)
-	scene.drawText(screen, "WORKFORCE · W role/context · [/] edit · A apply · D discard", panelX+8, workforcePanelOriginY-2, 6.7, color.RGBA{R: 167, G: 184, B: 181, A: 255})
-	for role := range parts {
-		column := role % 2
-		row := role / 2
-		x := panelX + 8 + float32(column)*158
-		y := float32(workforceRoleOriginY + row*workforceRoleRowGap)
-		scene.drawText(screen, parts[role], x, y, 6.8, color.White)
-	}
-	if status != "" {
-		scene.drawText(screen, status, panelX+276, workforceRoleOriginY+2*workforceRoleRowGap, 6.8, statusColor)
-	}
-}
-
-func workforceDraftStatus(draft WorkforceDraft) (string, color.RGBA) {
-	if !draft.Valid {
-		var total uint32
-		for _, points := range draft.AllocationBP {
-			total += uint32(points)
-		}
-		return fmt.Sprintf("%+.0f%%", (float64(total)-10_000)/100), color.RGBA{R: 232, G: 112, B: 92, A: 255}
-	}
-	if draft.Dirty {
-		return "DIRTY", color.RGBA{R: 245, G: 202, B: 92, A: 255}
-	}
-	return "", color.RGBA{}
-}
-
-func fieldNotePanelColors(celebration bool) (color.RGBA, color.RGBA) {
-	if celebration {
-		return color.RGBA{R: 45, G: 39, B: 24, A: 255}, color.RGBA{R: 255, G: 213, B: 92, A: 255}
-	}
-	return color.RGBA{R: 19, G: 28, B: 34, A: 255}, color.RGBA{R: 203, G: 172, B: 104, A: 255}
-}
-
-func (scene *MapScene) drawTileInspector(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview) {
-	const panelX = float32(fieldNotesPanelX)
-	const currentX = panelX + 8
-	const targetX = panelX + 167
-
-	vector.FillRect(screen, panelX, tileInspectorOriginY, 324, tileInspectorHeight, color.RGBA{R: 18, G: 27, B: 33, A: 255}, false)
-	vector.StrokeRect(screen, panelX, tileInspectorOriginY, 324, tileInspectorHeight, 1, color.RGBA{R: 70, G: 91, B: 97, A: 255}, false)
-	scene.drawText(screen, "TILE LIVEABILITY · cyan reachable · gold best · red queued", currentX, tileInspectorOriginY+3, 7.8, color.RGBA{R: 203, G: 172, B: 104, A: 255})
-
-	band := selectedBandInFrame(frame, selectedBand)
-	current := currentTileSummary(frame, band)
-	target := targetTileSummary(frame, band, preview, scene.hover)
-	currentHeading, targetHeading := current.heading, target.heading
-	if current.showDetails {
-		currentHeading += " · " + current.status
-	}
-	if target.showDetails {
-		targetHeading += " · " + target.status
-	}
-	scene.drawText(screen, currentHeading, currentX, tileInspectorOriginY+15, 8.3, color.RGBA{R: 245, G: 202, B: 92, A: 255})
-	targetColor := color.RGBA{R: 167, G: 184, B: 181, A: 255}
-	if target.showDetails {
-		targetColor = color.RGBA{R: 87, G: 211, B: 211, A: 255}
-	}
-	if band != nil && band.HasQueuedMigration && (!preview.Visible || preview.BandID != band.ID) {
-		targetColor = color.RGBA{R: 255, G: 106, B: 91, A: 255}
-	}
-	scene.drawText(screen, targetHeading, targetX, tileInspectorOriginY+15, 8.3, targetColor)
-	vector.StrokeLine(screen, targetX-8, tileInspectorOriginY+15, targetX-8, tileInspectorOriginY+104, 0.7, color.RGBA{R: 67, G: 82, B: 87, A: 220}, false)
-
-	currentLines, targetLines := liveabilityLines(current), liveabilityLines(target)
-	for index := range currentLines {
-		y := tileInspectorOriginY + 27 + float32(index)*tileInspectorRowGap
-		if currentLines[index] != "" {
-			lineColor := color.RGBA{R: 220, G: 225, B: 218, A: 255}
-			if index == archaicPresenceLineIndex && current.archaicBandCount > 0 {
-				lineColor = archaicBandMarkerColor
-			}
-			scene.drawText(screen, currentLines[index], currentX, y, tileInspectorTextSize, lineColor)
-		}
-		if targetLines[index] != "" {
-			lineColor := color.RGBA{R: 220, G: 225, B: 218, A: 255}
-			if index == archaicPresenceLineIndex && target.archaicBandCount > 0 {
-				lineColor = archaicBandMarkerColor
-			}
-			scene.drawText(screen, targetLines[index], targetX, y, tileInspectorTextSize, lineColor)
-		}
-	}
-
-	footer := "Arrows update target · Enter queues · Esc clears"
-	footerColor := color.RGBA{R: 145, G: 163, B: 161, A: 255}
-	if band != nil {
-		if line := interbreedPanelLine(interbreedStatus(*band)); line != "" {
-			footer, footerColor = line, interbreedMarkerColor
-		}
-	}
-	scene.drawText(screen, footer, currentX, interbreedPanelLineY, 8, footerColor)
-}
-
-func formatHealthDelta(points float64) string {
-	if math.Abs(points) < 0.1 {
-		return fmt.Sprintf("%+.2fpp", points)
-	}
-	return fmt.Sprintf("%+.1fpp", points)
-}
-
-func (scene *MapScene) drawResearchKeys(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID) {
-	const left, top, width = float32(20), float32(bottomInspectorOriginY), float32(864)
-	vector.FillRect(screen, left, top, width, bottomInspectorHeight, color.RGBA{R: 20, G: 30, B: 36, A: 250}, false)
-	vector.StrokeRect(screen, left, top, width, bottomInspectorHeight, 1, color.RGBA{R: 70, G: 91, B: 97, A: 255}, false)
-	band := selectedBandInFrame(frame, selectedBand)
-	scene.drawResearchDAG(screen, band)
-	scene.drawSelectedBandInspector(screen, frame, band)
-}
-
-type researchNodePoint struct{ x, y float32 }
-
-var researchLegendEntries = [...]struct {
-	label  string
-	option gameapi.ResearchOption
-}{
-	{label: "current", option: gameapi.ResearchOption{Current: true}},
-	{label: "learned", option: gameapi.ResearchOption{Acquired: true}},
-	{label: "available", option: gameapi.ResearchOption{Available: true}},
-	{label: "locked", option: gameapi.ResearchOption{}},
-}
-
-var researchNodePoints = [gameapi.TechCount]researchNodePoint{
-	gameapi.Firecraft:          {x: 30, y: 610},
-	gameapi.HaftedTools:        {x: 196, y: 610},
-	gameapi.PlantKnowledge:     {x: 362, y: 610},
-	gameapi.TailoredClothing:   {x: 196, y: 635},
-	gameapi.CordageAndNets:     {x: 362, y: 635},
-	gameapi.Campcraft:          {x: 30, y: 660},
-	gameapi.MedicinalKnowledge: {x: 196, y: 660},
-	gameapi.Trapping:           {x: 362, y: 660},
-	gameapi.CoastalNavigation:  {x: 362, y: 685},
-}
-
-func (scene *MapScene) drawResearchDAG(screen logicalCanvas, band *gameapi.Band) {
-	scene.drawText(screen, "RESEARCH DAG · keys 1–9", 30, bottomInspectorOriginY+3, 8.5, color.RGBA{R: 203, G: 172, B: 104, A: 255})
-	legendX := float32(177)
-	for index, entry := range researchLegendEntries {
-		border, fill, textColor := researchNodeColors(entry.option)
-		vector.FillRect(screen, legendX, bottomInspectorOriginY+6, 7, 7, fill, false)
-		vector.StrokeRect(screen, legendX, bottomInspectorOriginY+6, 7, 7, 1, border, false)
-		scene.drawText(screen, entry.label, legendX+10, bottomInspectorOriginY+3, 6.8, textColor)
-		legendX += [...]float32{61, 65, 74, 0}[index]
-	}
-	if band != nil {
-		for technology := gameapi.Tech(0); technology < gameapi.TechCount; technology++ {
-			to := researchNodePoints[technology]
-			for prerequisite := gameapi.Tech(0); prerequisite < gameapi.TechCount; prerequisite++ {
-				if band.ResearchOptions[technology].PrerequisiteMask&(1<<prerequisite) == 0 {
-					continue
-				}
-				from := researchNodePoints[prerequisite]
-				vector.StrokeLine(screen, from.x+76, from.y+14, to.x+76, to.y, 0.8, color.RGBA{R: 83, G: 102, B: 106, A: 210}, false)
-			}
-		}
-	}
-	for technology := gameapi.Tech(0); technology < gameapi.TechCount; technology++ {
-		point := researchNodePoints[technology]
-		option := gameapi.ResearchOption{}
-		progress := 0.0
-		if band != nil {
-			option = band.ResearchOptions[technology]
-			progress = band.ResearchProgress[technology]
-		}
-		border, fill, textColor := researchNodeColors(option)
-		vector.FillRect(screen, point.x, point.y, 152, 20, fill, false)
-		vector.StrokeRect(screen, point.x, point.y, 152, 20, 0.9, border, false)
-		scene.drawText(screen, fmt.Sprintf("%d %s", technology+1, technology), point.x+4, point.y+1, 7.2, textColor)
-		status := fmt.Sprintf("%.0f/%.0f", progress, option.Cost)
-		switch {
-		case option.Acquired:
-			status += " · learned"
-		case option.Current:
-			status += " · current"
-		case !option.Available && band != nil:
-			status += " · needs " + missingPrerequisiteLabel(option, band.AcquiredTech)
-		case band != nil && band.Species == gameapi.ArchaicHominin:
-			status += " · computer"
-		}
-		scene.drawText(screen, status, point.x+4, point.y+10, 6.2, textColor)
-	}
-}
-
-func researchNodeColors(option gameapi.ResearchOption) (color.RGBA, color.RGBA, color.RGBA) {
-	border := color.RGBA{R: 82, G: 95, B: 98, A: 255}
-	fill := color.RGBA{R: 28, G: 39, B: 45, A: 255}
-	textColor := color.RGBA{R: 122, G: 135, B: 137, A: 255}
-	switch {
-	case option.Current:
-		border, textColor = color.RGBA{R: 245, G: 202, B: 92, A: 255}, color.RGBA{R: 255, G: 225, B: 148, A: 255}
-	case option.Acquired:
-		border, textColor = color.RGBA{R: 121, G: 195, B: 137, A: 255}, color.RGBA{R: 168, G: 223, B: 178, A: 255}
-	case option.Available:
-		border, textColor = color.RGBA{R: 190, G: 204, B: 199, A: 255}, color.RGBA{R: 231, G: 235, B: 229, A: 255}
-	}
-	return border, fill, textColor
-}
-
-func missingPrerequisiteLabel(option gameapi.ResearchOption, acquired uint16) string {
-	missing := option.PrerequisiteMask &^ acquired
-	label := ""
-	for technology := gameapi.Tech(0); technology < gameapi.TechCount; technology++ {
-		if missing&(1<<technology) == 0 {
-			continue
-		}
-		if label != "" {
-			label += "+"
-		}
-		label += researchShortName(technology)
-	}
-	return label
-}
-
-func researchShortName(technology gameapi.Tech) string {
-	return [...]string{"Fire", "Haft", "Plants", "Clothes", "Cordage", "Camp", "Medicine", "Traps", "Navigation"}[technology]
-}
-
-func (scene *MapScene) drawSelectedBandInspector(screen logicalCanvas, frame *gameapi.Frame, band *gameapi.Band) {
-	const x = float32(536)
-	vector.StrokeLine(screen, x, bottomInspectorOriginY, x, bottomInspectorOriginY+bottomInspectorHeight, 1, color.RGBA{R: 70, G: 91, B: 97, A: 255}, false)
-	if band == nil {
-		scene.drawText(screen, "SELECTED BAND · none", x+10, bottomInspectorOriginY+8, 9, color.White)
-		return
-	}
-	control := "PLAYER CONTROLLED"
-	headingColor := color.RGBA{R: 245, G: 202, B: 92, A: 255}
-	if band.Species == gameapi.ArchaicHominin {
-		control = "COMPUTER CONTROLLED · READ ONLY"
-		headingColor = archaicBandMarkerColor
-	}
-	scene.drawText(screen, fmt.Sprintf("BAND %d · %s", band.ID, control), x+10, bottomInspectorOriginY+5, 8.5, headingColor)
-	scene.drawText(screen, fmt.Sprintf("%s · pop %d · health %.1f%% · stored %.1f FU", band.Species, band.Population, band.Health*100, band.StoredFood), x+10, bottomInspectorOriginY+19, 7.7, color.White)
-	foodLine := "Last turn food: unavailable"
-	if band.LastFoodReport.Turn > 0 {
-		foodLine = fmt.Sprintf("Turn %d food: need %.1f · ate %.1f · short %.1f (%.1f%%)", band.LastFoodReport.Turn, band.LastFoodReport.RequiredFU, band.LastFoodReport.ConsumedFU(), band.LastFoodReport.DeficitFU, band.LastFoodReport.DeficitFraction()*100)
-	}
-	scene.drawText(screen, foodLine, x+10, bottomInspectorOriginY+33, 7.2, color.RGBA{R: 202, G: 210, B: 206, A: 255})
-	m := band.LastMortality
-	mortalityLine := "Last turn mortality: unavailable"
-	if band.LastOutcomeReport.Turn > 0 {
-		mortalityLine = fmt.Sprintf("Deaths: starv %.2f · season %.2f · chronic %.2f · macro %.2f · acute %.2f", m.Starvation, m.Seasonal, m.Chronic, m.Macro, m.Acute)
-	}
-	scene.drawText(screen, mortalityLine, x+10, bottomInspectorOriginY+47, 6.9, color.RGBA{R: 202, G: 210, B: 206, A: 255})
-	researchLine := "Research: no target"
-	if band.HasResearchTarget {
-		option := band.ResearchOptions[band.ResearchTarget]
-		researchLine = fmt.Sprintf("Research: %s %.1f/%.0f · own gain +%.1f/turn", band.ResearchTarget, band.ResearchProgress[band.ResearchTarget], option.Cost, band.OriginalResearchGainPreview)
-	}
-	scene.drawText(screen, researchLine, x+10, bottomInspectorOriginY+61, 7.2, color.RGBA{R: 203, G: 172, B: 104, A: 255})
-	traits := band.HeritableState
-	temperature, elevation, latitude, biome := 0.0, 0.0, 0.0, "unknown"
-	fauna := "none"
-	if frame != nil && int(band.TileID) < len(frame.Tiles) {
-		tile := frame.Tiles[band.TileID]
-		temperature, elevation, latitude, biome = tile.LocalTemperatureC, tile.ElevationKm, tile.Latitude, tile.Biome.String()
-		fauna = dominantFaunaOpportunity(tile.Fauna)
-	}
-	traitHeadingY := float32(bottomInspectorOriginY + 76)
-	if len(band.InterbreedCandidateIDs) > 0 || band.HasInterbreedTarget {
-		interbreed := "Interbreed targets: "
-		for index, candidate := range band.InterbreedCandidateIDs {
-			if index > 0 {
-				interbreed += ", "
-			}
-			marker := ""
-			if candidate == scene.interbreedFocus {
-				marker = "›"
-			}
-			interbreed += fmt.Sprintf("%sB%d", marker, candidate)
-		}
-		if band.HasInterbreedTarget {
-			interbreed = fmt.Sprintf("Interbreeding accepted with B%d", band.InterbreedTargetID)
-		} else {
-			interbreed += " · J choose · I accept"
-		}
-		scene.drawText(screen, interbreed, x+10, traitHeadingY, 6.8, interbreedMarkerColor)
-		traitHeadingY += 11
-	}
-	scene.drawText(screen, "HERITABLE VARIANTS · G cycles scientific context", x+10, traitHeadingY, 7, color.RGBA{R: 167, G: 184, B: 181, A: 255})
-	scene.drawText(screen, fmt.Sprintf("Cold %.3f @ %.0f°C · Alt %.3f @ %.1fkm · Immune %.3f @ %s", traits[gameapi.ColdAdaptation], temperature, traits[gameapi.HighAltitudeAdaptation], elevation, traits[gameapi.InnateImmuneReactivity], biome), x+10, traitHeadingY+13, 6.3, color.White)
-	scene.drawText(screen, fmt.Sprintf("Arid %.3f @ %.0f°C · Pigment %.3f @ %.0f° · Fat %.3f @ %s", traits[gameapi.AridClimateAdaptation], temperature, traits[gameapi.PigmentationLevel], latitude, traits[gameapi.FattyAcidMetabolism], fauna), x+10, traitHeadingY+26, 6.3, color.White)
-}
-
-func campaignEraLabel(era gameapi.CampaignEra) string {
-	ranges := [gameapi.CampaignEraCount]string{"80,000–50,000 BP", "50,000–35,000 BP", "35,000–25,000 BP", "25,000–20,000 BP"}
-	if era >= gameapi.CampaignEraCount {
-		return era.String()
-	}
-	return era.String() + " era  ·  " + ranges[era]
-}
-
-func macroWarningLabel(episodes []gameapi.MacroEpisodeSummary) string {
-	for _, episode := range episodes {
-		switch {
-		case episode.Current:
-			return "ACTIVE · " + episode.Episode.String()
-		case episode.Warned:
-			return "WARNING · " + episode.Episode.String()
-		}
-	}
-	return ""
 }
 
 func selectedBandInFrame(frame *gameapi.Frame, selectedBand gameapi.BandID) *gameapi.Band {
@@ -1288,8 +736,8 @@ func passageOverlayForRender(frame *gameapi.Frame, passage gameapi.Passage) (pas
 // drawPassageGlyph strokes a small diamond at a passage endpoint. It is
 // symmetric so it hints at nothing about the far shore's direction, and its
 // shape keeps it apart from the round band markers and selection rings.
-func drawPassageGlyph(screen logicalCanvas, x, y float32, tint color.RGBA) {
-	const half = float32(4.2)
+func drawPassageGlyph(screen logicalCanvas, x, y, markerScale float32, tint color.RGBA) {
+	half := 4.2 * markerScale
 	vector.StrokeLine(screen, x, y-half, x+half, y, 1.5, tint, true)
 	vector.StrokeLine(screen, x+half, y, x, y+half, 1.5, tint, true)
 	vector.StrokeLine(screen, x, y+half, x-half, y, 1.5, tint, true)

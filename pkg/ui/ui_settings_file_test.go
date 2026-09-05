@@ -13,7 +13,7 @@ func TestFileUISettingsStoreRoundTripsCompleteRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := UISettings{SchemaVersion: 1, FieldNotesVisible: false, MasterVolume: 0.8, Muted: true}
+	want := UISettings{SchemaVersion: UISettingsSchemaVersion, FieldNotesVisible: false, MasterVolume: 0.8, Muted: true}
 	if err := store.BeginWrite(3, want); err != nil {
 		t.Fatal(err)
 	}

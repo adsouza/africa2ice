@@ -2,16 +2,24 @@ package app
 
 import (
 	"fmt"
+	"hash/maphash"
 
 	"github.com/adsouza/africa2ice/internal/adapters/logging"
 	"github.com/adsouza/africa2ice/internal/application"
 	gameaudio "github.com/adsouza/africa2ice/pkg/audio"
 	"github.com/adsouza/africa2ice/pkg/gameapi"
+	"github.com/adsouza/africa2ice/pkg/hud"
 	"github.com/adsouza/africa2ice/pkg/render"
 	"github.com/adsouza/africa2ice/pkg/ui"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
+
+// chromeRevisionSeed is fixed for the process's lifetime: MapScene compares
+// chrome revisions across ticks (via mapFrameKey), so hashing the same
+// PresentationKey with a different seed between calls would look like a
+// change and force a spurious repaint.
+var chromeRevisionSeed = maphash.MakeSeed()
 
 const (
 	LogicalWidth                  = 1280
@@ -30,9 +38,7 @@ type Game struct {
 	selectedBand           gameapi.BandID
 	notice                 string
 	noticeFrames           int
-	fieldNotesVisible      bool
 	fieldNote              render.FieldNote
-	fieldNoteScroll        int
 	breakthroughFrames     int
 	migrationPreviewBand   gameapi.BandID
 	migrationPreviewTile   gameapi.TileID
@@ -73,6 +79,18 @@ type Game struct {
 	interbreedFocus        gameapi.BandID
 	regionalPulseFocused   bool
 	logSession             *logging.Session
+	panel                  *hud.Panel
+	openRow                ui.ChecklistRow
+	rowChosen              bool // player opened a row explicitly; auto-advance yields until reset
+	detailsOpen            bool
+	bandListOpen           bool
+	endTurnArmed           bool
+	guide                  ui.GuideState
+	notesMode              hud.NotesMode
+	shortcutsOpen          bool
+	researchCursor         gameapi.Tech
+	camera                 render.Camera
+	cameraOverride         bool
 }
 
 const (
@@ -109,7 +127,8 @@ func newGameWithPresentation(port gameapi.Game, sound gameaudio.SoundManager, se
 	}
 	settings := ui.DefaultUISettings()
 	game := &Game{
-		port: port, sound: sound, frame: frame, scene: render.NewMapScene(), fieldNotesVisible: true,
+		port: port, sound: sound, frame: frame, scene: render.NewMapScene(),
+		panel: hud.New(), notesMode: hud.NotesCompact, guide: ui.NewGuideState(false),
 		fieldNote: ui.CampaignOverviewFieldNote(),
 		notice:    "Outlined tiles are reachable — arrows choose, Enter confirms", noticeFrames: 300,
 		pendingQuickSaveIDs: make(map[gameapi.StorageOpID]struct{}),
@@ -129,6 +148,7 @@ func newGameWithPresentation(port gameapi.Game, sound gameaudio.SoundManager, se
 	}
 	game.ensureSelection()
 	game.syncAssignmentDraft(true)
+	game.resetDisclosure()
 	return game
 }
 
@@ -185,6 +205,23 @@ func (g *Game) Update() error {
 	if g.viewportInitialized && !g.viewport.SupportsGameplay() {
 		return nil
 	}
+	g.stepCamera()
+	intents := g.panel.Update(g.hudState())
+	// One record per left-button press (never per frame): the cursor
+	// position, whether the chrome claimed the pointer, and how many
+	// intents this tick produced. This is the seam that let the New
+	// Campaign click go undiagnosable from a session log — the gap between
+	// a pointer going down and an action dispatch.
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		cursorX, cursorY := ebiten.CursorPosition()
+		g.logSession.LogUIPointer(cursorX, cursorY, g.panel.Hovered(), len(intents))
+	}
+	// Overlay intents are handled in every scene: the panel column's own
+	// buttons are gameplay-only, but a modal window (title/menu/storage/
+	// settings, or the shortcut sheet) blocks pointer input to whatever sits
+	// beneath it, so the widgets that can actually emit an intent while a
+	// non-gameplay scene is showing are exactly the overlay's own.
+	g.handleIntents(intents)
 	modifier := ebiten.IsKeyPressed(ebiten.KeyControl) || ebiten.IsKeyPressed(ebiten.KeyMeta)
 	if modifier && inpututil.IsKeyJustPressed(ebiten.KeyS) && g.scenes.Current() == ui.SceneGameplay {
 		g.beginQuickSave()
@@ -214,12 +251,9 @@ func (g *Game) Update() error {
 	}
 	g.syncTileHover()
 	if g.frame.CampaignResult != gameapi.Ongoing {
-		mouseStartsCampaign := false
-		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-			x, y, inside := g.logicalCursorPosition()
-			mouseStartsCampaign = inside && render.NewCampaignButtonContains(x, y)
-		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyN) || mouseStartsCampaign {
+		// The terminal scene's New campaign button belongs to the panel now; the
+		// key remains the application's own path for it.
+		if inpututil.IsKeyJustPressed(ebiten.KeyN) {
 			g.startNewCampaign()
 		}
 		return nil
@@ -227,121 +261,10 @@ func (g *Game) Update() error {
 	if g.handleSceneInput() {
 		return nil
 	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyTab) {
-		if g.assignmentDraftDirty() {
-			g.showNotice("Apply or discard workforce changes")
-		} else {
-			g.clearMigrationPreview()
-			if ebiten.IsKeyPressed(ebiten.KeyShift) {
-				g.selectPreviousSapiens()
-			} else {
-				g.selectNextSapiens()
-			}
-		}
-	}
-	if inpututil.IsKeyJustPressed(fieldNotesHotkey) {
-		g.handleGameplayHotkey(fieldNotesHotkey)
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyM) {
-		g.toggleMute()
-	}
-	for _, volumeKey := range [...]struct {
-		key   ebiten.Key
-		delta float64
-	}{{key: ebiten.KeyMinus, delta: -0.1}, {key: ebiten.KeyEqual, delta: 0.1}} {
-		if inpututil.IsKeyJustPressed(volumeKey.key) {
-			g.adjustVolume(volumeKey.delta)
-			break
-		}
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyW) && g.hasAssignmentDraft {
-		g.assignmentRole = (g.assignmentRole + 1) % gameapi.AssignmentCount
-		if note, ok := ui.WorkforceRoleFieldNote(g.assignmentRole); ok {
-			g.setFieldNote(note)
-		}
-	}
-	if g.fieldNotesVisible {
-		switch {
-		case inpututil.IsKeyJustPressed(ebiten.KeyPageUp):
-			g.scrollFieldNotes(-3)
-		case inpututil.IsKeyJustPressed(ebiten.KeyPageDown):
-			g.scrollFieldNotes(3)
-		}
-		if _, wheelY := ebiten.Wheel(); wheelY != 0 {
-			x, y, inside := g.logicalCursorPosition()
-			if inside && render.FieldNotesPanelContains(x, y) {
-				g.scrollFieldNotes(-int(wheelY))
-			}
-		}
-	}
-	for _, edit := range [...]struct {
-		key   ebiten.Key
-		delta int
-	}{{key: ebiten.KeyBracketLeft, delta: -100}, {key: ebiten.KeyBracketRight, delta: 100}} {
-		if inpututil.IsKeyJustPressed(edit.key) {
-			g.editAssignmentDraft(edit.delta)
-			break
-		}
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyA) {
-		g.applyAssignmentDraft()
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyD) {
-		g.discardAssignmentDraft()
-	}
-	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		x, y, inside := g.logicalCursorPosition()
-		if inside && render.FieldNotesToggleContains(x, y) {
-			g.toggleFieldNotes()
-			return nil
-		}
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) && !g.panel.Hovered() {
 		g.handleMapClick()
 	}
-	for _, directionalKey := range [...]struct {
-		key    ebiten.Key
-		dx, dy int
-	}{
-		{key: ebiten.KeyArrowUp, dy: -1},
-		{key: ebiten.KeyArrowDown, dy: 1},
-		{key: ebiten.KeyArrowLeft, dx: -1},
-		{key: ebiten.KeyArrowRight, dx: 1},
-	} {
-		if inpututil.IsKeyJustPressed(directionalKey.key) {
-			g.handleDirectionalMigration(directionalKey.dx, directionalKey.dy)
-			break
-		}
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
-		g.confirmMigrationPreview()
-	}
-	if inpututil.IsKeyJustPressed(splitBandHotkey) {
-		g.handleGameplayHotkey(splitBandHotkey)
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyI) {
-		g.requestInterbreed()
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyJ) {
-		g.selectNextInterbreedTarget()
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeyG) {
-		g.focusNextTraitNote()
-	}
-	for index, key := range [...]ebiten.Key{ebiten.Key1, ebiten.Key2, ebiten.Key3, ebiten.Key4, ebiten.Key5, ebiten.Key6, ebiten.Key7, ebiten.Key8, ebiten.Key9} {
-		if inpututil.IsKeyJustPressed(key) {
-			g.chooseResearchTechnology(gameapi.Tech(index))
-		}
-	}
-	if inpututil.IsKeyJustPressed(ebiten.KeySpace) && g.frame.CampaignResult == gameapi.Ongoing {
-		if g.assignmentDraftDirty() {
-			g.showNotice("Apply or discard workforce changes before ending the turn")
-			return nil
-		}
-		if g.hasMigrationPreview {
-			g.showNotice("Press Enter to queue the migration, or Esc to clear it before ending the turn.")
-			return nil
-		}
-		g.dispatchBatch([]ui.Action{ui.EndTurnAction()})
-	}
+	g.handleGameplayKeys()
 	return nil
 }
 
@@ -357,7 +280,10 @@ func (g *Game) pollUISettings() {
 			}
 			g.settingsLoading = false
 			g.settings = ui.NormalizeUISettings(completion.Settings)
-			g.fieldNotesVisible = g.settings.FieldNotesVisible
+			// A completed read is the one install that may seed UI-local state
+			// from preferences; later writes must not rewind the live guide.
+			g.notesMode = notesModeFor(g.settings)
+			g.guide = ui.NewGuideState(g.settings.GuideDismissed)
 			g.sound.SetMaster(g.settings.MasterVolume, g.settings.Muted)
 			if completion.Err != nil {
 				g.showNotice("Preferences could not be loaded; using defaults")
@@ -384,7 +310,7 @@ func (g *Game) pollUISettings() {
 func (g *Game) updateUISettings(settings ui.UISettings) {
 	settings = ui.NormalizeUISettings(settings)
 	g.settings = settings
-	g.fieldNotesVisible = settings.FieldNotesVisible
+	g.notesMode = notesModeFor(settings)
 	g.sound.SetMaster(settings.MasterVolume, settings.Muted)
 	if g.settingsStore == nil {
 		return
@@ -407,20 +333,35 @@ func (g *Game) startUISettingsWrite(settings ui.UISettings) {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	fieldNote := g.fieldNote
-	fieldNote.Celebration = g.breakthroughFrames > 0
-	g.scene.SetWorkforceDraft(g.workforceDraftForRender())
-	g.scene.SetMenuOverlay(g.menuOverlayForRender())
-	g.scene.SetFieldNoteScroll(g.fieldNoteScroll)
-	g.scene.SetInterbreedFocus(g.interbreedFocus)
 	g.scene.SetTileHover(render.TileHover{TileID: g.hoveredTile, Visible: g.hasHoveredTile})
+	g.scene.SetCamera(g.camera, g.mapVisibleHeight())
+	g.scene.SetGuideHighlight(g.guide.Step == ui.GuideMove && g.frame != nil && g.frame.CampaignResult == gameapi.Ongoing)
+	// The chrome (pkg/hud) draws over this image and can change what it
+	// looks like — a rebuild, or an in-place refresh — without any of the
+	// fields above changing, so pkg/render's cache key must see it too:
+	// hash the panel's PresentationKey into the opaque revision MapScene
+	// accepts (pkg/render must not import pkg/hud) and fold it into the
+	// map's own key. That is what makes the map repaint when only the
+	// chrome changed (details collapsing, the drawer shrinking, a settings
+	// window closing) even though the map itself did not.
+	g.scene.SetChromeRevision(maphash.Comparable(chromeRevisionSeed, g.panel.PresentationKey()))
 	displayFrame := g.displayFrame()
-	g.scene.Draw(screen, displayFrame, g.selectedBand, render.MigrationPreview{
+	painted := g.scene.Draw(screen, displayFrame, g.selectedBand, render.MigrationPreview{
 		BandID: g.migrationPreviewBand, TileID: g.migrationPreviewTile, Visible: g.hasMigrationPreview,
-	}, g.notice, fieldNote, g.fieldNotesVisible, ui.CampaignEndScene(displayFrame), g.viewportInitialized && !g.viewport.SupportsGameplay())
+	}, g.notice, g.endScene(displayFrame), g.viewportInitialized && !g.viewport.SupportsGameplay())
+	// The chrome draws over the map image rather than into it, so the two
+	// layers must always paint together and never separately: painting the
+	// panel alone over a stale map (or vice versa) leaves stale pixels
+	// exactly like the bug this replaces. The too-small overlay can only
+	// stay the topmost thing if the panel yields.
+	if painted && (!g.viewportInitialized || g.viewport.SupportsGameplay()) {
+		g.panel.Draw(screen)
+	}
 	// Browser readiness means the first frame is visible and input is accepted.
 	// IndexedDB discovery may still be resolving on earlier draws; announcing
 	// readiness there lets the first gesture disappear into the startup guard.
+	// This must still run on a skipped frame: readiness is about whether a
+	// frame has ever been shown, not whether this particular tick painted.
 	if !g.firstDrawDone && !g.startupRestorePending {
 		g.firstDrawDone = true
 		if g.onFirstDraw != nil {
@@ -454,6 +395,8 @@ func (g *Game) acceptCompletedTurn(frame *gameapi.Frame) {
 	}
 	g.publishFrame()
 	g.syncAssignmentDraft(false)
+	g.resetDisclosure()
+	g.guide = g.guide.ObserveTurnCompleted()
 	if len(discoveries) == 0 {
 		switch {
 		case hasNewRegion:
@@ -652,6 +595,21 @@ func (g *Game) displayFrame() *gameapi.Frame {
 	return g.frame
 }
 
+// endScene is the terminal presentation, suppressed while the title is up:
+// the title is the application's front door, and a finished campaign behind
+// it reads as two competing dialogs rather than one. Game.Draw and
+// hudState() both call this instead of ui.CampaignEndScene directly, so the
+// render layer and the chrome always agree. The dialog reappears as soon as
+// the player leaves the title with Continue; the menu, storage and settings
+// scenes are modal windows the player opened deliberately over a visible
+// dialog, ordinary layering that is left alone.
+func (g *Game) endScene(frame *gameapi.Frame) render.EndScene {
+	if g.scenes.Current() == ui.SceneTitle {
+		return render.EndScene{}
+	}
+	return ui.CampaignEndScene(frame)
+}
+
 // SetFramePublishedCallback installs the opt-in semantic browser-test
 // observer. The callback receives only a bounded encoding of the frame already
 // held by the host; it cannot issue commands or request another snapshot.
@@ -694,6 +652,7 @@ func (g *Game) requestInterbreed() {
 		if g.apply(gameapi.Interbreed{BandID: band.ID, TargetBandID: target}) {
 			g.clearMigrationPreview()
 			g.showNotice(fmt.Sprintf("Interbreeding with archaic band %d — gene flow resolves when the turn ends.", target))
+			g.advanceOpenRow()
 		}
 	}
 }
@@ -727,6 +686,51 @@ func (g *Game) selected() *gameapi.Band {
 	}
 	return nil
 }
+
+// desiredCameraMode applies spec §6: focus while the Move row is open and the
+// selected sapiens band still has its spatial action, inverted by Z.
+func (g *Game) desiredCameraMode() render.CameraMode {
+	band := g.selected()
+	auto := g.openRow == ui.RowMove && band != nil && band.Species == gameapi.HomoSapiens && !ui.MoveDone(*band)
+	if g.cameraOverride {
+		auto = !auto
+	}
+	if auto {
+		return render.CameraFocus
+	}
+	return render.CameraOverview
+}
+
+// stepCamera runs once per Update: retarget, then advance the transition.
+func (g *Game) stepCamera() {
+	g.camera.Mode = g.desiredCameraMode()
+	if band := g.selected(); band != nil {
+		g.camera.CenterTile = band.TileID
+	}
+	g.camera = g.camera.Step()
+}
+
+// mapVisibleHeight is the map area's height above the Field Notes drawer, so
+// hover/click picking and the camera geometry agree with what the drawer
+// leaves on screen (spec §6).
+func (g *Game) mapVisibleHeight() float64 {
+	switch g.notesMode {
+	case hud.NotesCompact:
+		return 626 - hud.DrawerCompactHeight
+	case hud.NotesExpanded:
+		return 626 - hud.DrawerExpandedHeight
+	default:
+		return 626 - hud.DrawerHiddenHeight
+	}
+}
+
+func (g *Game) toggleCameraOverride() { g.cameraOverride = !g.cameraOverride }
+
+// toggleDetails flips the band details disclosure (spec §8). It is `D`'s
+// global meaning; while the Workforce row is open, D is row-owned instead
+// (handleRowKey's ui.RowWorkforce case discards the draft), matching the
+// row-owned model arrows, Enter, and -/+ already use there.
+func (g *Game) toggleDetails() { g.detailsOpen = !g.detailsOpen }
 
 func (g *Game) syncAssignmentDraft(force bool) {
 	band := g.selected()
@@ -810,17 +814,6 @@ func (g *Game) discardAssignmentDraft() {
 	g.showNotice("Workforce changes discarded")
 }
 
-func (g *Game) workforceDraftForRender() render.WorkforceDraft {
-	var population uint32
-	if band := g.selected(); band != nil {
-		population = band.Population
-	}
-	return render.WorkforceDraft{
-		Visible: g.hasAssignmentDraft, BandID: g.assignmentDraftBand, Population: population, AllocationBP: g.assignmentDraft,
-		SelectedRole: g.assignmentRole, Dirty: g.assignmentDraftDirty(), Valid: g.assignmentDraftValid(),
-	}
-}
-
 func (g *Game) ensureSelection() {
 	if selected := g.selected(); selected != nil && selected.Species == gameapi.HomoSapiens && selected.Population > 0 {
 		return
@@ -829,7 +822,7 @@ func (g *Game) ensureSelection() {
 	if g.frame == nil {
 		return
 	}
-	bandIDs := render.SapiensBandIDsByAttention(g.frame.Bands)
+	bandIDs := ui.SapiensBandIDsByAttention(g.frame.Bands)
 	if len(bandIDs) > 0 {
 		g.selectedBand = bandIDs[0]
 	}
@@ -851,7 +844,7 @@ func (g *Game) selectSapiens(offset int) {
 		g.showNotice("Apply or discard workforce changes")
 		return
 	}
-	bandIDs := render.SapiensBandIDsByAttention(g.frame.Bands)
+	bandIDs := ui.SapiensBandIDsByAttention(g.frame.Bands)
 	selectedIndex := -1
 	for index, bandID := range bandIDs {
 		if bandID == g.selectedBand {
@@ -867,12 +860,14 @@ func (g *Game) selectSapiens(offset int) {
 		g.selectedBand = bandIDs[0]
 		g.syncAssignmentDraft(true)
 		g.refreshBandFieldNote()
+		g.resetDisclosure()
 		return
 	}
 	selectedIndex = (selectedIndex + offset + len(bandIDs)) % len(bandIDs)
 	g.selectedBand = bandIDs[selectedIndex]
 	g.syncAssignmentDraft(true)
 	g.refreshBandFieldNote()
+	g.resetDisclosure()
 }
 
 func (g *Game) refreshBandFieldNote() {
@@ -886,7 +881,7 @@ func (g *Game) handleMapClick() {
 	if !inside {
 		return
 	}
-	tileID, ok := g.scene.PickTile(x, y)
+	tileID, ok := g.pickTile(x, y)
 	if !ok {
 		return
 	}
@@ -903,8 +898,13 @@ func (g *Game) handleMapClick() {
 
 func (g *Game) syncTileHover() {
 	g.hasHoveredTile = false
+	// The chrome sits over the map's right edge and bottom drawer; a pointer
+	// there must not also light a tile underneath it.
+	if g.panel.Hovered() {
+		return
+	}
 	x, y, inside := g.logicalCursorPosition()
-	tileID, ok := exploredHoverTile(g.frame, x, y, inside)
+	tileID, ok := g.exploredHoverTile(x, y, inside)
 	if !ok {
 		return
 	}
@@ -912,12 +912,32 @@ func (g *Game) syncTileHover() {
 	g.hasHoveredTile = true
 }
 
-func exploredHoverTile(frame *gameapi.Frame, x, y int, inside bool) (gameapi.TileID, bool) {
-	if frame == nil || !inside {
+// exploredHoverTile is the camera-aware, drawer-aware pick shared by hover
+// and clicks (spec §6): it reads whatever the map is currently showing, not
+// a fixed overview grid.
+func (g *Game) exploredHoverTile(x, y int, inside bool) (gameapi.TileID, bool) {
+	if g.frame == nil || !inside {
 		return 0, false
 	}
-	tileID, ok := render.MapTileAt(x, y)
-	if !ok || int(tileID) >= len(frame.Tiles) || !frame.Tiles[tileID].Explored {
+	tileID, ok := g.pickTile(x, y)
+	if !ok || !g.frame.Tiles[tileID].Explored {
+		return 0, false
+	}
+	return tileID, true
+}
+
+// pickTile resolves a logical pointer position against the live camera and
+// drawer-aware visible height (spec §6). It is the one geometry lookup
+// shared by hover (which then filters to explored tiles above) and clicks
+// (which must still reach fogged tiles so tryQueueMigration's diagnostic
+// fires) — a stale copy of the camera, refreshed only in Draw, would let a
+// click resolve a different tile than the hover highlight mid-transition.
+func (g *Game) pickTile(x, y int) (gameapi.TileID, bool) {
+	if g.frame == nil {
+		return 0, false
+	}
+	tileID, ok := render.MapTileAt(g.camera, g.frame, g.mapVisibleHeight(), x, y)
+	if !ok || int(tileID) >= len(g.frame.Tiles) {
 		return 0, false
 	}
 	return tileID, true
@@ -959,6 +979,7 @@ func (g *Game) selectBandAtTile(tileID gameapi.TileID) bool {
 	g.clearMigrationPreview()
 	g.syncAssignmentDraft(true)
 	g.refreshBandFieldNote()
+	g.resetDisclosure()
 	return true
 }
 
@@ -975,7 +996,9 @@ func (g *Game) chooseResearchTechnology(technology gameapi.Tech) {
 		g.showNotice("Archaic research is computer controlled; its DAG is read only.")
 		return
 	}
-	g.apply(gameapi.ResearchTech{BandID: band.ID, Tech: technology})
+	if g.apply(gameapi.ResearchTech{BandID: band.ID, Tech: technology}) {
+		g.advanceOpenRow()
+	}
 }
 
 func (g *Game) handleDirectionalMigration(dx, dy int) {
@@ -1045,7 +1068,11 @@ func (g *Game) confirmMigrationPreview() {
 func (g *Game) tryQueueMigration(band *gameapi.Band, tileID gameapi.TileID) bool {
 	diagnostic := ui.DiagnoseMigration(g.frame, band, tileID)
 	if diagnostic.Reason == ui.MigrationAllowed {
-		return g.apply(gameapi.QueueMigration{BandID: band.ID, TileID: tileID})
+		if g.apply(gameapi.QueueMigration{BandID: band.ID, TileID: tileID}) {
+			g.advanceOpenRow()
+			return true
+		}
+		return false
 	}
 	g.showNotice(ui.MigrationDiagnosticMessage(diagnostic, band))
 	return false
@@ -1081,6 +1108,7 @@ func (g *Game) dispatchBatch(actions []ui.Action) (actionBatchResult, bool) {
 				g.frame = frame
 				g.publishFrame()
 				g.ensureSelection()
+				g.guide = g.guide.Observe(g.selected())
 				g.sound.Play(gameaudio.SFXChoiceClick)
 			}
 		case ui.ActionEndTurn:
@@ -1143,6 +1171,10 @@ func (g *Game) startNewCampaign() {
 	g.ensureSelection()
 	g.hasAssignmentDraft = false
 	g.syncAssignmentDraft(true)
+	g.resetDisclosure()
+	if !g.settings.GuideDismissed {
+		g.guide = ui.NewGuideState(false)
+	}
 	g.setFieldNote(ui.CampaignOverviewFieldNote())
 	g.breakthroughFrames = 0
 	g.regionalPulseFocused = false
@@ -1184,13 +1216,10 @@ func (g *Game) beginManualLoad(slot int) {
 func (g *Game) handleSceneInput() bool {
 	switch g.scenes.Current() {
 	case ui.SceneGameplay:
-		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) && g.hasMigrationPreview {
-			g.clearMigrationPreview()
-			g.showNotice("Migration choice cleared")
-			return true
-		}
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
-			g.dispatchBatch([]ui.Action{ui.PushSceneAction(ui.SceneMenu)})
+			if !g.escape() {
+				g.dispatchBatch([]ui.Action{ui.PushSceneAction(ui.SceneMenu)})
+			}
 			return true
 		}
 		return false
@@ -1208,20 +1237,7 @@ func (g *Game) handleSceneInput() bool {
 			g.openStorageBrowser(storageBrowserLoad)
 			return true
 		}
-		if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-			x, y, inside := g.logicalCursorPosition()
-			if inside {
-				switch render.MenuOverlayRowAt(x, y, 3) {
-				case 0:
-					g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
-				case 1:
-					g.startNewCampaign()
-					g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
-				case 2:
-					g.openStorageBrowser(storageBrowserLoad)
-				}
-			}
-		}
+		// The title overlay's rows are panel buttons now; they arrive as intents.
 		return true
 	case ui.SceneMenu:
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
@@ -1282,28 +1298,7 @@ func (g *Game) handleSceneInput() bool {
 		}
 		return true
 	case ui.SceneSettings:
-		if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
-			x, y, inside := g.logicalCursorPosition()
-			if inside && !g.settingsLoading {
-				switch render.MenuOverlayRowAt(x, y, 3) {
-				case 0:
-					settings := g.settings
-					volume, hit := render.SettingsVolumeAt(x, y)
-					if hit && volume != g.settings.MasterVolume {
-						settings.MasterVolume = volume
-						g.updateUISettings(settings)
-					}
-				case 1:
-					if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-						g.toggleMute()
-					}
-				case 2:
-					if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-						g.toggleFieldNotes()
-					}
-				}
-			}
-		}
+		// The settings slider and check boxes are panel widgets now.
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) || inpututil.IsKeyJustPressed(ebiten.KeyO) {
 			g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
 			return true
@@ -1326,38 +1321,49 @@ func (g *Game) handleSceneInput() bool {
 	}
 }
 
-func (g *Game) toggleFieldNotes() {
+// notesModeFor derives the drawer height state from the persisted preference
+// pair, which remains the single source of truth across sessions.
+func notesModeFor(settings ui.UISettings) hud.NotesMode {
+	switch {
+	case !settings.FieldNotesVisible:
+		return hud.NotesHidden
+	case settings.FieldNotesExpanded:
+		return hud.NotesExpanded
+	default:
+		return hud.NotesCompact
+	}
+}
+
+// setNotesMode is the one path that changes the drawer, so the F key and the
+// drawer's own tab cannot disagree about what gets persisted.
+func (g *Game) setNotesMode(mode hud.NotesMode) {
 	if g.settingsLoading {
 		g.showNotice("Loading preferences…")
 		return
 	}
 	settings := g.settings
-	settings.FieldNotesVisible = !settings.FieldNotesVisible
+	settings.FieldNotesVisible = mode != hud.NotesHidden
+	if mode != hud.NotesHidden {
+		settings.FieldNotesExpanded = mode == hud.NotesExpanded
+	}
 	g.updateUISettings(settings)
 }
 
-func (g *Game) setFieldNote(note render.FieldNote) {
-	g.fieldNote = note
-	g.fieldNoteScroll = 0
-}
-
-func (g *Game) scrollFieldNotes(delta int) {
-	maximum := render.FieldNoteMaxScroll(g.fieldNote)
-	current := min(maximum, max(0, g.fieldNoteScroll))
-	g.fieldNoteScroll = min(maximum, max(0, current+delta))
-}
-
-func (g *Game) handleGameplayHotkey(key ebiten.Key) bool {
-	switch key {
-	case fieldNotesHotkey:
-		g.toggleFieldNotes()
-	case splitBandHotkey:
-		g.splitSelectedBand()
-	default:
-		return false
+// toggleFieldNotes hides a visible drawer and restores the height the player
+// last chose when showing it again.
+func (g *Game) toggleFieldNotes() {
+	if g.notesMode != hud.NotesHidden {
+		g.setNotesMode(hud.NotesHidden)
+		return
 	}
-	return true
+	mode := hud.NotesCompact
+	if g.settings.FieldNotesExpanded {
+		mode = hud.NotesExpanded
+	}
+	g.setNotesMode(mode)
 }
+
+func (g *Game) setFieldNote(note render.FieldNote) { g.fieldNote = note }
 
 func (g *Game) splitSelectedBand() {
 	band := g.selected()
@@ -1370,6 +1376,7 @@ func (g *Game) splitSelectedBand() {
 		}
 		if g.apply(gameapi.SplitBand{BandID: g.selectedBand, Destination: candidate.TileID}) {
 			g.clearMigrationPreview()
+			g.advanceOpenRow()
 		}
 		return
 	}
@@ -1555,6 +1562,7 @@ func (g *Game) pollStorage() {
 			g.ensureSelection()
 			g.hasAssignmentDraft = false
 			g.syncAssignmentDraft(true)
+			g.resetDisclosure()
 			g.scenes.Reset()
 			if isStartupLoad {
 				g.scenes.Push(ui.SceneTitle)
@@ -1688,75 +1696,6 @@ func (g *Game) advanceToasts() {
 	} else {
 		g.notice = ""
 		g.noticeFrames = 0
-	}
-}
-
-func (g *Game) menuOverlayForRender() render.MenuOverlay {
-	switch g.scenes.Current() {
-	case ui.SceneTitle:
-		return render.MenuOverlay{
-			Visible: true, Heading: "Africa 2 Ice: Paleolithic Dispersal", Selected: -1, LineCount: 3,
-			Lines: [8]string{"Enter / C  Continue", "N  New Campaign", "L  Load a checkpoint"},
-			Help:  "Guide Homo sapiens from East Africa, 80,000–20,000 BP.",
-		}
-	case ui.SceneMenu:
-		return render.MenuOverlay{
-			Visible: true, Heading: "Game Menu", Selected: -1, LineCount: 6,
-			Lines: [8]string{"Esc  Back to game", "S  Save slots", "L  Load or delete slots", "O  Settings", "F  Toggle Field Notes", "T  Return to title"},
-			Help:  "Turns advance only when you explicitly end them.",
-		}
-	case ui.SceneStorage:
-		heading := "Load / Delete"
-		if g.storageMode == storageBrowserSave {
-			heading = "Save / Delete"
-		}
-		overlay := render.MenuOverlay{
-			Visible: true, Heading: heading, Selected: g.storageSelection, LineCount: len(storageBrowserSlots),
-			Help: "↑/↓ select · Enter activate · Del delete · Esc back",
-		}
-		for index, slot := range storageBrowserSlots {
-			label := storageSlotLabel(slot)
-			metadata, exists := g.storageMetadata(slot)
-			suffix := "Empty"
-			if exists {
-				suffix = fmt.Sprintf("Turn %d · %d BP · sapiens %d", metadata.Turn, metadata.YearBP, metadata.SapiensPopulation)
-			}
-			if g.storageMode == storageBrowserSave && slot > 3 {
-				suffix += " · load/delete only"
-			}
-			overlay.Lines[index] = label + "  —  " + suffix
-		}
-		if g.storageListID != 0 {
-			overlay.Help = "Reading save metadata… · Esc back"
-		} else if g.storageOperationID != 0 {
-			overlay.Help = "Storage operation pending…"
-		}
-		return overlay
-	case ui.SceneSettings:
-		mute := "Off"
-		if g.settings.Muted {
-			mute = "On"
-		}
-		visible := "Hidden"
-		if g.fieldNotesVisible {
-			visible = "Visible"
-		}
-		help := "Click/drag controls · keyboard -/+ · M · F · O/Esc back"
-		if g.settingsLoading {
-			help = "Loading preferences… controls disabled · O/Esc back"
-		}
-		return render.MenuOverlay{
-			Visible: true, Heading: "Settings", Selected: -1, LineCount: 3, Settings: true,
-			SettingsDisabled: g.settingsLoading, MasterVolume: g.settings.MasterVolume, Muted: g.settings.Muted, FieldNotesVisible: g.fieldNotesVisible,
-			Lines: [8]string{
-				fmt.Sprintf("Master volume  %.0f%%", g.settings.MasterVolume*100),
-				"Muted  " + mute,
-				"Field Notes  " + visible,
-			},
-			Help: help,
-		}
-	default:
-		return render.MenuOverlay{}
 	}
 }
 

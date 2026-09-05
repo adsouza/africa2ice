@@ -46,3 +46,32 @@ func TestUISettingsVolumeIsFiniteAndClamped(t *testing.T) {
 		t.Fatal("non-finite JSON volume was accepted")
 	}
 }
+
+func TestUISettingsSchemaTwoRoundTripsAndUpgradesSchemaOne(t *testing.T) {
+	want := UISettings{SchemaVersion: 2, FieldNotesVisible: false, MasterVolume: 0.3, Muted: true, GuideDismissed: true, FieldNotesExpanded: true}
+	payload, err := EncodeUISettings(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := DecodeUISettings(payload)
+	if err != nil || got != want {
+		t.Fatalf("round trip = %+v, %v; want %+v", got, err, want)
+	}
+
+	v1 := []byte(`{"SchemaVersion":1,"FieldNotesVisible":false,"MasterVolume":0.3,"Muted":true}`)
+	upgraded, err := DecodeUISettings(v1)
+	if err != nil {
+		t.Fatalf("schema 1 payload rejected: %v", err)
+	}
+	if upgraded.SchemaVersion != 2 || upgraded.GuideDismissed || upgraded.FieldNotesExpanded || upgraded.MasterVolume != 0.3 || upgraded.FieldNotesVisible || !upgraded.Muted {
+		t.Fatalf("upgraded schema 1 = %+v", upgraded)
+	}
+
+	missing := []byte(`{"SchemaVersion":2,"FieldNotesVisible":true,"MasterVolume":0.5,"Muted":false,"GuideDismissed":false}`)
+	if _, err := DecodeUISettings(missing); err == nil {
+		t.Fatal("schema 2 payload without FieldNotesExpanded was accepted")
+	}
+	if _, err := DecodeUISettings([]byte(`{"SchemaVersion":3,"FieldNotesVisible":true,"MasterVolume":0.5,"Muted":false,"GuideDismissed":false,"FieldNotesExpanded":false}`)); err == nil {
+		t.Fatal("unknown schema 3 was accepted")
+	}
+}

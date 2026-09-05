@@ -143,3 +143,182 @@ func TestMigrationWaterMessageAtPassageEndpointNamesTheRealGate(t *testing.T) {
 		t.Fatalf("open passage message %q does not direct the player to the far endpoint", message)
 	}
 }
+
+// splitEligibleFrame is a band that satisfies every split guard: sapiens, its
+// spatial action still open, over the stress threshold, at the minimum viable
+// population, with one ordinary-land neighbour to establish on.
+func splitEligibleFrame() *gameapi.Frame {
+	return &gameapi.Frame{CampaignResult: gameapi.Ongoing, Bands: []gameapi.Band{{
+		ID: 1, Species: gameapi.HomoSapiens, Population: gameapi.MinSplitSourcePopulation,
+		Stress:              gameapi.SplitStressThreshold + 0.01,
+		MigrationCandidates: []gameapi.MigrationCandidate{{TileID: 1}},
+	}}}
+}
+
+// DiagnoseSplit exists so the Split button can be disabled when the command
+// would refuse it: it used to look available whatever the band's state, and
+// clicking it only produced a notice (user-reported). Every reason returned
+// here is a guard domain.World.Split or splitBand actually applies, and each
+// already has player copy in errors.go.
+func TestDiagnoseSplitNamesTheGuardThatWouldRefuse(t *testing.T) {
+	if got := DiagnoseSplit(splitEligibleFrame(), &splitEligibleFrame().Bands[0]); got != "" {
+		t.Fatalf("eligible band = %q, want no blocking reason", got)
+	}
+	for name, test := range map[string]struct {
+		mutate func(*gameapi.Frame)
+		want   gameapi.ErrorCode
+	}{
+		"campaign already over": {
+			func(f *gameapi.Frame) { f.CampaignResult = gameapi.DispersalFailed },
+			gameapi.ErrCampaignComplete,
+		},
+		"computer-controlled band": {
+			func(f *gameapi.Frame) { f.Bands[0].Species = gameapi.ArchaicHominin },
+			gameapi.ErrComputerControlledBand,
+		},
+		"spatial action already spent": {
+			func(f *gameapi.Frame) { f.Bands[0].SpatialActionUsed = true },
+			gameapi.ErrSpatialActionUsed,
+		},
+		"a queued migration also spends the action": {
+			func(f *gameapi.Frame) { f.Bands[0].HasQueuedMigration = true },
+			gameapi.ErrSpatialActionUsed,
+		},
+		"stress exactly at the threshold is not over it": {
+			func(f *gameapi.Frame) { f.Bands[0].Stress = gameapi.SplitStressThreshold },
+			gameapi.ErrSplitStressTooLow,
+		},
+		"one person short of two viable bands": {
+			func(f *gameapi.Frame) { f.Bands[0].Population = gameapi.MinSplitSourcePopulation - 1 },
+			gameapi.ErrSplitPopulationTooLow,
+		},
+		"no ordinary-land neighbour": {
+			func(f *gameapi.Frame) {
+				f.Bands[0].MigrationCandidates = []gameapi.MigrationCandidate{{TileID: 1, RequiresPassage: true}}
+			},
+			gameapi.ErrSplitDestinationNotAdjacent,
+		},
+		"campaign is at the band limit": {
+			func(f *gameapi.Frame) { f.Bands = append(f.Bands, make([]gameapi.Band, gameapi.MaxBands)...) },
+			gameapi.ErrBandLimitReached,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			frame := splitEligibleFrame()
+			test.mutate(frame)
+			// The band pointer is taken after the mutation: appending to
+			// frame.Bands can reallocate its backing array.
+			if got := DiagnoseSplit(frame, &frame.Bands[0]); got != test.want {
+				t.Fatalf("DiagnoseSplit = %q, want %q", got, test.want)
+			}
+		})
+	}
+	if got := DiagnoseSplit(splitEligibleFrame(), nil); got != gameapi.ErrBandNotFound {
+		t.Fatalf("nil band = %q, want %q", got, gameapi.ErrBandNotFound)
+	}
+}
+
+// moveActionFrame is a band with every Move action available: sapiens, action
+// open, crowded enough and large enough to split, one ordinary-land neighbour,
+// and an archaic band sharing its tile to interbreed with.
+func moveActionFrame() *gameapi.Frame {
+	return &gameapi.Frame{
+		CampaignResult: gameapi.Ongoing,
+		Tiles: []gameapi.Tile{
+			{ID: 0, X: 0, Y: 0, Land: true, Explored: true, BaselineK: 150, EcologicalK: 150},
+			{ID: 1, X: 1, Y: 0, Land: true, Explored: true, BaselineK: 150, EcologicalK: 150},
+		},
+		Bands: []gameapi.Band{
+			{
+				ID: 1, Species: gameapi.HomoSapiens, TileID: 0,
+				Population: gameapi.MinSplitSourcePopulation, Stress: gameapi.SplitStressThreshold + 0.01,
+				MigrationCandidates:    []gameapi.MigrationCandidate{{TileID: 1}},
+				InterbreedCandidateIDs: []gameapi.BandID{2},
+			},
+			{ID: 2, Species: gameapi.ArchaicHominin, TileID: 0, Population: 20},
+		},
+	}
+}
+
+// DiagnoseMoveActions is the single source of truth for the Move row's four
+// buttons: each is disabled exactly when its explanation is non-empty, so the
+// button state and the tooltip cannot disagree (spec §4.1).
+func TestDiagnoseMoveActionsExplainsEachUnavailableAction(t *testing.T) {
+	diagnose := func(frame *gameapi.Frame) MoveActionBlocks {
+		band := &frame.Bands[0]
+		target := TargetTileLiveability(frame, band, 1)
+		return DiagnoseMoveActions(frame, band, target, TargetHover, 1)
+	}
+	if blocks := diagnose(moveActionFrame()); blocks != (MoveActionBlocks{}) {
+		t.Fatalf("fully eligible band = %+v, want every action available", blocks)
+	}
+	for name, test := range map[string]struct {
+		mutate                                func(*gameapi.Frame)
+		moveHere, bestTile, split, interbreed string
+	}{
+		"campaign over blocks every action": {
+			func(f *gameapi.Frame) { f.CampaignResult = gameapi.DispersalFailed },
+			ErrorCodeMessage(gameapi.ErrCampaignComplete), ErrorCodeMessage(gameapi.ErrCampaignComplete),
+			ErrorCodeMessage(gameapi.ErrCampaignComplete), ErrorCodeMessage(gameapi.ErrCampaignComplete),
+		},
+		"an archaic band is computer controlled": {
+			func(f *gameapi.Frame) { f.Bands[0].Species = gameapi.ArchaicHominin },
+			ErrorCodeMessage(gameapi.ErrComputerControlledBand), ErrorCodeMessage(gameapi.ErrComputerControlledBand),
+			ErrorCodeMessage(gameapi.ErrComputerControlledBand), ErrorCodeMessage(gameapi.ErrComputerControlledBand),
+		},
+		"a spent spatial action blocks every action": {
+			func(f *gameapi.Frame) { f.Bands[0].SpatialActionUsed = true },
+			ErrorCodeMessage(gameapi.ErrSpatialActionUsed), ErrorCodeMessage(gameapi.ErrSpatialActionUsed),
+			ErrorCodeMessage(gameapi.ErrSpatialActionUsed), ErrorCodeMessage(gameapi.ErrSpatialActionUsed),
+		},
+		"too little pressure stops only the split": {
+			func(f *gameapi.Frame) { f.Bands[0].Stress = gameapi.SplitStressThreshold },
+			"", "", ErrorCodeMessage(gameapi.ErrSplitStressTooLow), "",
+		},
+		"too few people stops only the split": {
+			func(f *gameapi.Frame) { f.Bands[0].Population = gameapi.MinSplitSourcePopulation - 1 },
+			"", "", ErrorCodeMessage(gameapi.ErrSplitPopulationTooLow), "",
+		},
+		"no archaic neighbour stops only interbreeding": {
+			func(f *gameapi.Frame) { f.Bands[0].InterbreedCandidateIDs = nil },
+			"", "", "", noInterbreedPartnerMessage,
+		},
+		"only passage routes stop Best tile and the split": {
+			func(f *gameapi.Frame) {
+				f.Bands[0].MigrationCandidates = []gameapi.MigrationCandidate{{TileID: 1, RequiresPassage: true}}
+			},
+			"", noOrdinaryLandMessage, ErrorCodeMessage(gameapi.ErrSplitDestinationNotAdjacent), "",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			frame := moveActionFrame()
+			test.mutate(frame)
+			got := diagnose(frame)
+			want := MoveActionBlocks{MoveHere: test.moveHere, BestTile: test.bestTile, Split: test.split, Interbreed: test.interbreed}
+			if got != want {
+				t.Fatalf("DiagnoseMoveActions =\n  %+v\nwant\n  %+v", got, want)
+			}
+		})
+	}
+}
+
+// With no tile chosen, Move here is the only action that cannot proceed, and it
+// says what to do rather than what went wrong.
+func TestDiagnoseMoveActionsAsksForATargetWhenNoneIsChosen(t *testing.T) {
+	frame := moveActionFrame()
+	band := &frame.Bands[0]
+	blocks := DiagnoseMoveActions(frame, band, TileLiveability{}, TargetNone, 0)
+	if blocks.MoveHere != noTargetChosenMessage {
+		t.Fatalf("Move here = %q, want the prompt to choose a tile", blocks.MoveHere)
+	}
+	if blocks.BestTile != "" || blocks.Split != "" || blocks.Interbreed != "" {
+		t.Fatalf("a missing target blocked more than Move here: %+v", blocks)
+	}
+	// An unreachable chosen tile falls through to the existing migration
+	// diagnostic rather than inventing new copy.
+	band.MigrationCandidates = nil
+	unreachable := DiagnoseMoveActions(frame, band, TargetTileLiveability(frame, band, 1), TargetHover, 1)
+	if want := MigrationDiagnosticMessage(DiagnoseMigration(frame, band, 1), band); unreachable.MoveHere != want || want == "" {
+		t.Fatalf("unreachable target = %q, want the migration diagnostic %q", unreachable.MoveHere, want)
+	}
+}

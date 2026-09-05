@@ -9,6 +9,7 @@ import (
 	"github.com/adsouza/africa2ice/internal/application"
 	gameaudio "github.com/adsouza/africa2ice/pkg/audio"
 	"github.com/adsouza/africa2ice/pkg/gameapi"
+	"github.com/adsouza/africa2ice/pkg/hud"
 	"github.com/adsouza/africa2ice/pkg/render"
 	"github.com/adsouza/africa2ice/pkg/ui"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -177,17 +178,28 @@ func TestFieldNotesAndSplitHotkeysRemainDistinct(t *testing.T) {
 		t.Fatal("Field Notes and split-band hotkeys overlap")
 	}
 
+	// Both keys reach the shipped gameplay paths, and neither disturbs what
+	// the other owns: F only moves the drawer, N only splits.
 	stub := &gameStub{frame: migrationPreviewFrame()}
 	game := New(stub)
-	if !game.handleGameplayHotkey(fieldNotesHotkey) || game.fieldNotesVisible || stub.appliedCommand != nil {
-		t.Fatalf("F binding = visible %t, command %T", game.fieldNotesVisible, stub.appliedCommand)
+	game.toggleFieldNotes()
+	if game.notesMode != hud.NotesHidden || stub.appliedCommand != nil {
+		t.Fatalf("F binding = notes mode %v, command %T", game.notesMode, stub.appliedCommand)
 	}
-	if !game.handleGameplayHotkey(splitBandHotkey) {
-		t.Fatal("N binding was not handled")
-	}
+	game.splitSelectedBand()
 	command, ok := stub.appliedCommand.(gameapi.SplitBand)
-	if !ok || command.BandID != 7 || command.Destination != 2 || game.fieldNotesVisible {
-		t.Fatalf("N binding = command %#v, Field Notes visible %t", stub.appliedCommand, game.fieldNotesVisible)
+	if !ok || command.BandID != 7 || command.Destination != 2 || game.notesMode != hud.NotesHidden {
+		t.Fatalf("N binding = command %#v, Field Notes mode %v", stub.appliedCommand, game.notesMode)
+	}
+	// Neither key is row-owned, so the open row cannot steal or duplicate them.
+	for _, row := range []ui.ChecklistRow{ui.RowMove, ui.RowResearch, ui.RowWorkforce} {
+		rowGame := New(&gameStub{frame: migrationPreviewFrame()})
+		rowGame.openRow = row
+		rowGame.handleRowKey(fieldNotesHotkey, false)
+		rowGame.handleRowKey(splitBandHotkey, false)
+		if rowGame.notesMode != hud.NotesCompact || rowGame.hasMigrationPreview {
+			t.Fatalf("row %v bound F or N: notes %v, preview %t", row, rowGame.notesMode, rowGame.hasMigrationPreview)
+		}
 	}
 }
 
@@ -197,7 +209,7 @@ func TestSplitHotkeyExplainsWhenNoOrdinaryDestinationExists(t *testing.T) {
 	stub := &gameStub{frame: frame}
 	game := New(stub)
 
-	game.handleGameplayHotkey(splitBandHotkey)
+	game.splitSelectedBand()
 	if stub.appliedCommand != nil || game.notice != "This band has no eligible adjacent land tile for splitting." {
 		t.Fatalf("unavailable split = command %T, notice %q", stub.appliedCommand, game.notice)
 	}
@@ -243,11 +255,11 @@ func TestPresentationSettingsInstallAtomicallyAndCoalesceWrites(t *testing.T) {
 	if !game.settingsLoading || len(store.reads) != 1 || len(sounds.masters) != 0 {
 		t.Fatalf("initial settings state = loading %t reads %v masters %v", game.settingsLoading, store.reads, sounds.masters)
 	}
-	loaded := ui.UISettings{SchemaVersion: 1, FieldNotesVisible: false, MasterVolume: 0.8, Muted: true}
+	loaded := ui.UISettings{SchemaVersion: ui.UISettingsSchemaVersion, FieldNotesVisible: false, MasterVolume: 0.8, Muted: true}
 	store.completions = []ui.UISettingsCompletion{{Operation: ui.UISettingsRead, Revision: 1, Settings: loaded}}
 	game.pollUISettings()
-	if game.settingsLoading || game.settings != loaded || game.fieldNotesVisible || len(sounds.masters) != 1 || sounds.masters[0].volume != 0.8 || !sounds.masters[0].muted {
-		t.Fatalf("installed settings = loading %t record %#v visible %t masters %v", game.settingsLoading, game.settings, game.fieldNotesVisible, sounds.masters)
+	if game.settingsLoading || game.settings != loaded || game.notesMode != hud.NotesHidden || len(sounds.masters) != 1 || sounds.masters[0].volume != 0.8 || !sounds.masters[0].muted {
+		t.Fatalf("installed settings = loading %t record %#v notes %v masters %v", game.settingsLoading, game.settings, game.notesMode, sounds.masters)
 	}
 
 	first := loaded
@@ -448,28 +460,6 @@ func TestInitialSelectionSkipsArchaicAndExtinctBands(t *testing.T) {
 	}
 }
 
-func TestFieldNoteScrollNormalizesBeforeApplyingInput(t *testing.T) {
-	game := New(&gameStub{frame: migrationPreviewFrame()})
-	game.fieldNote = render.FieldNote{
-		Introduction: strings.Repeat("A deliberately verbose field note sentence. ", 20),
-		Context:      strings.Repeat("Additional historical context. ", 20),
-	}
-	maximum := render.FieldNoteMaxScroll(game.fieldNote)
-	if maximum <= 3 {
-		t.Fatalf("test Field Note max scroll = %d, want more than 3", maximum)
-	}
-
-	game.fieldNoteScroll = maximum + 12
-	game.scrollFieldNotes(-3)
-	if game.fieldNoteScroll != maximum-3 {
-		t.Fatalf("PageUp-equivalent scroll = %d, want %d", game.fieldNoteScroll, maximum-3)
-	}
-	game.scrollFieldNotes(maximum + 12)
-	if game.fieldNoteScroll != maximum {
-		t.Fatalf("PageDown-equivalent scroll = %d, want capped %d", game.fieldNoteScroll, maximum)
-	}
-}
-
 func TestWorkforceDraftPreservesExplicitSharesUntilValidApplyOrDiscard(t *testing.T) {
 	frame := migrationPreviewFrame()
 	frame.Bands[0].AllocationBP = [gameapi.AssignmentCount]uint16{2_000, 2_000, 2_000, 2_000, 2_000}
@@ -514,7 +504,7 @@ func TestWorkforceDraftPreservesExplicitSharesUntilValidApplyOrDiscard(t *testin
 func TestCompletedTurnCelebratesNewTechnologyWithoutOverridingPanelVisibility(t *testing.T) {
 	before := migrationPreviewFrame()
 	game := New(&gameStub{frame: before})
-	game.fieldNotesVisible = false
+	game.notesMode = hud.NotesHidden
 	after := *before
 	after.Turn = 1
 	after.Bands = append([]gameapi.Band(nil), before.Bands...)
@@ -524,7 +514,7 @@ func TestCompletedTurnCelebratesNewTechnologyWithoutOverridingPanelVisibility(t 
 	if game.fieldNote.Topic != gameapi.Firecraft.String() || game.breakthroughFrames != breakthroughCelebrationFrames {
 		t.Fatalf("breakthrough note = %#v for %d frames", game.fieldNote, game.breakthroughFrames)
 	}
-	if game.fieldNotesVisible {
+	if game.notesMode != hud.NotesHidden {
 		t.Fatal("technology celebration overrode the player's hidden Field Notes choice")
 	}
 	if game.notice != "Breakthrough! Band 7 learned Firecraft" || game.noticeFrames != 300 {
@@ -627,14 +617,10 @@ func TestRegionalPulseFieldNoteFocusesOnlyOncePerContinuousRun(t *testing.T) {
 	if !strings.Contains(game.fieldNote.Topic, "REGIONAL CLIMATE PULSE") || !game.regionalPulseFocused {
 		t.Fatalf("first pulse note = %#v, focused %t", game.fieldNote, game.regionalPulseFocused)
 	}
-	game.fieldNoteScroll = 4
 	second := cloneAppFrame(first)
 	second.Turn++
 	second.Climate.RegionalAbrupt[region] = 0.3
 	game.acceptCompletedTurn(second)
-	if game.fieldNoteScroll != 4 {
-		t.Fatalf("continuous pulse reset Field Notes scroll to %d", game.fieldNoteScroll)
-	}
 
 	between := cloneAppFrame(second)
 	between.Turn++
@@ -646,10 +632,9 @@ func TestRegionalPulseFieldNoteFocusesOnlyOncePerContinuousRun(t *testing.T) {
 	later := cloneAppFrame(between)
 	later.Turn++
 	later.Climate.RegionalAbrupt[region] = 0.2
-	game.fieldNoteScroll = 3
 	game.acceptCompletedTurn(later)
-	if game.fieldNoteScroll != 0 || !game.regionalPulseFocused {
-		t.Fatalf("later pulse did not refocus: scroll %d focused %t", game.fieldNoteScroll, game.regionalPulseFocused)
+	if !game.regionalPulseFocused {
+		t.Fatal("later pulse did not refocus")
 	}
 }
 
@@ -793,33 +778,32 @@ func TestRepeatedTileClicksCycleVisibleSapiensAndArchaicBands(t *testing.T) {
 	}
 }
 
+// The title and game-menu overlays are panel widgets from Task 13 onward.
 func TestTitleAndGameMenuExposeCampaignNavigation(t *testing.T) {
-	game := New(&gameStub{frame: migrationPreviewFrame()})
-	if !game.scenes.Push(ui.SceneTitle) {
-		t.Fatal("could not install title scene")
+	stub := &gameStub{frame: migrationPreviewFrame()}
+	game := New(stub)
+	game.scenes.Push(ui.SceneTitle)
+	if game.overlayState().Scene != ui.SceneTitle {
+		t.Fatal("title scene not reported")
 	}
-	title := game.menuOverlayForRender()
-	if title.Heading != "Africa 2 Ice: Paleolithic Dispersal" || title.LineCount != 3 || !strings.Contains(title.Lines[1], "New Campaign") {
-		t.Fatalf("title overlay = %#v", title)
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentContinue}})
+	if game.scenes.Current() != ui.SceneGameplay {
+		t.Fatal("Continue did not pop the title")
 	}
+	game.scenes.Push(ui.SceneMenu)
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentOpenSettings}})
+	if game.scenes.Current() != ui.SceneSettings {
+		t.Fatal("Settings intent did not open settings")
+	}
+
 	game.scenes.Reset()
-	game.scenes.Push(ui.SceneMenu)
-	menu := game.menuOverlayForRender()
-	if menu.LineCount != 6 || !strings.Contains(menu.Lines[5], "title") {
-		t.Fatalf("game menu navigation = %#v", menu)
+	game.scenes.Push(ui.SceneTitle)
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentNewCampaign}})
+	if stub.newCampaigns != 1 {
+		t.Fatalf("new campaigns = %d, want 1", stub.newCampaigns)
 	}
-}
-
-func TestGameMenuDescribesTurnBasedBehavior(t *testing.T) {
-	game := New(&gameStub{frame: migrationPreviewFrame()})
-	game.scenes.Push(ui.SceneMenu)
-
-	overlay := game.menuOverlayForRender()
-	if overlay.Heading != "Game Menu" || overlay.Lines[0] != "Esc  Back to game" {
-		t.Fatalf("game menu identity = %#v", overlay)
-	}
-	if strings.Contains(strings.ToLower(overlay.Help), "pause") || !strings.Contains(overlay.Help, "explicitly end") {
-		t.Fatalf("game menu turn guidance = %q", overlay.Help)
+	if game.scenes.Current() != ui.SceneGameplay {
+		t.Fatal("New Campaign from the title did not return to gameplay")
 	}
 }
 
@@ -839,13 +823,19 @@ func TestStorageBrowserListsAllGroupsAndActivatesExplicitOperations(t *testing.T
 		},
 	}}
 	game.pollStorage()
-	overlay := game.menuOverlayForRender()
-	if overlay.LineCount != 7 || !strings.Contains(overlay.Lines[0], "Turn 4") || !strings.Contains(overlay.Lines[5], "Turn 8") || !strings.Contains(overlay.Lines[3], "Empty") {
-		t.Fatalf("storage overlay = %#v", overlay)
+
+	overlay := game.overlayState()
+	if !strings.Contains(overlay.StorageRows[0].Detail, "Turn 4") {
+		t.Fatalf("row 0 detail = %q", overlay.StorageRows[0].Detail)
+	}
+	if !strings.Contains(overlay.StorageRows[5].Detail, "Turn 8") {
+		t.Fatalf("row 5 detail = %q", overlay.StorageRows[5].Detail)
+	}
+	if overlay.StorageRows[3].Detail != "Empty" {
+		t.Fatalf("row 3 detail = %q", overlay.StorageRows[3].Detail)
 	}
 
-	game.storageSelection = 5
-	game.activateStorageSelection()
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentLoadSlot, Slot: 102}})
 	if stub.loadedSlot != 102 || game.pendingManualLoadID == 0 {
 		t.Fatalf("autosave load = slot %d pending %d", stub.loadedSlot, game.pendingManualLoadID)
 	}
@@ -878,18 +868,19 @@ func TestStorageBrowserRestrictsWritesButCanDeleteAnyOccupiedGroup(t *testing.T)
 
 func TestSettingsSceneReportsLivePreferences(t *testing.T) {
 	game := New(&gameStub{frame: migrationPreviewFrame()})
-	game.scenes.Push(ui.SceneMenu)
-	game.scenes.Push(ui.SceneSettings)
 	game.settings.MasterVolume = 0.7
 	game.settings.Muted = true
-	game.fieldNotesVisible = false
+	game.notesMode = hud.NotesHidden
 
-	overlay := game.menuOverlayForRender()
-	joined := strings.Join(overlay.Lines[:overlay.LineCount], " ")
-	for _, required := range []string{"70%", "Muted  On", "Field Notes  Hidden"} {
-		if !strings.Contains(joined, required) {
-			t.Fatalf("settings overlay missing %q: %#v", required, overlay)
-		}
+	overlay := game.overlayState()
+	if overlay.MasterVolume != 0.7 {
+		t.Fatalf("MasterVolume = %v, want 0.7", overlay.MasterVolume)
+	}
+	if !overlay.Muted {
+		t.Fatal("Muted not reported")
+	}
+	if game.hudState().NotesMode != hud.NotesHidden {
+		t.Fatal("Field Notes hidden state not reported")
 	}
 }
 
@@ -974,17 +965,18 @@ func TestExploredHoverTileRejectsFogAndCoordinatesOutsideTheMap(t *testing.T) {
 	frame := &gameapi.Frame{Tiles: make([]gameapi.Tile, 2)}
 	frame.Tiles[0] = gameapi.Tile{ID: 0, Explored: true}
 	frame.Tiles[1] = gameapi.Tile{ID: 1, Explored: false}
+	game := New(&gameStub{frame: frame})
 
-	if tileID, ok := exploredHoverTile(frame, 24, 78, true); !ok || tileID != 0 {
+	if tileID, ok := game.exploredHoverTile(24, 78, true); !ok || tileID != 0 {
 		t.Fatalf("explored hover = (%d, %t), want tile 0", tileID, ok)
 	}
-	if _, ok := exploredHoverTile(frame, 32, 78, true); ok {
+	if _, ok := game.exploredHoverTile(32, 78, true); ok {
 		t.Fatal("pointer hover exposed a fogged tile")
 	}
-	if _, ok := exploredHoverTile(frame, 19, 78, true); ok {
+	if _, ok := game.exploredHoverTile(19, 78, true); ok {
 		t.Fatal("pointer hover accepted a coordinate outside the map")
 	}
-	if _, ok := exploredHoverTile(frame, 24, 78, false); ok {
+	if _, ok := game.exploredHoverTile(24, 78, false); ok {
 		t.Fatal("pointer hover ignored the viewport boundary")
 	}
 }
@@ -1002,6 +994,57 @@ func migrationPreviewFrame() *gameapi.Frame {
 			Population:          120,
 			MigrationCandidates: []gameapi.MigrationCandidate{{TileID: 2}},
 		}},
+	}
+}
+
+// TestDrawPaintsChromeAndMapTogether covers the fix for CI's web performance
+// gate (DESIGN.md §8): production disables Ebitengine's automatic screen
+// clear, so an idle frame must paint nothing. pkg/render's own skip test
+// proves the map's cache key behaves correctly using a screen-sentinel
+// ((*ebiten.Image).At), which needs a TestMain running inside an ebiten game
+// loop (see pkg/render/main_test.go) — pkg/app has no such TestMain, and
+// ebiten.Game.Draw has no return value to observe directly, so this test
+// instead reads render.MapScene.Paints, a counter MapScene exports solely
+// for tests like this one to see whether Draw actually painted.
+//
+// Two consecutive Draw calls with nothing changed since the one Update that
+// built the panel must not paint again; toggling detailsOpen (which rebuilds
+// the panel, changing pkg/hud's PresentationKey) and running another
+// Update/Draw must paint both layers together.
+func TestDrawPaintsChromeAndMapTogether(t *testing.T) {
+	game := New(&gameStub{frame: migrationPreviewFrame()})
+	screen := ebiten.NewImage(1280, 720)
+	defer screen.Deallocate()
+
+	// Settle the camera transition first: without this, g.stepCamera (run
+	// from Game.Update) would keep changing the map's own frame key on its
+	// own for a few ticks regardless of the chrome, which would let this
+	// test pass by coincidence instead of by exercising the chrome-revision
+	// wiring it targets.
+	for i := 0; i < render.CameraTransitionTicks+2; i++ {
+		game.Update()
+	}
+	// Settle the chrome too, not just the camera. ebitenui holds its hover and
+	// pointer state in package globals, so the first Draw of a fresh Panel can
+	// still be reading what an earlier test left there; it corrects itself on
+	// the following frame. The invariant under test is about the steady state,
+	// so establish one before sampling rather than measuring the settle.
+	game.Draw(screen)
+	game.Update()
+	game.Draw(screen)
+	paints := game.scene.Paints
+
+	game.Update()
+	game.Draw(screen)
+	if game.scene.Paints != paints {
+		t.Fatalf("scene.Paints = %d, want %d unchanged: an unchanged Draw must skip (idle-frame floor)", game.scene.Paints, paints)
+	}
+
+	game.toggleDetails()
+	game.Update()
+	game.Draw(screen)
+	if game.scene.Paints == paints {
+		t.Fatalf("scene.Paints = %d, want it to advance: toggling detailsOpen changed the chrome and both layers must repaint", game.scene.Paints)
 	}
 }
 

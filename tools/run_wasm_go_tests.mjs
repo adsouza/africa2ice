@@ -45,7 +45,17 @@ try {
       process.stdout.write(`${message.text()}\n`);
       if (message.type() === "error") failures.push(`console.error: ${message.text()}`);
     });
-    page.on("pageerror", error => failures.push(`pageerror: ${error.message}`));
+    // Chromium can deliver a queued IndexedDB event after the Go test binary
+    // has already called os.Exit. wasm_exec.js answers that late callback by
+    // throwing "Go program has already exited", which is a property of the
+    // browser's event ordering rather than of the code under test: the suite's
+    // own verdict is the exit code and the console output collected above, and
+    // both are complete by then. Treating this one message as a failure made
+    // the gate flaky, so it is ignored and every other page error still fails.
+    page.on("pageerror", error => {
+      if (/Go program has already exited/.test(error.message)) return;
+      failures.push(`pageerror: ${error.message}`);
+    });
     await page.goto(`http://127.0.0.1:${server.address().port}/`, { waitUntil: "load" });
     await page.evaluate(async ({ file, test }) => {
       const go = new Go();

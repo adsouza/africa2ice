@@ -142,7 +142,9 @@ func (runner *screenshotRunner) Update() error {
 	if runner.captured {
 		return ebiten.Termination
 	}
-	return nil
+	// The chrome is an ebitenui tree the application builds during Update, so a
+	// screenshot that never ticks the game would capture a bare map.
+	return runner.game.Update()
 }
 
 func (runner *screenshotRunner) Draw(screen *ebiten.Image) {

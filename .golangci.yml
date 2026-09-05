@@ -97,6 +97,17 @@ linters:
             - "github.com/adsouza/africa2ice/pkg/gameapi"
             - "github.com/hajimehoshi/ebiten/v2"
             - "golang.org/x/image"
+        hud-adapter-dependencies:
+          list-mode: strict
+          files: ["**/pkg/hud/**/*.go"]
+          allow:
+            - "$gostd"
+            - "github.com/adsouza/africa2ice/pkg/gameapi"
+            - "github.com/adsouza/africa2ice/pkg/ui"
+            - "github.com/adsouza/africa2ice/pkg/render"
+            - "github.com/hajimehoshi/ebiten/v2"
+            - "github.com/ebitenui/ebitenui"
+            - "golang.org/x/image"
         ui-adapter-dependencies:
           list-mode: strict
           files: ["**/pkg/ui/**/*.go"]
@@ -128,8 +139,10 @@ linters:
             - "github.com/adsouza/africa2ice/pkg/gameapi"
             - "github.com/adsouza/africa2ice/pkg/render"
             - "github.com/adsouza/africa2ice/pkg/ui"
+            - "github.com/adsouza/africa2ice/pkg/hud"
             - "github.com/adsouza/africa2ice/pkg/audio"
             - "github.com/hajimehoshi/ebiten/v2"
+            - "github.com/ebitenui/ebitenui"
     forbidigo:
       analyze-types: true
       forbid:
