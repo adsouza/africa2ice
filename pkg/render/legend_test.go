@@ -66,15 +66,22 @@ func TestEveryBiomeLegendEntryCarriesAGlyph(t *testing.T) {
 }
 
 // An 8x8 swatch cannot host a legible pictograph. This pins the enlarged
-// geometry so a later tidy-up cannot silently shrink it back.
+// geometry — including the y offsets that keep the swatch, the meaning text,
+// and the row bottom from colliding — so a later tidy-up cannot silently
+// shrink the swatch or let it collide with a neighbor again.
 func TestLegendSwatchIsLargeEnoughForAGlyph(t *testing.T) {
 	if legendSwatchSize < 12 {
 		t.Errorf("legend swatch = %v, too small to host a glyph", legendSwatchSize)
 	}
-	if legendLabelX <= legendSwatchSize+4 {
-		t.Errorf("legend label at %v overlaps a %v swatch at x+4", legendLabelX, legendSwatchSize)
+	if legendLabelX <= legendSwatchSize+legendSwatchX {
+		t.Errorf("legend label at %v overlaps a %v swatch at x+%v", legendLabelX, legendSwatchSize, legendSwatchX)
 	}
-	if legendMeaningY+7 > mapLegendHeight {
-		t.Errorf("meaning text at %v overflows the %v row", legendMeaningY, mapLegendHeight)
+	swatchBottom := legendSwatchY + legendSwatchSize
+	if swatchBottom >= legendMeaningY {
+		t.Errorf("swatch bottom %v (y=%v + size %v) collides with meaning text at y=%v", swatchBottom, legendSwatchY, legendSwatchSize, legendMeaningY)
+	}
+	meaningBottom := legendMeaningY + 7*textLineSpacing
+	if meaningBottom > mapLegendHeight {
+		t.Errorf("meaning text box bottom %v (y=%v + 7*%v line spacing) overflows the %v row", meaningBottom, legendMeaningY, textLineSpacing, mapLegendHeight)
 	}
 }

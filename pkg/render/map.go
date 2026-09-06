@@ -32,10 +32,14 @@ const (
 	noticeFontSize     = 14
 	noticeTextMaxWidth = noticeBoxWidth - 2*(noticeTextX-noticeBoxX)
 	textLineSpacing    = 1.35
-	// An 8x8 swatch cannot host a legible pictograph; 12 can at 11 DIP.
+	// An 8x8 swatch cannot host a legible pictograph; 12 can at 11 DIP. The
+	// swatch's y offset moved from the original 4 to 2 so its taller 12 DIP
+	// body still clears the meaning text drawn below it in the same row.
+	legendSwatchX    = float32(4)
+	legendSwatchY    = float32(2)
 	legendSwatchSize = float32(12)
 	legendLabelX     = float32(19)
-	legendMeaningY   = float32(14)
+	legendMeaningY   = float32(15)
 	legendGlyphSize  = float32(11)
 )
 
@@ -861,15 +865,15 @@ func (scene *MapScene) drawMapLegend(screen logicalCanvas, aridity float64) {
 			vector.StrokeLine(screen, x+4, mapLegendOriginY+8, x+12, mapLegendOriginY+8, 3, color.RGBA{R: 48, G: 31, B: 26, A: 235}, false)
 			vector.StrokeLine(screen, x+4, mapLegendOriginY+8, x+12, mapLegendOriginY+8, 1.35, entry.color, false)
 		} else {
-			vector.FillRect(screen, x+4, mapLegendOriginY+4, legendSwatchSize, legendSwatchSize, entry.color, false)
-			vector.StrokeRect(screen, x+4, mapLegendOriginY+4, legendSwatchSize, legendSwatchSize, 0.7, color.RGBA{R: 210, G: 216, B: 210, A: 180}, false)
+			vector.FillRect(screen, x+legendSwatchX, mapLegendOriginY+legendSwatchY, legendSwatchSize, legendSwatchSize, entry.color, false)
+			vector.StrokeRect(screen, x+legendSwatchX, mapLegendOriginY+legendSwatchY, legendSwatchSize, legendSwatchSize, 0.7, color.RGBA{R: 210, G: 216, B: 210, A: 180}, false)
 			if entry.glyph != nil {
-				centre := x + 4 + legendSwatchSize/2
-				entry.glyph.paint(screen, centre, mapLegendOriginY+4+legendSwatchSize/2, legendGlyphSize, glyphInk(entry.color), 1)
+				centre := x + legendSwatchX + legendSwatchSize/2
+				entry.glyph.paint(screen, centre, mapLegendOriginY+legendSwatchY+legendSwatchSize/2, legendGlyphSize, glyphInk(entry.color), 1)
 			}
 		}
 		scene.drawText(screen, entry.label, x+legendLabelX, mapLegendOriginY+1, 8.5, color.RGBA{R: 235, G: 236, B: 226, A: 255})
-		scene.drawText(screen, entry.meaning, x+4, mapLegendOriginY+legendMeaningY, 7, color.RGBA{R: 167, G: 184, B: 181, A: 255})
+		scene.drawText(screen, entry.meaning, x+legendSwatchX, mapLegendOriginY+legendMeaningY, 7, color.RGBA{R: 167, G: 184, B: 181, A: 255})
 	}
 }
 
