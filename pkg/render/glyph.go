@@ -128,7 +128,18 @@ func (glyph *runeGlyph) paint(destination logicalCanvas, centreX, centreY, sizeD
 	// Rasterize at physical pixels, not DIP: logicalCanvas scales coordinates
 	// at draw time, so a DIP-sized glyph would be upscaled and blurry on a
 	// high-DPI target. This mirrors drawText (map.go).
-	options.GeoM.Translate(float64(centreX)*scale, float64(centreY)*scale)
+	//
+	// The extra half pixel de-biases the vertical centring. AlignCenter centres
+	// the line box, and for this font that is also the ink box -- the subset's
+	// glyphs all sit in y [-340, 1740] of a 2048 em, whose centre is 700 units
+	// above the baseline, exactly the (HAscent-HDescent)/2 that text/v2 offsets
+	// the baseline by. What moves the ink is the baseline's own quantization:
+	// ebiten floors it to a whole physical pixel (text/v2 gotext.go,
+	// `origin.Y &^= (1<<6)-1`), so every glyph is biased *up* by the fractional
+	// part -- a full 1 DIP for the legend swatch at DPR 1, which is what pushed
+	// its glyph over the swatch's top edge. Half a pixel turns that floor into
+	// a round, leaving an error of +/-0.5 px with no direction to it.
+	options.GeoM.Translate(float64(centreX)*scale, float64(centreY)*scale+0.5)
 	options.ColorScale.ScaleWithColor(ink)
 	options.ColorScale.ScaleAlpha(float32(alpha))
 	options.PrimaryAlign = text.AlignCenter

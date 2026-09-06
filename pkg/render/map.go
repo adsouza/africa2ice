@@ -32,15 +32,30 @@ const (
 	noticeFontSize     = 14
 	noticeTextMaxWidth = noticeBoxWidth - 2*(noticeTextX-noticeBoxX)
 	textLineSpacing    = 1.35
-	// An 8x8 swatch cannot host a legible pictograph; 12 can at 11 DIP. The
-	// swatch's y offset moved from the original 4 to 2 so its taller 12 DIP
-	// body still clears the meaning text drawn below it in the same row.
+	// An 8x8 swatch cannot host a legible pictograph; 12 can, at the em size
+	// legendGlyphSize measures out below. The swatch's y offset moved from the
+	// original 4 to 2 so its taller 12 DIP body still clears the meaning text
+	// drawn below it in the same row.
 	legendSwatchX    = float32(4)
 	legendSwatchY    = float32(2)
 	legendSwatchSize = float32(12)
 	legendLabelX     = float32(19)
 	legendMeaningY   = float32(15)
-	legendGlyphSize  = float32(11)
+	// legendMeaningSize is the meaning line's font size. legend_test.go
+	// checks that line's box against the row height, so it has to be a name
+	// rather than the same literal spelled in two places.
+	legendMeaningSize = float32(7)
+	// legendGlyphSize applies the map's measured ink-to-em ratio to the
+	// swatch, so the legend glyph clears the swatch's 0.7 stroke the same way
+	// a tile glyph clears its neighbours. At the previous 11 the widest ink
+	// measured 12.57 DIP inside a 12 DIP swatch -- savanna and highlands
+	// painted over the stroke and into the label gutter, and every biome
+	// crossed the top edge because ebiten floors a glyph's baseline to a
+	// whole physical pixel, which shifts the ink up by up to 1 DIP at DPR 1.
+	// At 8.4 the widest ink measures 9.93 DIP, leaving ~1 DIP per side: more
+	// than that quantization can spend. TestLegendGlyphInkStaysInsideItsSwatch
+	// pins it.
+	legendGlyphSize = legendSwatchSize * glyphCellFraction
 )
 
 var (
@@ -876,8 +891,13 @@ func (scene *MapScene) drawMapLegend(screen logicalCanvas, aridity float64) {
 	for index, entry := range entries {
 		x := float32(mapOriginX) + float32(index)*entryWidth
 		if entry.edge {
-			vector.StrokeLine(screen, x+4, mapLegendOriginY+8, x+12, mapLegendOriginY+8, 3, color.RGBA{R: 48, G: 31, B: 26, A: 235}, false)
-			vector.StrokeLine(screen, x+4, mapLegendOriginY+8, x+12, mapLegendOriginY+8, 1.35, entry.color, false)
+			// Spelled with the swatch constants rather than the literals the
+			// 8x8 era left behind: the rule now spans the same box every
+			// other entry's swatch fills, and its centre line follows
+			// legendSwatchY instead of coincidentally matching it.
+			ruleY := mapLegendOriginY + legendSwatchY + legendSwatchSize/2
+			vector.StrokeLine(screen, x+legendSwatchX, ruleY, x+legendSwatchX+legendSwatchSize, ruleY, 3, color.RGBA{R: 48, G: 31, B: 26, A: 235}, false)
+			vector.StrokeLine(screen, x+legendSwatchX, ruleY, x+legendSwatchX+legendSwatchSize, ruleY, 1.35, entry.color, false)
 		} else {
 			vector.FillRect(screen, x+legendSwatchX, mapLegendOriginY+legendSwatchY, legendSwatchSize, legendSwatchSize, entry.color, false)
 			vector.StrokeRect(screen, x+legendSwatchX, mapLegendOriginY+legendSwatchY, legendSwatchSize, legendSwatchSize, 0.7, color.RGBA{R: 210, G: 216, B: 210, A: 180}, false)
@@ -887,7 +907,7 @@ func (scene *MapScene) drawMapLegend(screen logicalCanvas, aridity float64) {
 			}
 		}
 		scene.drawText(screen, entry.label, x+legendLabelX, mapLegendOriginY+1, 8.5, color.RGBA{R: 235, G: 236, B: 226, A: 255})
-		scene.drawText(screen, entry.meaning, x+legendSwatchX, mapLegendOriginY+legendMeaningY, 7, color.RGBA{R: 167, G: 184, B: 181, A: 255})
+		scene.drawText(screen, entry.meaning, x+legendSwatchX, mapLegendOriginY+legendMeaningY, legendMeaningSize, color.RGBA{R: 167, G: 184, B: 181, A: 255})
 	}
 }
 

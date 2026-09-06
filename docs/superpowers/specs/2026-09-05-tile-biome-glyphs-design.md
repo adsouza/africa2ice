@@ -188,7 +188,10 @@ An 8×8 swatch cannot host a legible glyph. Changes:
 - Swatch grows 8×8 → 12×12, staying at `(x+4, y+4)`.
 - Label x offset 15 → 19.
 - Meaning text moves `y+13` → `y+14` to clear the taller swatch.
-- Glyph drawn inside the swatch at 11 px with the §6 ink rule, for the six biome entries only.
+- Glyph drawn inside the swatch with the §6 ink rule, for the six biome entries only, at the em
+  size that puts its measured ink inside the 12 DIP swatch — the same ink-to-em ratio §5.2 derives
+  for the map, so 8.4 DIP for a measured 9.93 DIP of ink. An 11 DIP em measures 12.57 DIP of ink
+  and paints over the swatch stroke and into the label gutter.
 
 `escarpment` keeps its stroked-line treatment; `unknown` and `water` keep a bare swatch — water is
 already unambiguous from colour and coastline shape, so it gets no glyph even though it is neither

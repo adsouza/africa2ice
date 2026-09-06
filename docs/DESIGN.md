@@ -6995,8 +6995,9 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   principal environmental hazard; water says it cannot be occupied and unexplored terrain says its
   details are not yet known. The legend therefore remains meaningful without color perception.
 - **Biome pictographs:** at Focus, each explored land tile additionally draws a monochrome pictograph
-  chosen by biome, and the legend swatch draws the same pictograph at 11 px; biome identity therefore
-  carries a redundant shape channel at Focus, not only a color one. The glyph is read straight from
+  chosen by biome, and the legend swatch draws the same pictograph, each sized so that its measured
+  ink extent — not its nominal em size — leaves a margin inside the box carrying it; biome identity
+  therefore carries a redundant shape channel at Focus, not only a color one. The glyph is read from
   the tile's already-classified biome and the same maximum-contrast ink rule as its fill, so it can
   never desync from the projection or state anything the tile color does not already state. Band
   discs deliberately carry no glyph: at their roughly 15 px inscribed square two species pictographs

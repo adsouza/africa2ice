@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
+	"github.com/hajimehoshi/ebiten/v2"
 )
 
 func TestMapLegendExplainsEveryRenderedTileClass(t *testing.T) {
@@ -93,8 +94,69 @@ func TestLegendSwatchIsLargeEnoughForAGlyph(t *testing.T) {
 	if swatchBottom >= legendMeaningY {
 		t.Errorf("swatch bottom %v (y=%v + size %v) collides with meaning text at y=%v", swatchBottom, legendSwatchY, legendSwatchSize, legendMeaningY)
 	}
-	meaningBottom := legendMeaningY + 7*textLineSpacing
+	meaningBottom := legendMeaningY + legendMeaningSize*textLineSpacing
 	if meaningBottom > mapLegendHeight {
-		t.Errorf("meaning text box bottom %v (y=%v + 7*%v line spacing) overflows the %v row", meaningBottom, legendMeaningY, textLineSpacing, mapLegendHeight)
+		t.Errorf("meaning text box bottom %v (y=%v + %v*%v line spacing) overflows the %v row", meaningBottom, legendMeaningY, legendMeaningSize, textLineSpacing, mapLegendHeight)
+	}
+}
+
+// The legend swatch is the smallest box a pictograph is asked to sit in, so it
+// is where an ink extent larger than the em size shows first. At the original
+// 11 DIP em every biome crossed the swatch's top edge and savanna and mountain
+// highlands crossed both sides, painting over the 0.7 stroke and into the
+// label gutter -- and nothing caught it, because the only glyph assertions in
+// the package counted pixels rather than locating them.
+//
+// This paints at the exact coordinates drawMapLegend uses for the first entry
+// (absolute position matters: the baseline is quantized to a whole physical
+// pixel) and asserts every inked pixel lands inside the swatch, at both device
+// scales the reference browsers run at.
+func TestLegendGlyphInkStaysInsideItsSwatch(t *testing.T) {
+	scene := NewMapScene()
+	// Wide and tall enough that ink escaping the swatch is recorded rather
+	// than clipped: the swatch sits at x 24-36, y 50-62 for the first entry.
+	const canvasWidth, canvasHeight = 96, 96
+	swatchLeft := float32(mapOriginX) + legendSwatchX
+	swatchTop := float32(mapLegendOriginY) + legendSwatchY
+	for _, scale := range []float64{1, 2} {
+		for _, entry := range scene.mapLegendEntries(0.4) {
+			if entry.glyph == nil {
+				continue
+			}
+			target := ebiten.NewImage(int(canvasWidth*scale), int(canvasHeight*scale))
+			target.Fill(entry.color)
+			entry.glyph.paint(
+				newLogicalCanvas(target, scale),
+				swatchLeft+legendSwatchSize/2, swatchTop+legendSwatchSize/2,
+				legendGlyphSize, glyphInk(entry.color), 1,
+			)
+			minX, minY, maxX, maxY, inked := canvasWidth*scale, canvasHeight*scale, -1.0, -1.0, 0
+			for y := range int(canvasHeight * scale) {
+				for x := range int(canvasWidth * scale) {
+					r, g, b, _ := target.At(x, y).RGBA()
+					if r>>8 == uint32(entry.color.R) && g>>8 == uint32(entry.color.G) && b>>8 == uint32(entry.color.B) {
+						continue
+					}
+					inked++
+					// A pixel covers [i, i+1) physical px, so its DIP extent
+					// is [i/scale, (i+1)/scale).
+					minX, minY = min(minX, float64(x)/scale), min(minY, float64(y)/scale)
+					maxX, maxY = max(maxX, float64(x+1)/scale), max(maxY, float64(y+1)/scale)
+				}
+			}
+			target.Deallocate()
+			if inked == 0 {
+				t.Fatalf("scale %v: %s legend glyph painted nothing", scale, entry.label)
+			}
+			t.Logf("scale %v %-20s ink x=[%.2f..%.2f] y=[%.2f..%.2f] over swatch x=[%.0f..%.0f] y=[%.0f..%.0f]",
+				scale, entry.label, minX, maxX, minY, maxY,
+				swatchLeft, swatchLeft+legendSwatchSize, swatchTop, swatchTop+legendSwatchSize)
+			if minX < float64(swatchLeft) || maxX > float64(swatchLeft+legendSwatchSize) ||
+				minY < float64(swatchTop) || maxY > float64(swatchTop+legendSwatchSize) {
+				t.Errorf("scale %v: %s legend glyph ink x=[%.2f..%.2f] y=[%.2f..%.2f] escapes the swatch x=[%.0f..%.0f] y=[%.0f..%.0f]",
+					scale, entry.label, minX, maxX, minY, maxY,
+					swatchLeft, swatchLeft+legendSwatchSize, swatchTop, swatchTop+legendSwatchSize)
+			}
+		}
 	}
 }
