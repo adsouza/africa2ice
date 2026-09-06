@@ -30,6 +30,7 @@ const (
 	IntentCameraToggle
 	IntentFocusTrait
 	IntentFocusEvent
+	IntentFocusInterbreedPartner
 	IntentOpenMenu
 	IntentBack
 	IntentContinue
@@ -94,6 +95,8 @@ func (kind IntentKind) String() string {
 		return "focus-trait"
 	case IntentFocusEvent:
 		return "focus-event"
+	case IntentFocusInterbreedPartner:
+		return "focus-interbreed-partner"
 	case IntentOpenMenu:
 		return "open-menu"
 	case IntentBack:

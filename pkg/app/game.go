@@ -776,6 +776,29 @@ func (g *Game) syncAssignmentDraft(force bool) {
 	}
 }
 
+// focusInterbreedPartner moves the partner comparison onto another candidate
+// without spending anything. The picker chips used to emit IntentInterbreed,
+// so the only way to see a second candidate's genetics was to breed with it —
+// which defeated the block that exists to make that choice informed.
+//
+// Focus is validated against the selected band's own candidate list, so it
+// always names a band the player could actually breed with; requestInterbreed
+// passes it straight to the domain as the target. The partner comparison
+// block is the feedback, so no Field Note is disturbed.
+func (g *Game) focusInterbreedPartner(id gameapi.BandID) {
+	band := g.selected()
+	if band == nil {
+		return
+	}
+	for _, candidate := range band.InterbreedCandidateIDs {
+		if candidate != id {
+			continue
+		}
+		g.interbreedFocus = id
+		return
+	}
+}
+
 func (g *Game) syncInterbreedFocus(band *gameapi.Band) {
 	if band == nil || len(band.InterbreedCandidateIDs) == 0 {
 		g.interbreedFocus = 0

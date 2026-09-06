@@ -40,6 +40,8 @@ func uiIntentLogAttributes(intent hud.Intent) []any {
 		return []any{"trait", uint8(intent.Trait)}
 	case hud.IntentFocusEvent:
 		return []any{"event", uint8(intent.Event)}
+	case hud.IntentFocusInterbreedPartner:
+		return []any{"band", uint64(intent.Band)}
 	case hud.IntentOpenStorage:
 		return []any{"save", intent.Save}
 	case hud.IntentSaveSlot, hud.IntentLoadSlot, hud.IntentDeleteSlot:
@@ -128,6 +130,8 @@ func (g *Game) handleIntent(intent hud.Intent) {
 		if note, ok := ui.EventKindFieldNote(intent.Event); ok {
 			g.setFieldNote(note)
 		}
+	case hud.IntentFocusInterbreedPartner:
+		g.focusInterbreedPartner(intent.Band)
 	case hud.IntentOpenMenu:
 		g.dispatchBatch([]ui.Action{ui.PushSceneAction(ui.SceneMenu)})
 	case hud.IntentCameraToggle:

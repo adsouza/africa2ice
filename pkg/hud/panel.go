@@ -133,6 +133,10 @@ type handles struct {
 	// the focused-partner block below the interbreed picker; nil unless the
 	// selected sapiens band has an open spatial action and at least one
 	// interbreed candidate (see buildPartnerGenetics).
+	// partnerPicker holds the B<id> chips that choose which candidate the
+	// block below describes. They focus rather than commit, so a test can
+	// prove clicking one spends nothing.
+	partnerPicker          []*widget.Button
 	partnerGenetics        *widget.Container
 	partnerGeneticsHeading *widget.Text
 	partnerGeneticsValues  [gameapi.HeritableTraitCount]*widget.Text

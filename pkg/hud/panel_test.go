@@ -562,6 +562,41 @@ func TestMoveRowButtonsFitThePanel(t *testing.T) {
 	}
 }
 
+// TestPartnerPickerFocusesWithoutCommitting covers the picker's original
+// defect: every chip emitted IntentInterbreed, the same intent as the button
+// that spends the band's spatial action, so the only way to see a second
+// candidate's genetics was to breed with it. The chips choose what the
+// comparison describes; the button remains the sole commit.
+func TestPartnerPickerFocusesWithoutCommitting(t *testing.T) {
+	frame := testFrame(1)
+	frame.Bands[0].InterbreedCandidateIDs = []gameapi.BandID{2, 3}
+	frame.Bands = append(frame.Bands,
+		gameapi.Band{ID: 2, Species: gameapi.ArchaicHominin, Population: 40, TileID: 0},
+		gameapi.Band{ID: 3, Species: gameapi.ArchaicHominin, Population: 25, TileID: 0},
+	)
+
+	panel := New()
+	state := testState(frame, 1)
+	panel.Update(state)
+
+	if len(panel.handles.partnerPicker) != 2 {
+		t.Fatalf("picker chips = %d, want one per candidate", len(panel.handles.partnerPicker))
+	}
+	panel.handles.partnerPicker[1].Click()
+	intents := panel.Update(state)
+	if len(intents) != 1 || intents[0].Kind != IntentFocusInterbreedPartner || intents[0].Band != 3 {
+		t.Fatalf("picker click = %+v, want a focus intent naming B3", intents)
+	}
+
+	if panel.handles.interbreed == nil {
+		t.Fatal("interbreed button missing")
+	}
+	panel.handles.interbreed.Click()
+	if intents := panel.Update(state); len(intents) != 1 || intents[0].Kind != IntentInterbreed {
+		t.Fatalf("interbreed button = %+v, want the commit intent", intents)
+	}
+}
+
 // TestPartnerGeneticsShowTheFocusedCandidate covers F2: interbreeding moves
 // the band's heritable traits toward the partner's, but the panel never
 // showed the partner's own values, so choosing among more than one

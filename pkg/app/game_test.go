@@ -830,6 +830,55 @@ func TestTileClicksStillSelectALoneArchaicBand(t *testing.T) {
 	}
 }
 
+// TestFocusingAnInterbreedPartnerDoesNotCommitToIt covers the partner picker's
+// original defect: its chips emitted the same intent as the Interbreed button,
+// so clicking one to compare a second candidate's genetics immediately bred
+// with it. buildPartnerGenetics exists because "a choice among more than one
+// candidate was blind", but the only control that changed which partner it
+// described was also the one that spent the band's spatial action.
+func TestFocusingAnInterbreedPartnerDoesNotCommitToIt(t *testing.T) {
+	frame := migrationPreviewFrame()
+	frame.Bands = append(frame.Bands,
+		gameapi.Band{ID: 12, Species: gameapi.ArchaicHominin, TileID: 0, Population: 90},
+		gameapi.Band{ID: 13, Species: gameapi.ArchaicHominin, TileID: 0, Population: 40},
+	)
+	frame.Bands[0].InterbreedCandidateIDs = []gameapi.BandID{12, 13}
+	stub := &gameStub{frame: frame}
+	game := New(stub)
+	if game.interbreedFocus != 12 {
+		t.Fatalf("initial focus = %d, want the first candidate", game.interbreedFocus)
+	}
+
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentFocusInterbreedPartner, Band: 13}})
+	if game.interbreedFocus != 13 {
+		t.Fatalf("focus after picking B13 = %d", game.interbreedFocus)
+	}
+	if stub.appliedCommand != nil {
+		t.Fatalf("focusing a partner applied %T", stub.appliedCommand)
+	}
+	// The panel reads the focus to decide which partner buildPartnerGenetics
+	// describes, so the comparison follows the pick without a command.
+	if got := game.hudState().InterbreedFocus; got != 13 {
+		t.Fatalf("panel InterbreedFocus = %d, want 13", got)
+	}
+
+	// A candidate the selected band does not have is not a focus.
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentFocusInterbreedPartner, Band: 99}})
+	if game.interbreedFocus != 13 {
+		t.Fatalf("focus moved to a non-candidate: %d", game.interbreedFocus)
+	}
+
+	// Committing is still exactly one control, and it uses the focused partner.
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentInterbreed, Band: 13}})
+	command, ok := stub.appliedCommand.(gameapi.Interbreed)
+	if !ok {
+		t.Fatalf("Interbreed intent applied %T", stub.appliedCommand)
+	}
+	if command.TargetBandID != 13 {
+		t.Fatalf("committed against band %d, want the focused 13", command.TargetBandID)
+	}
+}
+
 // The title and game-menu overlays are panel widgets from Task 13 onward.
 func TestTitleAndGameMenuExposeCampaignNavigation(t *testing.T) {
 	stub := &gameStub{frame: migrationPreviewFrame()}

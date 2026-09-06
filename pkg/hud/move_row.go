@@ -227,7 +227,12 @@ func (p *Panel) buildMoveBody(state State, band *gameapi.Band) widget.PreferredS
 			if id == partner {
 				border = colorInterbreed
 			}
-			picker.AddChild(t.button(fmt.Sprintf("B%d", id), 9, border, colorInterbreed, func() { p.emit(Intent{Kind: IntentInterbreed, Band: id}) }))
+			// Picking a partner only moves the comparison below; the
+			// Interbreed button remains the one control that spends the
+			// band's spatial action.
+			chip := t.button(fmt.Sprintf("B%d", id), 9, border, colorInterbreed, func() { p.emit(Intent{Kind: IntentFocusInterbreedPartner, Band: id}) })
+			p.handles.partnerPicker = append(p.handles.partnerPicker, chip)
+			picker.AddChild(chip)
 		}
 		body.AddChild(picker)
 	}
