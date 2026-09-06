@@ -62,12 +62,16 @@ func main() {
 	if !strings.Contains(string(notices), fontSource) {
 		fail(fmt.Errorf("bundled Go Regular license does not identify %s", fontSource))
 	}
+	if !strings.Contains(string(notices), "## Bundled Noto Emoji subset") {
+		fail(errors.New("THIRD_PARTY_NOTICES.md does not include the bundled Noto Emoji subset license"))
+	}
 	for _, required := range [...]string{
 		"### Apache License 2.0",
 		"### `github.com/rivo/uniseg` — MIT License",
 		"### `github.com/jezek/xgb` — BSD-3-Clause with patent grant",
 		"### `golang.org/x/image`, `x/sync`, `x/sys`, and `x/text` — BSD-3-Clause",
 		"### `github.com/go-text/typesetting` — Unlicense OR BSD-3-Clause",
+		"### Noto Emoji — SIL Open Font License 1.1",
 	} {
 		if !strings.Contains(string(notices), required) {
 			fail(fmt.Errorf("THIRD_PARTY_NOTICES.md is missing required license section %q", required))
