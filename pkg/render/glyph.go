@@ -64,8 +64,10 @@ const (
 // Noto Emoji is line art, and line art is what dissolves at this size: a
 // contour authored at ~20 font units lands at 0.2 px once scaled and vanishes
 // into antialiasing, while a filled region merely shrinks. The six chosen
-// glyphs measured on the survivable side, but savanna is closest to the line.
-// This ships empty; an entry here needs no caller changes.
+// glyphs measured on the survivable side, but riverine woodland is closest to
+// the line at 173/576 px changed in TestRuneGlyphPaintsInkAtFocusTileSize,
+// against 253-273/576 for the other five. This ships empty; an entry here
+// needs no caller changes.
 var biomeGlyphOverrides = map[gameapi.Biome]glyphPainter{}
 
 // glyphPainter draws one pictograph centred at a DIP point.

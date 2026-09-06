@@ -2,6 +2,7 @@ package render
 
 import (
 	"image/color"
+	"math"
 	"testing"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
@@ -70,6 +71,14 @@ func TestGlyphAlphaIsZeroAtOverviewAndFullAtFocus(t *testing.T) {
 	if got := glyphAlpha(glyphMinCell - 0.01); got != 0 {
 		t.Errorf("just below the floor alpha = %v, want 0", got)
 	}
+	// Pin an intermediate point so a degenerate step function (0 below the
+	// floor, 1 above it, no ramp) cannot pass: the function is documented to
+	// ramp *linearly* from glyphMinCell (16) to mapTileSize*FocusScale (24),
+	// so the midpoint cell 20 must land at 0.5, not jump straight to 1.
+	const glyphAlphaEpsilon = 1e-9
+	if got := glyphAlpha(20); math.Abs(got-0.5) > glyphAlphaEpsilon {
+		t.Errorf("midpoint cell 20 alpha = %v, want 0.5 (linear ramp from glyphMinCell to mapTileSize*FocusScale)", got)
+	}
 	previous := 0.0
 	for cell := float32(glyphMinCell); cell <= mapTileSize*FocusScale; cell += 0.5 {
 		alpha := glyphAlpha(cell)
@@ -114,15 +123,19 @@ func TestBiomeGlyphOverrideTakesPrecedenceOverTheFontGlyph(t *testing.T) {
 	}
 }
 
-type countingGlyphPainter struct{ calls int }
+// countingGlyphPainter only needs to satisfy glyphPainter; the override test
+// distinguishes it from the font-backed painters by identity, not by call
+// count.
+type countingGlyphPainter struct{}
 
 func (p *countingGlyphPainter) paint(logicalCanvas, float32, float32, float32, color.RGBA, float64) {
-	p.calls++
 }
 
-// A painted glyph must actually change pixels at the size it ships at. This is
-// the one test that proves the ebiten text path renders these outlines at all;
-// everything above it would pass against a painter that drew nothing.
+// A painted glyph must actually change pixels at the size it ships at, in the
+// right amount, and in the ink colour it was actually asked to paint. This is
+// the one test that proves the ebiten text path renders these outlines at
+// all; a painter that drew nothing, filled the whole tile solid, or ignored
+// its ink argument must all fail here.
 func TestRuneGlyphPaintsInkAtFocusTileSize(t *testing.T) {
 	painters, _, err := newBiomeGlyphs()
 	if err != nil {
@@ -130,24 +143,73 @@ func TestRuneGlyphPaintsInkAtFocusTileSize(t *testing.T) {
 	}
 	for biome := gameapi.Biome(0); biome < gameapi.BiomeCount; biome++ {
 		background := climateBiomeColor(biome, 0)
+		ink := glyphInk(background)
 		target := ebiten.NewImage(24, 24)
 		target.Fill(background)
-		painters[biome].paint(newLogicalCanvas(target, 1), 12, 12, 20, glyphInk(background), 1)
+		painters[biome].paint(newLogicalCanvas(target, 1), 12, 12, 20, ink, 1)
 
 		changed := 0
+		maxCoverage := 0.0 // how far toward pure ink the best-covered pixel gets, 0..1
 		for y := 0; y < 24; y++ {
 			for x := 0; x < 24; x++ {
-				if r, g, b, _ := target.At(x, y).RGBA(); r>>8 != uint32(background.R) || g>>8 != uint32(background.G) || b>>8 != uint32(background.B) {
-					changed++
+				r, g, b, _ := target.At(x, y).RGBA()
+				pr, pg, pb := r>>8, g>>8, b>>8
+				if pr == uint32(background.R) && pg == uint32(background.G) && pb == uint32(background.B) {
+					continue
+				}
+				changed++
+
+				// Antialiasing blends background and ink, so an exact-match
+				// count is wrong -- a changed pixel is a coverage-weighted
+				// blend of the two: pixel = background + t*(ink-background)
+				// for some coverage t in (0,1]. Project the pixel onto that
+				// line and check the leftover (perpendicular) component is
+				// negligible: a painter that ignored its ink argument, or
+				// otherwise painted some third colour, leaves a residual far
+				// larger than 8-bit rounding noise (measured max
+				// residual-squared across all six biomes is under 0.6).
+				bgR, bgG, bgB := float64(background.R), float64(background.G), float64(background.B)
+				inkR, inkG, inkB := float64(ink.R), float64(ink.G), float64(ink.B)
+				dR, dG, dB := inkR-bgR, inkG-bgG, inkB-bgB
+				cR, cG, cB := float64(pr)-bgR, float64(pg)-bgG, float64(pb)-bgB
+				denom := dR*dR + dG*dG + dB*dB
+				if denom == 0 {
+					t.Fatalf("%v: ink and background are identical, cannot verify glyph colour", biome)
+				}
+				coverage := (dR*cR + dG*cG + dB*cB) / denom
+				residualR, residualG, residualB := cR-coverage*dR, cG-coverage*dG, cB-coverage*dB
+				if residual := residualR*residualR + residualG*residualG + residualB*residualB; residual > 50 {
+					t.Errorf("%v: pixel (%d,%d) = (%d,%d,%d) is not a background/ink blend (residual^2=%.1f, coverage=%.2f)", biome, x, y, pr, pg, pb, residual, coverage)
+				}
+				if coverage > maxCoverage {
+					maxCoverage = coverage
 				}
 			}
 		}
 		target.Deallocate()
-		t.Logf("%v: %d/576 pixels changed", biome, changed)
+		t.Logf("%v: %d/576 pixels changed, max ink coverage %.2f", biome, changed, maxCoverage)
+
 		// A glyph covering under 5% of a 576px cell is a hairline, which is the
 		// failure mode line-art fonts have at this size.
 		if changed < 29 {
-			t.Errorf("%v glyph changed only %d of 576 pixels", biome, changed)
+			t.Errorf("%v glyph changed only %d of 576 pixels, want >= 29 (5%% floor)", biome, changed)
+		}
+		// A ceiling catches a painter that fills the whole tile solid instead
+		// of drawing a glyph (576 changed pixels). Measured coverage across
+		// all six biomes: riverine woodland 173, savanna 253, shrubland 234,
+		// highlands 269, desert 247, tundra 273 (out of 576) -- a ceiling at
+		// 345 (60% of the tile) leaves comfortable headroom above the real
+		// maximum (273, ~47%) while still rejecting a solid fill outright.
+		if changed > 345 {
+			t.Errorf("%v glyph changed %d of 576 pixels, want <= 345 (60%% ceiling)", biome, changed)
+		}
+		// At least one pixel must actually reach close to full ink coverage,
+		// not just a faint fringe -- otherwise a painter that barely tints
+		// the background (rather than drawing ink) could still clear the
+		// floor above on pixel count alone. Measured max coverage is >=0.96
+		// for all six biomes.
+		if maxCoverage < 0.8 {
+			t.Errorf("%v: no pixel reached >= 0.8 ink coverage (max %.2f); glyph may not actually paint in ink", biome, maxCoverage)
 		}
 	}
 }
