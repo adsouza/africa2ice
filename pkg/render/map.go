@@ -32,6 +32,30 @@ const (
 	noticeFontSize     = 14
 	noticeTextMaxWidth = noticeBoxWidth - 2*(noticeTextX-noticeBoxX)
 	textLineSpacing    = 1.35
+	// An 8x8 swatch cannot host a legible pictograph; 12 can, at the em size
+	// legendGlyphSize measures out below. The swatch's y offset moved from the
+	// original 4 to 2 so its taller 12 DIP body still clears the meaning text
+	// drawn below it in the same row.
+	legendSwatchX    = float32(4)
+	legendSwatchY    = float32(2)
+	legendSwatchSize = float32(12)
+	legendLabelX     = float32(19)
+	legendMeaningY   = float32(15)
+	// legendMeaningSize is the meaning line's font size. legend_test.go
+	// checks that line's box against the row height, so it has to be a name
+	// rather than the same literal spelled in two places.
+	legendMeaningSize = float32(7)
+	// legendGlyphSize applies the map's measured ink-to-em ratio to the
+	// swatch, so the legend glyph clears the swatch's 0.7 stroke the same way
+	// a tile glyph clears its neighbours. At the previous 11 the widest ink
+	// measured 13.00 DIP inside a 12 DIP swatch -- mountainous highlands
+	// painted over the stroke and into the label gutter, and every biome
+	// crossed the top edge because ebiten floors a glyph's baseline to a
+	// whole physical pixel, which shifts the ink up by up to 1 DIP at DPR 1.
+	// At 8.4 the widest ink measures 9.93 DIP, leaving ~1 DIP per side: more
+	// than that quantization can spend. TestLegendGlyphInkStaysInsideItsSwatch
+	// pins it.
+	legendGlyphSize = legendSwatchSize * glyphCellFraction
 )
 
 var (
@@ -44,6 +68,8 @@ var (
 
 type MapScene struct {
 	faceSource      *text.GoTextFaceSource
+	biomeGlyphs     [gameapi.BiomeCount]glyphPainter
+	glyphDraws      uint64
 	terrainImage    *ebiten.Image
 	terrainRevision uint64
 	terrainAridity  float64
@@ -131,7 +157,11 @@ func NewMapScene() *MapScene {
 	if err != nil {
 		panic(err)
 	}
-	return &MapScene{faceSource: source}
+	painters, err := newBiomeGlyphs()
+	if err != nil {
+		panic(err)
+	}
+	return &MapScene{faceSource: source, biomeGlyphs: painters}
 }
 
 // Update advances the fog halo's shimmer clock. It is the scene's only
@@ -273,8 +303,19 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 	mapCanvas := logicalCanvas{image: screen.image.SubImage(clip).(*ebiten.Image), scale: screen.scale}
 
 	markerScale := geometry.Cell / mapTileSize
+	// This reset only fires on a recompute: Draw returns early on a
+	// frame-cache hit, before drawFrame (and this line) ever runs. So a
+	// cache-hit Draw leaves glyphDraws holding the prior composition's
+	// count. That is fine -- a cache hit means nothing was redrawn, so the
+	// stale count still describes exactly what is on screen.
+	scene.glyphDraws = 0
 	scene.drawTerrain(mapCanvas, geometry, frame)
 	scene.drawHalo(mapCanvas, geometry, frame)
+	// Glyphs must land here: above terrain/halo (so they're visible) but
+	// below the reachable-tile overlay, guide highlight, markers, and band
+	// discs drawn next (so those selection affordances stay readable over a
+	// biome's pictograph rather than getting obscured by it).
+	scene.drawBiomeGlyphs(mapCanvas, geometry, frame)
 	scene.drawReachableTiles(mapCanvas, geometry, frame, selectedBand)
 	scene.drawGuideHighlight(mapCanvas, geometry, frame, selectedBand)
 	// The pointer's tile is tinted on the map itself now that the bottom
@@ -542,6 +583,45 @@ func (scene *MapScene) drawHalo(screen logicalCanvas, geometry MapGeometry, fram
 	}
 }
 
+// drawBiomeGlyphs paints one pictograph per explored land tile, giving biome
+// identity a shape channel alongside the L* fill ladder. It is deliberately not
+// baked into the terrain cache: that image is a fixed 8 px-per-tile raster the
+// camera scales up with FilterNearest, so a baked glyph would be upscaled 3x
+// into mush at exactly the zoom where it is meant to be legible.
+func (scene *MapScene) drawBiomeGlyphs(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame) {
+	alpha := glyphAlpha(geometry.Cell)
+	if alpha <= 0 {
+		return
+	}
+	size := geometry.Cell * glyphCellFraction
+	// The ink is a pure function of biome, so hoist it out of the tile loop.
+	// glyphInk costs six math.Pow calls through relativeLuminance; paying that
+	// per tile priced the whole grid for six distinct answers.
+	var ink [gameapi.BiomeCount]color.RGBA
+	for biome := gameapi.Biome(0); biome < gameapi.BiomeCount; biome++ {
+		ink[biome] = glyphInk(climateBiomeColor(biome, frame.Climate.AridityIndex))
+	}
+	for _, tile := range frame.Tiles {
+		if !tile.Explored || !tile.Land || int(tile.Biome) >= len(scene.biomeGlyphs) {
+			continue
+		}
+		x, y := geometry.TilePoint(tile)
+		// The SubImage clip makes an off-screen glyph harmless, but not free:
+		// text.Draw still shapes, rasterizes and submits it. At focus the grid
+		// is 96x64 while the map rectangle shows about 36x27 cells, so relying
+		// on the clip alone paints roughly six tiles for every one visible.
+		// Skip them here instead. One em of slack on each edge is far more
+		// than the widest glyph's half-ink (9.93 DIP against a 16.8 DIP em),
+		// so nothing partly on screen is dropped.
+		if x < mapOriginX-size || x > mapOriginX+mapAreaWidth+size ||
+			y < mapOriginY-size || y > geometry.visibleBottom()+size {
+			continue
+		}
+		scene.biomeGlyphs[tile.Biome].paint(screen, x, y, size, ink[tile.Biome], alpha)
+		scene.glyphDraws++
+	}
+}
+
 func (scene *MapScene) drawFlatTerrain(screen logicalCanvas, frame *gameapi.Frame) {
 	tileExtent := float32(mapTileSize - 0.4)
 	for _, tile := range frame.Tiles {
@@ -806,19 +886,28 @@ func (scene *MapScene) drawTimeline(screen logicalCanvas, frame *gameapi.Frame, 
 
 func (scene *MapScene) drawMapLegend(screen logicalCanvas, aridity float64) {
 	vector.FillRect(screen, mapOriginX, mapLegendOriginY, 864, mapLegendHeight, color.RGBA{R: 18, G: 27, B: 33, A: 245}, false)
-	entries := mapLegendEntries(aridity)
+	entries := scene.mapLegendEntries(aridity)
 	const entryWidth = float32(96)
 	for index, entry := range entries {
 		x := float32(mapOriginX) + float32(index)*entryWidth
 		if entry.edge {
-			vector.StrokeLine(screen, x+4, mapLegendOriginY+8, x+12, mapLegendOriginY+8, 3, color.RGBA{R: 48, G: 31, B: 26, A: 235}, false)
-			vector.StrokeLine(screen, x+4, mapLegendOriginY+8, x+12, mapLegendOriginY+8, 1.35, entry.color, false)
+			// Spelled with the swatch constants rather than the literals the
+			// 8x8 era left behind: the rule now spans the same box every
+			// other entry's swatch fills, and its centre line follows
+			// legendSwatchY instead of coincidentally matching it.
+			ruleY := mapLegendOriginY + legendSwatchY + legendSwatchSize/2
+			vector.StrokeLine(screen, x+legendSwatchX, ruleY, x+legendSwatchX+legendSwatchSize, ruleY, 3, color.RGBA{R: 48, G: 31, B: 26, A: 235}, false)
+			vector.StrokeLine(screen, x+legendSwatchX, ruleY, x+legendSwatchX+legendSwatchSize, ruleY, 1.35, entry.color, false)
 		} else {
-			vector.FillRect(screen, x+4, mapLegendOriginY+4, 8, 8, entry.color, false)
-			vector.StrokeRect(screen, x+4, mapLegendOriginY+4, 8, 8, 0.7, color.RGBA{R: 210, G: 216, B: 210, A: 180}, false)
+			vector.FillRect(screen, x+legendSwatchX, mapLegendOriginY+legendSwatchY, legendSwatchSize, legendSwatchSize, entry.color, false)
+			vector.StrokeRect(screen, x+legendSwatchX, mapLegendOriginY+legendSwatchY, legendSwatchSize, legendSwatchSize, 0.7, color.RGBA{R: 210, G: 216, B: 210, A: 180}, false)
+			if entry.glyph != nil {
+				centre := x + legendSwatchX + legendSwatchSize/2
+				entry.glyph.paint(screen, centre, mapLegendOriginY+legendSwatchY+legendSwatchSize/2, legendGlyphSize, glyphInk(entry.color), 1)
+			}
 		}
-		scene.drawText(screen, entry.label, x+15, mapLegendOriginY+1, 8.5, color.RGBA{R: 235, G: 236, B: 226, A: 255})
-		scene.drawText(screen, entry.meaning, x+4, mapLegendOriginY+13, 7, color.RGBA{R: 167, G: 184, B: 181, A: 255})
+		scene.drawText(screen, entry.label, x+legendLabelX, mapLegendOriginY+1, 8.5, color.RGBA{R: 235, G: 236, B: 226, A: 255})
+		scene.drawText(screen, entry.meaning, x+legendSwatchX, mapLegendOriginY+legendMeaningY, legendMeaningSize, color.RGBA{R: 167, G: 184, B: 181, A: 255})
 	}
 }
 

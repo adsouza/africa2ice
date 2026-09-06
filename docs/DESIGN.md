@@ -6994,6 +6994,15 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   approximate colors. The accompanying text names the characteristic resource opportunity and
   principal environmental hazard; water says it cannot be occupied and unexplored terrain says its
   details are not yet known. The legend therefore remains meaningful without color perception.
+- **Biome pictographs:** at Focus, each explored land tile additionally draws a monochrome pictograph
+  chosen by biome, and the legend swatch draws the same pictograph, each sized so that its measured
+  ink extent — not its nominal em size — leaves a margin inside the box carrying it; biome identity
+  therefore carries a redundant shape channel at Focus, not only a color one. The glyph is read from
+  the tile's already-classified biome and the same maximum-contrast ink rule as its fill, so it can
+  never desync from the projection or state anything the tile color does not already state. Band
+  discs deliberately carry no glyph: at their roughly 15 px inscribed square two species pictographs
+  are indistinguishable, and a figure there would occlude the wedge boundary it was meant to
+  reinforce, so this records the rejection rather than leaving it to be revived without new evidence.
 - **Escarpment overlay:** once both endpoint tiles are explored, draw each authored escarpment as a
   dark-backed ochre rule on their shared cell boundary. Hidden endpoints reveal no partial line.
   A rejected pointer click or keyboard confirmation says “A steep escarpment blocks entry from this
@@ -10079,6 +10088,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | Minimum gameplay viewport                  | `1,280 × 720 DIPs`                                             | Policy                                          | §8    |
 | Sapiens band warning thresholds            | suffering: latest decline/food shortfall or `Health < 0.50`; danger: `Health < 0.80` or seasonal + chronic rate `>= 0.004` | Policy | §8 |
 | High-DPI coordinate contract               | physical input is inverse-mapped once; HUD and grid picking share logical presentation coordinates | Locked | §8 |
+| Biome glyph channel                        | Monochrome Noto Emoji subset (`biomeGlyphFont`, six biomes), drawn at Focus only and in the legend swatch, ink chosen by `glyphInk`'s maximum-contrast rule | Locked | §8 |
 | Browser `DisableHiDPI`                     | `false`                                                        | Locked                                          | §10   |
 | Operational-log target sinks               | Desktop: new temp JSONL file/session; web: JS console          | Locked                                          | §3    |
 | Operational `session_id`                   | 128 random bits; documented timestamp/counter fallback         | Policy                                          | §3    |
