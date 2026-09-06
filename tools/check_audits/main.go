@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"golang.org/x/image/font/sfnt"
 )
 
 const (
@@ -65,6 +67,9 @@ func main() {
 	if !strings.Contains(string(notices), "## Bundled Noto Emoji subset") {
 		fail(errors.New("THIRD_PARTY_NOTICES.md does not include the bundled Noto Emoji subset license"))
 	}
+	if err := checkGlyphFontVersion(root, notices); err != nil {
+		fail(err)
+	}
 	for _, required := range [...]string{
 		"### Apache License 2.0",
 		"### `github.com/rivo/uniseg` — MIT License",
@@ -82,6 +87,33 @@ func main() {
 	}
 
 	fmt.Println("citation and dependency-license audits match their repository inputs")
+}
+
+// checkGlyphFontVersion asserts THIRD_PARTY_NOTICES.md identifies the bundled
+// Noto Emoji subset by the version its own name table reports, the way the Go
+// Regular section is identified by the x/image release it was taken from.
+// Asserting the section is merely present would pass a font re-subsetted from
+// a different upstream, which is exactly the drift the notices exist to catch:
+// the subset is a committed binary, so nothing else in the tree records what
+// it is.
+func checkGlyphFontVersion(root string, notices []byte) error {
+	raw, err := os.ReadFile(filepath.Join(root, "pkg", "render", "assets", "biomeglyphs.ttf"))
+	if err != nil {
+		return err
+	}
+	parsed, err := sfnt.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("parse bundled Noto Emoji subset: %w", err)
+	}
+	version, err := parsed.Name(nil, sfnt.NameIDVersion)
+	if err != nil {
+		return fmt.Errorf("read bundled Noto Emoji subset version: %w", err)
+	}
+	identifier := fmt.Sprintf("Noto Emoji `%s`", version)
+	if !strings.Contains(string(notices), identifier) {
+		return fmt.Errorf("bundled Noto Emoji subset reports %q; THIRD_PARTY_NOTICES.md does not identify it as %s", version, identifier)
+	}
+	return nil
 }
 
 func repositoryRoot() (string, error) {
