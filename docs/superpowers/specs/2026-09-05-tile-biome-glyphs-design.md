@@ -169,7 +169,6 @@ rather than popping at a threshold.
 | Mountainous highlands | ⛰ U+26F0 | |
 | Semi-arid desert | 🌵 U+1F335 | **not** 🏜 U+1F3DC, which Noto draws as a framed desert scene — far too busy at 20 px |
 | Glacial tundra | ❄ U+2744 | |
-| Water (legend only) | 🌊 U+1F30A | legend swatch only; water tiles draw no glyph |
 
 ## 9. Legend
 
@@ -181,10 +180,12 @@ An 8×8 swatch cannot host a legible glyph. Changes:
 - Swatch grows 8×8 → 12×12, staying at `(x+4, y+4)`.
 - Label x offset 15 → 19.
 - Meaning text moves `y+13` → `y+14` to clear the taller swatch.
-- Glyph drawn inside the swatch at 11 px with the §6 ink rule.
+- Glyph drawn inside the swatch at 11 px with the §6 ink rule, for the six biome entries only.
 
-`escarpment` keeps its stroked-line treatment; `unknown` keeps a bare swatch. This is the most
-invasive part of the change and it will touch `legend_test.go`.
+`escarpment` keeps its stroked-line treatment; `unknown` and `water` keep a bare swatch — water is
+already unambiguous from colour and coastline shape, so it gets no glyph even though it is neither
+`escarpment` nor `unknown`. This is the most invasive part of the change and it will touch
+`legend_test.go`.
 
 ## 10. Rejected alternative: glyphs on band discs
 
@@ -215,14 +216,14 @@ Font: **Noto Emoji**, monochrome, SIL Open Font License 1.1, from `google/fonts`
 (`ofl/notoemoji/NotoEmoji[wght].ttf`). The variable font is instanced at a single weight and
 subset to the §8 vocabulary, then embedded with `go:embed`.
 
-Measured (7 glyphs, instanced at wght=400, hinting and layout tables dropped):
+Measured (6 glyphs, instanced at wght=400, hinting and layout tables dropped):
 
 | | bytes |
 |---|---:|
-| subset raw | 6,412 |
-| subset brotli `-q 11` | **4,561** |
+| subset raw | 6,052 |
+| subset brotli `-q 11` | **4,313** |
 | current release brotli | 3,288,292 |
-| projected | ~3,292,853 |
+| projected | ~3,292,605 |
 | `MaxCompressedWasmBytes` | 3,600,000 |
 | remaining headroom | ~307,000 |
 

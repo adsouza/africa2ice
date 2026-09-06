@@ -25,7 +25,7 @@ func (scene *MapScene) mapLegendEntries(aridity float64) [9]mapLegendEntry {
 		{label: "Mountain highlands", meaning: "low capacity; cold/falls", color: climateBiomeColor(gameapi.MountainousHighlands, aridity), glyph: scene.biomeGlyphs[gameapi.MountainousHighlands]},
 		{label: "Semi-arid desert", meaning: "little food/water; heat", color: climateBiomeColor(gameapi.SemiAridDesert, aridity), glyph: scene.biomeGlyphs[gameapi.SemiAridDesert]},
 		{label: "Glacial tundra", meaning: "little plant food; freezing", color: climateBiomeColor(gameapi.GlacialTundra, aridity), glyph: scene.biomeGlyphs[gameapi.GlacialTundra]},
-		{label: "Water", meaning: "cannot be occupied", color: EpochGrade(aridity).Water, glyph: scene.waterGlyph},
+		{label: "Water", meaning: "cannot be occupied", color: EpochGrade(aridity).Water},
 		{label: "Unknown", meaning: "not yet explored", color: unexploredTileColor},
 		{label: "Escarpment", meaning: "impassable edge", color: escarpmentColor, edge: true},
 	}

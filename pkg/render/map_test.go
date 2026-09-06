@@ -845,7 +845,7 @@ func TestBiomeGlyphsSkipUnexploredAndWaterTiles(t *testing.T) {
 // be upscaled and blurry on a high-DPI target. runeGlyph.paint multiplies size
 // by canvas scale, mirroring drawText; this pins that it actually does.
 func TestBiomeGlyphsRasterizeAtPhysicalScale(t *testing.T) {
-	painters, _, err := newBiomeGlyphs()
+	painters, err := newBiomeGlyphs()
 	if err != nil {
 		t.Fatalf("newBiomeGlyphs: %v", err)
 	}

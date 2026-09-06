@@ -117,13 +117,13 @@ func (glyph *runeGlyph) paint(destination logicalCanvas, centreX, centreY, sizeD
 	text.Draw(destination.image, glyph.value, face, options)
 }
 
-// newBiomeGlyphs builds the per-biome painter table and the legend's water
-// painter, applying biomeGlyphOverrides last so a hand-drawn replacement wins.
-func newBiomeGlyphs() ([gameapi.BiomeCount]glyphPainter, glyphPainter, error) {
+// newBiomeGlyphs builds the per-biome painter table, applying
+// biomeGlyphOverrides last so a hand-drawn replacement wins.
+func newBiomeGlyphs() ([gameapi.BiomeCount]glyphPainter, error) {
 	var painters [gameapi.BiomeCount]glyphPainter
 	source, err := text.NewGoTextFaceSource(bytes.NewReader(biomeGlyphFont))
 	if err != nil {
-		return painters, nil, err
+		return painters, err
 	}
 	// Semi-arid desert is the cactus, not U+1F3DC: Noto draws that as a framed
 	// desert scene, far too busy at 20 DIP.
@@ -143,5 +143,5 @@ func newBiomeGlyphs() ([gameapi.BiomeCount]glyphPainter, glyphPainter, error) {
 			painters[biome] = override
 		}
 	}
-	return painters, &runeGlyph{source: source, value: "\U0001F30A"}, nil
+	return painters, nil
 }

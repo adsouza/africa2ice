@@ -59,9 +59,22 @@ func TestEveryBiomeLegendEntryCarriesAGlyph(t *testing.T) {
 			withGlyph++
 		}
 	}
-	// Six biomes plus water; unknown and escarpment stay bare.
-	if withGlyph != int(gameapi.BiomeCount)+1 {
-		t.Errorf("%d legend entries carry a glyph, want %d", withGlyph, gameapi.BiomeCount+1)
+	// The six biomes carry glyphs; water, unknown and escarpment stay bare.
+	if withGlyph != int(gameapi.BiomeCount) {
+		t.Errorf("%d legend entries carry a glyph, want %d", withGlyph, gameapi.BiomeCount)
+	}
+}
+
+// The legend teaches the map's glyph vocabulary, so it must not show a glyph
+// the map never draws. Water is deliberately glyph-less: drawBiomeGlyphs skips
+// every !tile.Land tile, and water is already unambiguous from colour and
+// coastline shape without a redundant channel.
+func TestWaterLegendEntryHasNoGlyph(t *testing.T) {
+	scene := NewMapScene()
+	for _, entry := range scene.mapLegendEntries(0.4) {
+		if entry.label == "Water" && entry.glyph != nil {
+			t.Error("water legend entry carries a glyph, but the map never draws one")
+		}
 	}
 }
 

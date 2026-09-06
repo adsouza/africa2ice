@@ -90,12 +90,9 @@ func TestGlyphAlphaIsZeroAtOverviewAndFullAtFocus(t *testing.T) {
 }
 
 func TestBiomeGlyphsCoverEveryBiome(t *testing.T) {
-	painters, water, err := newBiomeGlyphs()
+	painters, err := newBiomeGlyphs()
 	if err != nil {
 		t.Fatalf("newBiomeGlyphs: %v", err)
-	}
-	if water == nil {
-		t.Error("water painter is nil")
 	}
 	for biome := gameapi.Biome(0); biome < gameapi.BiomeCount; biome++ {
 		if painters[biome] == nil {
@@ -111,7 +108,7 @@ func TestBiomeGlyphOverrideTakesPrecedenceOverTheFontGlyph(t *testing.T) {
 	biomeGlyphOverrides[gameapi.Savanna] = stub
 	defer delete(biomeGlyphOverrides, gameapi.Savanna)
 
-	painters, _, err := newBiomeGlyphs()
+	painters, err := newBiomeGlyphs()
 	if err != nil {
 		t.Fatalf("newBiomeGlyphs: %v", err)
 	}
@@ -137,7 +134,7 @@ func (p *countingGlyphPainter) paint(logicalCanvas, float32, float32, float32, c
 // all; a painter that drew nothing, filled the whole tile solid, or ignored
 // its ink argument must all fail here.
 func TestRuneGlyphPaintsInkAtFocusTileSize(t *testing.T) {
-	painters, _, err := newBiomeGlyphs()
+	painters, err := newBiomeGlyphs()
 	if err != nil {
 		t.Fatalf("newBiomeGlyphs: %v", err)
 	}

@@ -54,7 +54,6 @@ var (
 type MapScene struct {
 	faceSource      *text.GoTextFaceSource
 	biomeGlyphs     [gameapi.BiomeCount]glyphPainter
-	waterGlyph      glyphPainter
 	glyphDraws      uint64
 	terrainImage    *ebiten.Image
 	terrainRevision uint64
@@ -143,11 +142,11 @@ func NewMapScene() *MapScene {
 	if err != nil {
 		panic(err)
 	}
-	painters, water, err := newBiomeGlyphs()
+	painters, err := newBiomeGlyphs()
 	if err != nil {
 		panic(err)
 	}
-	return &MapScene{faceSource: source, biomeGlyphs: painters, waterGlyph: water}
+	return &MapScene{faceSource: source, biomeGlyphs: painters}
 }
 
 // Update advances the fog halo's shimmer clock. It is the scene's only

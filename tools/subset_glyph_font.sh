@@ -11,8 +11,8 @@ set -euo pipefail
 readonly UPSTREAM="https://raw.githubusercontent.com/google/fonts/main/ofl/notoemoji/NotoEmoji%5Bwght%5D.ttf"
 readonly OUT="$(dirname "$0")/../pkg/render/assets/biomeglyphs.ttf"
 # Riverine woodland, savanna, coastal shrubland, mountainous highlands,
-# semi-arid desert, glacial tundra, and water (legend swatch only).
-readonly UNICODES="U+1F333,U+1F33E,U+1F41A,U+26F0,U+1F335,U+2744,U+1F30A"
+# semi-arid desert, and glacial tundra.
+readonly UNICODES="U+1F333,U+1F33E,U+1F41A,U+26F0,U+1F335,U+2744"
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -66,12 +66,12 @@ from fontTools.ttLib import TTFont
 font = TTFont(sys.argv[1])
 cmap, glyf = font.getBestCmap(), font["glyf"]
 missing = [
-    hex(cp) for cp in (0x1F333, 0x1F33E, 0x1F41A, 0x26F0, 0x1F335, 0x2744, 0x1F30A)
+    hex(cp) for cp in (0x1F333, 0x1F33E, 0x1F41A, 0x26F0, 0x1F335, 0x2744)
     if cmap.get(cp) is None or glyf[cmap[cp]].numberOfContours == 0
 ]
 if missing:
     sys.exit("subset is missing or has empty outlines for: %s" % ", ".join(missing))
-print("subset OK: 7 glyphs, %d bytes" % len(open(sys.argv[1], "rb").read()))
+print("subset OK: 6 glyphs, %d bytes" % len(open(sys.argv[1], "rb").read()))
 PY
 
 mv "$scratch" "$OUT"
