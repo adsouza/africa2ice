@@ -964,3 +964,30 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - **The riskiest step is Task 3, Step 4.** If a biome's glyph changes fewer than 29 of 576 pixels it is a hairline, which is the exact failure mode spec §13 predicts for line-art fonts. Do not lower the threshold to make it pass. Report which biome, and treat it as the first `biomeGlyphOverrides` entry.
 - **Spec §13 asks for one in-engine confirmation before building on the offline measurements.** Task 3's `TestRuneGlyphPaintsInkAtFocusTileSize` is that confirmation — it runs inside the `TestMain` ebiten loop (`pkg/render/main_test.go`) where `.At()` is available. If it fails for *every* biome, stop: the offline rasterisation did not predict the engine, and the design needs revisiting rather than the plan continuing.
 - **`git diff` is not a patch here** — `diff.external=difft` is configured. Use `git diff --no-ext-diff` when you need machine-readable output.
+
+---
+
+### Task 5b: Remove the water glyph (added mid-run, from user feedback)
+
+This task was not in the original plan. While the feature was being built, the user observed that
+the water glyph appeared in the legend but never on map tiles, and chose to remove it rather than
+start drawing it on water.
+
+The behaviour was intentional and specified, but the spec was wrong: the legend's job here is to
+teach the map's glyph vocabulary, so a glyph the map never draws does not belong in it. Water is
+already unambiguous from colour and coastline shape — it was the one legend entry that never needed
+a redundant channel, and stamping a pictograph across every sea tile at focus zoom would have been
+heavy repeated ink for a distinction the colour already makes.
+
+**Tasks 1, 3, 4 and 5 above are left as originally written.** They record what was instructed at the
+time, and this task records what changed. Reading the plan in order gives the true final state; do
+not "tidy" the earlier tasks to match, or the plan stops being a usable build log.
+
+**What changed:**
+- `pkg/render/legend.go` — the Water entry drops its `glyph`; it keeps its colour swatch.
+- `pkg/render/glyph.go` — `newBiomeGlyphs()` returns `([gameapi.BiomeCount]glyphPainter, error)`;
+  the water painter is gone.
+- `pkg/render/map.go` — `MapScene.waterGlyph` removed.
+- `tools/subset_glyph_font.sh` and `pkg/render/assets/biomeglyphs.ttf` — U+1F30A dropped, so the
+  vocabulary is six codepoints and the subset is 6052 B raw / 4313 B brotli.
+- `TestWaterLegendEntryHasNoGlyph` pins the rule so it cannot silently regress.
