@@ -811,6 +811,11 @@ func TestBiomeGlyphsDrawOnlyAtFocusZoom(t *testing.T) {
 	// more than the tiles that exist" both still pass if a regression
 	// under-draws (skips one qualifying tile) -- 0 < glyphDraws <= 7 is
 	// satisfied by 5 as much as by 7. Only an exact match catches that.
+	//
+	// glyphDraws also excludes tiles culled for being off the map rectangle,
+	// so this is exact only because the fixture's tiles all sit in the
+	// top-left corner, which the focus camera's clamp keeps on screen. If a
+	// future fixture spread past it this fails loudly rather than drifting.
 	if scene.glyphDraws != uint64(explored) {
 		t.Fatalf("focus drew %d biome glyphs, want %d (one per explored land tile in the fixture)",
 			scene.glyphDraws, explored)
@@ -822,14 +827,27 @@ func TestBiomeGlyphsDrawOnlyAtFocusZoom(t *testing.T) {
 // gameapi.Tile spells this as Land, not Water -- there is no Water field.
 func TestBiomeGlyphsSkipUnexploredAndWaterTiles(t *testing.T) {
 	frame := representativeRenderFrame()
-	explored := 0
+	explored, water, unexplored := 0, 0, 0
 	for _, tile := range frame.Tiles {
-		if tile.Explored && tile.Land {
+		switch {
+		case tile.Explored && tile.Land:
 			explored++
+		case !tile.Land:
+			water++
+		default:
+			unexplored++
 		}
 	}
 	if explored == 0 {
 		t.Fatal("fixture has no explored land tiles")
+	}
+	// Guard the premise, not just the conclusion. The assertion below only
+	// says the glyph pass drew no *more* than the explored land tiles; on a
+	// fixture that happened to be all-explored land it would hold trivially
+	// while the skip rule went untested, and so would the exact-count test
+	// above it. Both classes this test names have to actually be present.
+	if water == 0 || unexplored == 0 {
+		t.Fatalf("fixture cannot exercise the skip rule: %d water tiles, %d unexplored land tiles", water, unexplored)
 	}
 	screen := ebiten.NewImage(1280, 720)
 	defer screen.Deallocate()

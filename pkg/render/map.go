@@ -579,15 +579,30 @@ func (scene *MapScene) drawBiomeGlyphs(screen logicalCanvas, geometry MapGeometr
 		return
 	}
 	size := geometry.Cell * glyphCellFraction
+	// The ink is a pure function of biome, so hoist it out of the tile loop.
+	// glyphInk costs six math.Pow calls through relativeLuminance; paying that
+	// per tile priced the whole grid for six distinct answers.
+	var ink [gameapi.BiomeCount]color.RGBA
+	for biome := gameapi.Biome(0); biome < gameapi.BiomeCount; biome++ {
+		ink[biome] = glyphInk(climateBiomeColor(biome, frame.Climate.AridityIndex))
+	}
 	for _, tile := range frame.Tiles {
 		if !tile.Explored || !tile.Land || int(tile.Biome) >= len(scene.biomeGlyphs) {
 			continue
 		}
 		x, y := geometry.TilePoint(tile)
-		// TilePoint is valid for every tile; the SubImage clip drops the ones
-		// off-screen, so no visibility test is needed here.
-		background := climateBiomeColor(tile.Biome, frame.Climate.AridityIndex)
-		scene.biomeGlyphs[tile.Biome].paint(screen, x, y, size, glyphInk(background), alpha)
+		// The SubImage clip makes an off-screen glyph harmless, but not free:
+		// text.Draw still shapes, rasterizes and submits it. At focus the grid
+		// is 96x64 while the map rectangle shows about 36x27 cells, so relying
+		// on the clip alone paints roughly six tiles for every one visible.
+		// Skip them here instead. One em of slack on each edge is far more
+		// than the widest glyph's half-ink (9.93 DIP against a 16.8 DIP em),
+		// so nothing partly on screen is dropped.
+		if x < mapOriginX-size || x > mapOriginX+mapAreaWidth+size ||
+			y < mapOriginY-size || y > geometry.visibleBottom()+size {
+			continue
+		}
+		scene.biomeGlyphs[tile.Biome].paint(screen, x, y, size, ink[tile.Biome], alpha)
 		scene.glyphDraws++
 	}
 }
