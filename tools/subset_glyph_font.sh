@@ -23,16 +23,23 @@ curl -sSL --fail --max-time 120 -o "$work/upstream.ttf" "$UPSTREAM"
 # every glyph, and nothing here varies weight at runtime.
 python3 -m fontTools.varLib.instancer "$work/upstream.ttf" wght=400 -o "$work/static.ttf"
 
+# pkg/render/assets/ does not exist until this script creates it.
 mkdir -p "$(dirname "$OUT")"
+
+# Subset into a scratch path first: pyftsubset writing straight to $OUT would
+# let an interrupted run (killed, disk full, OOM) leave truncated bytes at the
+# committed path, and the EXIT trap only cleans up $work. Only mv into $OUT
+# below, after the verification block passes.
+scratch="$work/biomeglyphs.ttf"
 
 python3 -m fontTools.subset "$work/static.ttf" \
   --unicodes="$UNICODES" \
-  --output-file="$OUT" \
+  --output-file="$scratch" \
   --no-hinting --desubroutinize \
   --layout-features='' \
   --drop-tables+=DSIG,GSUB,GPOS
 
-python3 - "$OUT" <<'PY'
+python3 - "$scratch" <<'PY'
 import sys
 from fontTools.ttLib import TTFont
 font = TTFont(sys.argv[1])
@@ -45,3 +52,5 @@ if missing:
     sys.exit("subset is missing or has empty outlines for: %s" % ", ".join(missing))
 print("subset OK: 7 glyphs, %d bytes" % len(open(sys.argv[1], "rb").read()))
 PY
+
+mv "$scratch" "$OUT"
