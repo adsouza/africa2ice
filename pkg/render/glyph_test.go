@@ -138,8 +138,8 @@ func (p *countingGlyphPainter) paint(logicalCanvas, float32, float32, float32, c
 //
 // The ink box is asserted, not just the pixel count, because a count alone
 // cannot see extent: an edge-to-edge glyph and a well-margined one of the same
-// area are the same number. That gap is exactly how a 20 DIP em -- 23.6 DIP of
-// ink for savanna and mountainous highlands -- passed every earlier review of
+// area are the same number. That gap is exactly how a 20 DIP em -- 23.63 DIP of
+// ink for mountainous highlands and 22.85 DIP for savanna -- passed every earlier review of
 // this test while leaving no margin at all.
 func TestRuneGlyphPaintsInkAtFocusTileSize(t *testing.T) {
 	painters, err := newBiomeGlyphs()

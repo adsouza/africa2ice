@@ -48,7 +48,7 @@ const (
 	// legendGlyphSize applies the map's measured ink-to-em ratio to the
 	// swatch, so the legend glyph clears the swatch's 0.7 stroke the same way
 	// a tile glyph clears its neighbours. At the previous 11 the widest ink
-	// measured 12.57 DIP inside a 12 DIP swatch -- savanna and highlands
+	// measured 13.00 DIP inside a 12 DIP swatch -- mountainous highlands
 	// painted over the stroke and into the label gutter, and every biome
 	// crossed the top edge because ebiten floors a glyph's baseline to a
 	// whole physical pixel, which shifts the ink up by up to 1 DIP at DPR 1.

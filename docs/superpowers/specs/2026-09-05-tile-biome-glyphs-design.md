@@ -175,7 +175,7 @@ rather than popping at a threshold.
 | Savanna | 🌾 U+1F33E | busiest of the six; first override candidate |
 | Coastal shrubland | 🐚 U+1F41A | |
 | Mountainous highlands | ⛰ U+26F0 | |
-| Semi-arid desert | 🌵 U+1F335 | **not** 🏜 U+1F3DC, which Noto draws as a framed desert scene — far too busy at 20 px |
+| Semi-arid desert | 🌵 U+1F335 | **not** 🏜 U+1F3DC, which Noto draws as a framed desert scene — far too busy inside a 24 DIP cell |
 | Glacial tundra | ❄ U+2744 | |
 
 ## 9. Legend
@@ -190,7 +190,7 @@ An 8×8 swatch cannot host a legible glyph. Changes:
 - Meaning text moves `y+13` → `y+14` to clear the taller swatch.
 - Glyph drawn inside the swatch with the §6 ink rule, for the six biome entries only, at the em
   size that puts its measured ink inside the 12 DIP swatch — the same ink-to-em ratio §5.2 derives
-  for the map, so 8.4 DIP for a measured 9.93 DIP of ink. An 11 DIP em measures 12.57 DIP of ink
+  for the map, so 8.4 DIP for a measured 9.93 DIP of ink. An 11 DIP em measures 13.00 DIP of ink
   and paints over the swatch stroke and into the label gutter.
 
 `escarpment` keeps its stroked-line treatment; `unknown` and `water` keep a bare swatch — water is
