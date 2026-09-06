@@ -222,10 +222,20 @@ Measured (6 glyphs, instanced at wght=400, hinting and layout tables dropped):
 |---|---:|
 | subset raw | 6,052 |
 | subset brotli `-q 11` | **4,313** |
-| current release brotli | 3,288,292 |
-| projected | ~3,292,605 |
+| baseline release brotli (pre-feature, `wasm-size.json`) | 3,288,292 |
+| **measured** release brotli (this feature, `./build_web.sh --release`) | **3,303,519** |
 | `MaxCompressedWasmBytes` | 3,600,000 |
-| remaining headroom | ~307,000 |
+| remaining headroom | 296,481 |
+
+The measured row is a real build, not an estimate: `./build_web.sh --release`, then
+`brotli -q 11` on `web/main.wasm`. An earlier draft of this table instead *projected* the total as
+baseline + subset brotli (3,288,292 + 4,313 = 3,292,605) and was wrong by 10,914 B, because that
+arithmetic priced only the embedded font asset and had no term for the compiled Go code this
+feature also adds — the painters, the ink rule, the draw pass, and the legend changes — all of
+which compile into the wasm binary and pass through brotli same as the font does. Anyone
+projecting a future asset's cost the same way should budget for its call sites, not only its
+embedded bytes. Both the baseline and the measured figure sit far below the ceiling, so this
+correction is about the document being accurate, not about the budget being at risk.
 
 **No §10 ratchet amendment is required.** The ceiling is untouched and the one-way ratchet is
 unaffected.

@@ -214,8 +214,19 @@ func TestRuneGlyphPaintsInkAtFocusTileSize(t *testing.T) {
 // The embedded subset is a transfer-size cost against a ratcheting ceiling, so
 // a wider vocabulary must be a visible decision rather than silent growth.
 // Raise this only alongside a measured wasm-size check.
+//
+// 6500 balances two competing pressures against the measured six-glyph subset
+// (6,052 B raw). It must be loose enough to absorb upstream Noto Emoji
+// redrawing those same six glyphs (a few hundred bytes of drift is normal
+// hinting/outline churn, not a vocabulary change), but tight enough to fire
+// on the smallest real expansion: a seventh glyph costs roughly 1,008 B
+// (6,052 B / 6 glyphs), landing the subset near 7,060 B. 8192 was loose
+// enough to let a one-glyph addition through silently; 6500 sits below that
+// 7,060 B line with ~450 B of headroom for redraw drift above the current
+// 6,052 B, so it trips on any vocabulary addition while tolerating glyph
+// reshaping.
 func TestEmbeddedGlyphFontStaysWithinItsBudget(t *testing.T) {
-	const maxBiomeGlyphFontBytes = 8192
+	const maxBiomeGlyphFontBytes = 6500
 	if len(biomeGlyphFont) == 0 {
 		t.Fatal("embedded glyph font is empty")
 	}
