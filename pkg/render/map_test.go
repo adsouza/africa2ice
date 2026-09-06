@@ -786,6 +786,15 @@ func TestReducedMotionFreezesTheShimmer(t *testing.T) {
 // matching against an antialiased glyph would not be.
 func TestBiomeGlyphsDrawOnlyAtFocusZoom(t *testing.T) {
 	frame := representativeRenderFrame()
+	explored := 0
+	for _, tile := range frame.Tiles {
+		if tile.Explored && tile.Land {
+			explored++
+		}
+	}
+	if explored == 0 {
+		t.Fatal("fixture has no explored land tiles")
+	}
 	screen := ebiten.NewImage(1280, 720)
 	defer screen.Deallocate()
 	scene := NewMapScene()
@@ -798,12 +807,13 @@ func TestBiomeGlyphsDrawOnlyAtFocusZoom(t *testing.T) {
 
 	scene.SetCamera(Camera{Mode: CameraFocus, Progress: 1}, mapAreaHeight)
 	scene.Draw(screen, frame, 7, MigrationPreview{}, "", EndScene{}, false)
-	if scene.glyphDraws == 0 {
-		t.Fatal("focus drew no biome glyphs")
-	}
-	if scene.glyphDraws > TerrainGridWidth*TerrainGridHeight {
-		t.Fatalf("focus drew %d glyphs, more than the %d tiles that exist",
-			scene.glyphDraws, TerrainGridWidth*TerrainGridHeight)
+	// Pin the exact count rather than bounding a range: "not zero" and "not
+	// more than the tiles that exist" both still pass if a regression
+	// under-draws (skips one qualifying tile) -- 0 < glyphDraws <= 7 is
+	// satisfied by 5 as much as by 7. Only an exact match catches that.
+	if scene.glyphDraws != uint64(explored) {
+		t.Fatalf("focus drew %d biome glyphs, want %d (one per explored land tile in the fixture)",
+			scene.glyphDraws, explored)
 	}
 }
 

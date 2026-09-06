@@ -280,9 +280,18 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 	mapCanvas := logicalCanvas{image: screen.image.SubImage(clip).(*ebiten.Image), scale: screen.scale}
 
 	markerScale := geometry.Cell / mapTileSize
+	// This reset only fires on a recompute: Draw returns early on a
+	// frame-cache hit, before drawFrame (and this line) ever runs. So a
+	// cache-hit Draw leaves glyphDraws holding the prior composition's
+	// count. That is fine -- a cache hit means nothing was redrawn, so the
+	// stale count still describes exactly what is on screen.
 	scene.glyphDraws = 0
 	scene.drawTerrain(mapCanvas, geometry, frame)
 	scene.drawHalo(mapCanvas, geometry, frame)
+	// Glyphs must land here: above terrain/halo (so they're visible) but
+	// below the reachable-tile overlay, guide highlight, markers, and band
+	// discs drawn next (so those selection affordances stay readable over a
+	// biome's pictograph rather than getting obscured by it).
 	scene.drawBiomeGlyphs(mapCanvas, geometry, frame)
 	scene.drawReachableTiles(mapCanvas, geometry, frame, selectedBand)
 	scene.drawGuideHighlight(mapCanvas, geometry, frame, selectedBand)
