@@ -462,10 +462,12 @@ const (
 	// floor sits at twice the overview cell so glyphs appear only in the
 	// second half of the camera transition rather than crawling in from it.
 	glyphMinCell = 16.0
-	// glyphCellFraction leaves a margin inside the cell so neighbouring tiles'
-	// glyphs do not merge across the 0.4 DIP gap drawFlatTerrain leaves.
-	glyphCellFraction = 20.0 / (mapTileSize * FocusScale)
 )
+```
+
+**Do not declare `glyphCellFraction` here.** It belongs to Task 4, which holds its only caller. This repo's `golangci-lint` config enables `unused` (`.golangci.yml:15`), which flags any unexported symbol with zero references anywhere in the package — so a constant declared one task ahead of its first use fails the lint gate even though `go build` and every test pass.
+
+```go
 
 // biomeGlyphOverrides replaces a font glyph with a hand-drawn painter.
 //
@@ -579,8 +581,16 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Modify: `pkg/render/map_test.go`
 
 **Interfaces:**
-- Consumes: `newBiomeGlyphs`, `glyphAlpha`, `glyphInk`, `glyphCellFraction` (Task 3); `MapGeometry.TilePoint`; `climateBiomeColor`.
-- Produces: `MapScene.glyphDraws uint64`, a per-frame counter mirroring the existing `terrainRebuilds` instrumentation, plus `(*MapScene).drawBiomeGlyphs`.
+- Consumes: `newBiomeGlyphs`, `glyphAlpha`, `glyphInk` (Tasks 2–3); `MapGeometry.TilePoint`; `climateBiomeColor`.
+- Produces: `MapScene.glyphDraws uint64`, a per-frame counter mirroring the existing `terrainRebuilds` instrumentation; `(*MapScene).drawBiomeGlyphs`; and `glyphCellFraction`.
+
+**Declare `glyphCellFraction` in this task**, in `pkg/render/glyph.go`'s existing const block, because this task holds its only caller and `unused` (`.golangci.yml:15`) fails a constant declared ahead of its first reference:
+
+```go
+	// glyphCellFraction leaves a margin inside the cell so neighbouring tiles'
+	// glyphs do not merge across the 0.4 DIP gap drawFlatTerrain leaves.
+	glyphCellFraction = 20.0 / (mapTileSize * FocusScale)
+```
 
 - [ ] **Step 1: Write the failing test**
 
