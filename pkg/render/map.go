@@ -44,6 +44,9 @@ var (
 
 type MapScene struct {
 	faceSource      *text.GoTextFaceSource
+	biomeGlyphs     [gameapi.BiomeCount]glyphPainter
+	waterGlyph      glyphPainter
+	glyphDraws      uint64
 	terrainImage    *ebiten.Image
 	terrainRevision uint64
 	terrainAridity  float64
@@ -131,7 +134,11 @@ func NewMapScene() *MapScene {
 	if err != nil {
 		panic(err)
 	}
-	return &MapScene{faceSource: source}
+	painters, water, err := newBiomeGlyphs()
+	if err != nil {
+		panic(err)
+	}
+	return &MapScene{faceSource: source, biomeGlyphs: painters, waterGlyph: water}
 }
 
 // Update advances the fog halo's shimmer clock. It is the scene's only
@@ -273,8 +280,10 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 	mapCanvas := logicalCanvas{image: screen.image.SubImage(clip).(*ebiten.Image), scale: screen.scale}
 
 	markerScale := geometry.Cell / mapTileSize
+	scene.glyphDraws = 0
 	scene.drawTerrain(mapCanvas, geometry, frame)
 	scene.drawHalo(mapCanvas, geometry, frame)
+	scene.drawBiomeGlyphs(mapCanvas, geometry, frame)
 	scene.drawReachableTiles(mapCanvas, geometry, frame, selectedBand)
 	scene.drawGuideHighlight(mapCanvas, geometry, frame, selectedBand)
 	// The pointer's tile is tinted on the map itself now that the bottom
@@ -539,6 +548,30 @@ func (scene *MapScene) drawHalo(screen logicalCanvas, geometry MapGeometry, fram
 		}
 		x, y := geometry.TilePoint(*tile)
 		vector.FillRect(screen, x-geometry.Cell/2, y-geometry.Cell/2, extent, extent, haloColor(base, blend, noise), false)
+	}
+}
+
+// drawBiomeGlyphs paints one pictograph per explored land tile, giving biome
+// identity a shape channel alongside the L* fill ladder. It is deliberately not
+// baked into the terrain cache: that image is a fixed 8 px-per-tile raster the
+// camera scales up with FilterNearest, so a baked glyph would be upscaled 3x
+// into mush at exactly the zoom where it is meant to be legible.
+func (scene *MapScene) drawBiomeGlyphs(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame) {
+	alpha := glyphAlpha(geometry.Cell)
+	if alpha <= 0 {
+		return
+	}
+	size := geometry.Cell * glyphCellFraction
+	for _, tile := range frame.Tiles {
+		if !tile.Explored || !tile.Land || int(tile.Biome) >= len(scene.biomeGlyphs) {
+			continue
+		}
+		x, y := geometry.TilePoint(tile)
+		// TilePoint is valid for every tile; the SubImage clip drops the ones
+		// off-screen, so no visibility test is needed here.
+		background := climateBiomeColor(tile.Biome, frame.Climate.AridityIndex)
+		scene.biomeGlyphs[tile.Biome].paint(screen, x, y, size, glyphInk(background), alpha)
+		scene.glyphDraws++
 	}
 }
 

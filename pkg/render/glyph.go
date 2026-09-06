@@ -57,6 +57,10 @@ const (
 	// floor sits at twice the overview cell so glyphs appear only in the
 	// second half of the camera transition rather than crawling in from it.
 	glyphMinCell = 16.0
+
+	// glyphCellFraction leaves a margin inside the cell so neighbouring tiles'
+	// glyphs do not merge across the 0.4 DIP gap drawFlatTerrain leaves.
+	glyphCellFraction = 20.0 / (mapTileSize * FocusScale)
 )
 
 // biomeGlyphOverrides replaces a font glyph with a hand-drawn painter.

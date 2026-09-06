@@ -779,3 +779,91 @@ func TestReducedMotionFreezesTheShimmer(t *testing.T) {
 		t.Fatal("reduced motion removed the halo instead of freezing it")
 	}
 }
+
+// Glyphs must be a separate pass from the terrain cache, which is a fixed
+// 8px-per-tile image that drawTerrain scales up with FilterNearest. Counting
+// draws mirrors the terrainRebuilds instrumentation and is robust where pixel
+// matching against an antialiased glyph would not be.
+func TestBiomeGlyphsDrawOnlyAtFocusZoom(t *testing.T) {
+	frame := representativeRenderFrame()
+	screen := ebiten.NewImage(1280, 720)
+	defer screen.Deallocate()
+	scene := NewMapScene()
+
+	scene.SetCamera(Camera{Mode: CameraOverview}, mapAreaHeight)
+	scene.Draw(screen, frame, 7, MigrationPreview{}, "", EndScene{}, false)
+	if scene.glyphDraws != 0 {
+		t.Fatalf("overview drew %d biome glyphs, want 0", scene.glyphDraws)
+	}
+
+	scene.SetCamera(Camera{Mode: CameraFocus, Progress: 1}, mapAreaHeight)
+	scene.Draw(screen, frame, 7, MigrationPreview{}, "", EndScene{}, false)
+	if scene.glyphDraws == 0 {
+		t.Fatal("focus drew no biome glyphs")
+	}
+	if scene.glyphDraws > TerrainGridWidth*TerrainGridHeight {
+		t.Fatalf("focus drew %d glyphs, more than the %d tiles that exist",
+			scene.glyphDraws, TerrainGridWidth*TerrainGridHeight)
+	}
+}
+
+// Water, unexplored and halo tiles assert nothing a pictograph could restate,
+// so a glyph there would be new information rather than a redundant channel.
+// gameapi.Tile spells this as Land, not Water -- there is no Water field.
+func TestBiomeGlyphsSkipUnexploredAndWaterTiles(t *testing.T) {
+	frame := representativeRenderFrame()
+	explored := 0
+	for _, tile := range frame.Tiles {
+		if tile.Explored && tile.Land {
+			explored++
+		}
+	}
+	if explored == 0 {
+		t.Fatal("fixture has no explored land tiles")
+	}
+	screen := ebiten.NewImage(1280, 720)
+	defer screen.Deallocate()
+	scene := NewMapScene()
+	scene.SetCamera(Camera{Mode: CameraFocus, Progress: 1}, mapAreaHeight)
+	scene.Draw(screen, frame, 7, MigrationPreview{}, "", EndScene{}, false)
+	if scene.glyphDraws > uint64(explored) {
+		t.Fatalf("drew %d glyphs for %d explored land tiles", scene.glyphDraws, explored)
+	}
+}
+
+// logicalCanvas scales coordinates at draw time, so a glyph sized in DIP would
+// be upscaled and blurry on a high-DPI target. runeGlyph.paint multiplies size
+// by canvas scale, mirroring drawText; this pins that it actually does.
+func TestBiomeGlyphsRasterizeAtPhysicalScale(t *testing.T) {
+	painters, _, err := newBiomeGlyphs()
+	if err != nil {
+		t.Fatalf("newBiomeGlyphs: %v", err)
+	}
+	background := climateBiomeColor(gameapi.RiverineWoodland, 0)
+	ink := glyphInk(background)
+
+	inkPixels := func(scale float64, size int) int {
+		target := ebiten.NewImage(size, size)
+		defer target.Deallocate()
+		target.Fill(background)
+		centre := float32(size) / 2 / float32(scale)
+		painters[gameapi.RiverineWoodland].paint(newLogicalCanvas(target, scale), centre, centre, 20, ink, 1)
+		count := 0
+		for y := 0; y < size; y++ {
+			for x := 0; x < size; x++ {
+				if r, g, b, _ := target.At(x, y).RGBA(); r>>8 != uint32(background.R) || g>>8 != uint32(background.G) || b>>8 != uint32(background.B) {
+					count++
+				}
+			}
+		}
+		return count
+	}
+
+	standard, highDPI := inkPixels(1, 24), inkPixels(2, 48)
+	// A glyph rasterized at DIP and blitted up would cover the same fraction
+	// but from 4x fewer source pixels. Rasterizing at physical size means the
+	// 2x target carries close to 4x the ink pixels.
+	if float64(highDPI) < 3*float64(standard) {
+		t.Errorf("high-DPI glyph covered %d px against %d at 1x; expected near 4x", highDPI, standard)
+	}
+}
