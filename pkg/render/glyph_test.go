@@ -101,8 +101,9 @@ func TestBiomeGlyphsCoverEveryBiome(t *testing.T) {
 	}
 }
 
-// The override map is the escape hatch for a glyph that reads poorly at 20 DIP.
-// It ships empty, so this proves the mechanism is live rather than assumed.
+// The override map is the escape hatch for a glyph that reads poorly in a
+// 24 DIP cell. It ships empty, so this proves the mechanism is live rather
+// than assumed.
 func TestBiomeGlyphOverrideTakesPrecedenceOverTheFontGlyph(t *testing.T) {
 	stub := &countingGlyphPainter{}
 	biomeGlyphOverrides[gameapi.Savanna] = stub
@@ -129,32 +130,45 @@ func (p *countingGlyphPainter) paint(logicalCanvas, float32, float32, float32, c
 }
 
 // A painted glyph must actually change pixels at the size it ships at, in the
-// right amount, and in the ink colour it was actually asked to paint. This is
-// the one test that proves the ebiten text path renders these outlines at
-// all; a painter that drew nothing, filled the whole tile solid, or ignored
-// its ink argument must all fail here.
+// right amount, in the right *place*, and in the ink colour it was actually
+// asked to paint. This is the one test that proves the ebiten text path
+// renders these outlines at all; a painter that drew nothing, filled the whole
+// tile solid, spilled over the cell edge, or ignored its ink argument must all
+// fail here.
+//
+// The ink box is asserted, not just the pixel count, because a count alone
+// cannot see extent: an edge-to-edge glyph and a well-margined one of the same
+// area are the same number. That gap is exactly how a 20 DIP em -- 23.6 DIP of
+// ink for savanna and mountainous highlands -- passed every earlier review of
+// this test while leaving no margin at all.
 func TestRuneGlyphPaintsInkAtFocusTileSize(t *testing.T) {
 	painters, err := newBiomeGlyphs()
 	if err != nil {
 		t.Fatalf("newBiomeGlyphs: %v", err)
 	}
+	// The cell and em size the map actually paints at focus.
+	const cell = mapTileSize * FocusScale
+	size := float32(cell) * glyphCellFraction
 	for biome := gameapi.Biome(0); biome < gameapi.BiomeCount; biome++ {
 		background := climateBiomeColor(biome, 0)
 		ink := glyphInk(background)
-		target := ebiten.NewImage(24, 24)
+		target := ebiten.NewImage(cell, cell)
 		target.Fill(background)
-		painters[biome].paint(newLogicalCanvas(target, 1), 12, 12, 20, ink, 1)
+		painters[biome].paint(newLogicalCanvas(target, 1), cell/2, cell/2, size, ink, 1)
 
 		changed := 0
 		maxCoverage := 0.0 // how far toward pure ink the best-covered pixel gets, 0..1
-		for y := 0; y < 24; y++ {
-			for x := 0; x < 24; x++ {
+		minX, minY, maxX, maxY := int(cell), int(cell), -1, -1
+		for y := 0; y < cell; y++ {
+			for x := 0; x < cell; x++ {
 				r, g, b, _ := target.At(x, y).RGBA()
 				pr, pg, pb := r>>8, g>>8, b>>8
 				if pr == uint32(background.R) && pg == uint32(background.G) && pb == uint32(background.B) {
 					continue
 				}
 				changed++
+				minX, minY = min(minX, x), min(minY, y)
+				maxX, maxY = max(maxX, x), max(maxY, y)
 
 				// Antialiasing blends background and ink, so an exact-match
 				// count is wrong -- a changed pixel is a coverage-weighted
@@ -184,7 +198,21 @@ func TestRuneGlyphPaintsInkAtFocusTileSize(t *testing.T) {
 			}
 		}
 		target.Deallocate()
-		t.Logf("%v: %d/576 pixels changed, max ink coverage %.2f", biome, changed, maxCoverage)
+		t.Logf("%v: %d/576 pixels changed, ink box x=[%d..%d] y=[%d..%d], max ink coverage %.2f",
+			biome, changed, minX, maxX, minY, maxY, maxCoverage)
+
+		// The margin spec 5.2 asks for is a property of ink extent, not of em
+		// size, so assert the extent. Measured at the shipped 16.8 DIP em in
+		// the 24 DIP cell, the widest ink box is x=[2..21] -- savanna and
+		// mountainous highlands, the two glyphs that filled the cell edge to
+		// edge at the old 20 DIP em -- and every box stays inside [2..21] on
+		// both axes. So each glyph clears every cell edge by at least
+		// glyphCellMargin, and adjacent tiles keep 4 DIP between their ink
+		// across the 0.4 DIP gap drawFlatTerrain leaves.
+		if minX < glyphCellMargin || maxX > cell-1-glyphCellMargin || minY < glyphCellMargin || maxY > cell-1-glyphCellMargin {
+			t.Errorf("%v ink box x=[%d..%d] y=[%d..%d] does not clear the %d DIP cell by %d DIP on every side",
+				biome, minX, maxX, minY, maxY, int(cell), glyphCellMargin)
+		}
 
 		// A glyph covering under 5% of a 576px cell is a hairline, which is the
 		// failure mode line-art fonts have at this size.
@@ -193,17 +221,18 @@ func TestRuneGlyphPaintsInkAtFocusTileSize(t *testing.T) {
 		}
 		// A ceiling catches a painter that fills the whole tile solid instead
 		// of drawing a glyph (576 changed pixels). Measured coverage across
-		// all six biomes: riverine woodland 173, savanna 253, shrubland 234,
-		// highlands 269, desert 247, tundra 273 (out of 576) -- a ceiling at
-		// 345 (60% of the tile) leaves comfortable headroom above the real
-		// maximum (273, ~47%) while still rejecting a solid fill outright.
+		// all six biomes at the shipped 16.8 DIP em: riverine woodland 138,
+		// savanna 186, shrubland 177, highlands 203, desert 184, tundra 202
+		// (out of 576) -- a ceiling at 345 (60% of the tile) leaves
+		// comfortable headroom above the real maximum (203, ~35%) while still
+		// rejecting a solid fill outright.
 		if changed > 345 {
 			t.Errorf("%v glyph changed %d of 576 pixels, want <= 345 (60%% ceiling)", biome, changed)
 		}
 		// At least one pixel must actually reach close to full ink coverage,
 		// not just a faint fringe -- otherwise a painter that barely tints
 		// the background (rather than drawing ink) could still clear the
-		// floor above on pixel count alone. Measured max coverage is >=0.96
+		// floor above on pixel count alone. Measured max coverage is >=0.92
 		// for all six biomes.
 		if maxCoverage < 0.8 {
 			t.Errorf("%v: no pixel reached >= 0.8 ink coverage (max %.2f); glyph may not actually paint in ink", biome, maxCoverage)

@@ -90,8 +90,16 @@ recognizable pictograph. Hence the hard gate on `CameraFocus`.
 
 ### 5.2 Glyph size within the cell
 
-Glyph box is 20 DIP inside the 24 DIP cell, leaving a 2 DIP margin so adjacent tiles' glyphs do
+Glyph **ink** is 20 DIP inside the 24 DIP cell, leaving a 2 DIP margin so adjacent tiles' glyphs do
 not visually merge across the 0.4 DIP tile gap.
+
+The distinction between ink extent and font em size is load-bearing, and an earlier draft of this
+section lost it by writing "glyph box". Measured from the subset's own `glyf` bounding boxes,
+Noto Emoji draws these pictographs wider than their em: mountainous highlands spans 1.182 em and
+savanna 1.143 em, so a 20 DIP *em* paints 23.6 DIP of ink and the margin disappears entirely for
+the two commonest biomes on this map. Size the em from the measured ink instead:
+`20 / 1.182 = 16.93 DIP` is the ceiling, and the implementation takes 16.8 (0.70 of the cell) for
+a measured 19.85 DIP of ink. `TestRuneGlyphPaintsInkAtFocusTileSize` asserts the resulting ink box.
 
 ## 6. Ink selection
 

@@ -58,20 +58,40 @@ const (
 	// second half of the camera transition rather than crawling in from it.
 	glyphMinCell = 16.0
 
-	// glyphCellFraction leaves a margin inside the cell so neighbouring tiles'
-	// glyphs do not merge across the 0.4 DIP gap drawFlatTerrain leaves.
-	glyphCellFraction = 20.0 / (mapTileSize * FocusScale)
+	// glyphCellFraction is the font em size as a fraction of the drawn cell,
+	// chosen so the widest glyph's *ink* fits the 20 DIP box spec 5.2 asks
+	// for inside the 24 DIP cell -- leaving the ~2 DIP margin that keeps
+	// neighbouring tiles' glyphs from merging across the 0.4 DIP gap
+	// drawFlatTerrain leaves.
+	//
+	// Em size is not ink extent, and for this vocabulary the gap is large.
+	// Measured from the embedded subset's own glyf bounding boxes (units of
+	// a 2048 em): mountainous highlands spans 2420 = 1.182 em and savanna
+	// 2340 = 1.143 em. A 20 DIP em therefore painted 23.6 DIP of ink, and
+	// both -- savanna being the commonest biome on this map -- filled the
+	// cell edge to edge and touched their neighbours, which is precisely
+	// what the margin exists to prevent. 20/1.182 = 16.93 DIP is the largest
+	// em whose ink still fits; 16.8 is that rounded down to a fraction the
+	// cell divides exactly, and measures 19.85 DIP of ink for a 2.07 DIP
+	// margin per side. TestRuneGlyphPaintsInkAtFocusTileSize pins the ink
+	// box so a future size change cannot quietly reopen this.
+	glyphCellFraction = 16.8 / (mapTileSize * FocusScale)
+
+	// glyphCellMargin is the DIP clearance the above buys on each side of the
+	// cell, rounded down to the whole pixel a rasterized ink box can be
+	// asserted against.
+	glyphCellMargin = 2
 )
 
 // biomeGlyphOverrides replaces a font glyph with a hand-drawn painter.
 //
 // Noto Emoji is line art, and line art is what dissolves at this size: a
-// contour authored at ~20 font units lands at 0.2 px once scaled and vanishes
-// into antialiasing, while a filled region merely shrinks. The six chosen
-// glyphs measured on the survivable side, but riverine woodland is closest to
-// the line at 173/576 px changed in TestRuneGlyphPaintsInkAtFocusTileSize,
-// against 234-273/576 for the other five. This ships empty; an entry here
-// needs no caller changes.
+// contour authored at ~20 font units lands at 0.16 px once scaled (20/2048 of
+// the 16.8 DIP em) and vanishes into antialiasing, while a filled region merely
+// shrinks. The six chosen glyphs measured on the survivable side, but riverine
+// woodland is closest to the line at 138/576 px changed in
+// TestRuneGlyphPaintsInkAtFocusTileSize, against 177-203/576 for the other
+// five. This ships empty; an entry here needs no caller changes.
 var biomeGlyphOverrides = map[gameapi.Biome]glyphPainter{}
 
 // glyphPainter draws one pictograph centred at a DIP point.
@@ -126,7 +146,7 @@ func newBiomeGlyphs() ([gameapi.BiomeCount]glyphPainter, error) {
 		return painters, err
 	}
 	// Semi-arid desert is the cactus, not U+1F3DC: Noto draws that as a framed
-	// desert scene, far too busy at 20 DIP.
+	// desert scene, far too busy inside a 24 DIP cell.
 	vocabulary := [gameapi.BiomeCount]string{
 		gameapi.RiverineWoodland:     "\U0001F333",
 		gameapi.Savanna:              "\U0001F33E",
