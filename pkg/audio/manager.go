@@ -2,6 +2,7 @@ package audio
 
 import (
 	"bytes"
+	"sync"
 
 	"github.com/ebitengine/oto/v3"
 )
@@ -21,8 +22,12 @@ type Reporter func(stage string, err error)
 
 // deviceHealth is implemented by managers backed by a real device, whose
 // errors surface asynchronously rather than from the Play call itself.
+// Opened separates a device that never came up from one that worked and then
+// stopped, because the two ask a player for different remedies and both arrive
+// through the same Err() after the same first sound request.
 type deviceHealth interface {
 	Err() error
+	Opened() bool
 }
 
 type NoopManager struct{}
@@ -43,6 +48,11 @@ type Manager struct {
 	players []*oto.Player
 	volume  float64
 	muted   bool
+
+	// opened is written once by the goroutine watching oto's ready channel
+	// and read from the game loop, so it needs the mutex.
+	mutex  sync.Mutex
+	opened bool
 }
 
 // NewManager opens the sound device. The open runs on oto's own goroutine, so
@@ -51,7 +61,7 @@ type Manager struct {
 // the game loop, and on wasm would deadlock the event loop the browser needs
 // in order to resume audio in the first place.
 func NewManager() (*Manager, error) {
-	context, _, err := oto.NewContext(&oto.NewContextOptions{
+	context, ready, err := oto.NewContext(&oto.NewContextOptions{
 		SampleRate:   sampleRate,
 		ChannelCount: channelCount,
 		Format:       oto.FormatFloat32LE,
@@ -59,7 +69,20 @@ func NewManager() (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Manager{context: context, volume: 0.5}, nil
+	manager := &Manager{context: context, volume: 0.5}
+	// oto stores a setup error before it closes ready, so the error is already
+	// final here: a clean ready means the device genuinely came up, and any
+	// error after this point is a working device that later stopped.
+	go func() {
+		<-ready
+		if context.Err() != nil {
+			return
+		}
+		manager.mutex.Lock()
+		manager.opened = true
+		manager.mutex.Unlock()
+	}()
+	return manager, nil
 }
 
 // Err reports a device that never opened or has stopped working.
@@ -68,6 +91,18 @@ func (manager *Manager) Err() error {
 		return nil
 	}
 	return manager.context.Err()
+}
+
+// Opened reports whether the device ever reached a usable state. oto's ALSA
+// driver asks for SND_PCM_FORMAT_FLOAT_LE unconditionally, so a device can open
+// and still fail setup; that is a device which never played, not one that broke.
+func (manager *Manager) Opened() bool {
+	if manager == nil {
+		return false
+	}
+	manager.mutex.Lock()
+	defer manager.mutex.Unlock()
+	return manager.opened
 }
 
 func (manager *Manager) Play(sound Sound) {
@@ -207,7 +242,11 @@ func (manager *LazyManager) checkHealth() {
 		return
 	}
 	if err := health.Err(); err != nil {
-		manager.fail("play", err)
+		stage := "init"
+		if health.Opened() {
+			stage = "play"
+		}
+		manager.fail(stage, err)
 	}
 }
 

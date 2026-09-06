@@ -50,6 +50,13 @@ func TestManualDevicePlayback(t *testing.T) {
 		t.Fatalf("player never retired: still playing after %v", time.Since(start))
 	}
 	t.Logf("player retired %v after the 30ms mark", time.Since(start))
+	// Only now is the device provably up: a sound has drained through it. At
+	// the 30ms mark above, Opened() is still legitimately false, because oto
+	// has not finished opening the device -- which is exactly why a failure
+	// there is reported as "init" rather than "play".
+	if !manager.Opened() {
+		t.Fatal("Opened() is false after a sound drained: the ready watcher did not run")
+	}
 
 	manager.Play(SFXSaveComplete)
 	if len(manager.players) != 1 {

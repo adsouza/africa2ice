@@ -11,11 +11,13 @@ import (
 type fakeManager struct {
 	played []Sound
 	health error
+	opened bool
 }
 
 func (manager *fakeManager) Play(sound Sound)        { manager.played = append(manager.played, sound) }
 func (manager *fakeManager) SetMaster(float64, bool) {}
 func (manager *fakeManager) Err() error              { return manager.health }
+func (manager *fakeManager) Opened() bool            { return manager.opened }
 
 // TestLazyManagerDegradesWhenTheDeviceCannotBeCreated covers the AerynOS
 // crash: oto could not open any ALSA PCM device, ebiten surfaced that through
@@ -59,7 +61,7 @@ func TestLazyManagerDegradesWhenTheDeviceCannotBeCreated(t *testing.T) {
 // that was never available, so a session log says which one happened.
 func TestLazyManagerReportsADeviceThatFailsAfterOpening(t *testing.T) {
 	playErr := errors.New("oto: device disappeared")
-	backing := &fakeManager{health: playErr}
+	backing := &fakeManager{health: playErr, opened: true}
 	var stages []string
 	var reported error
 	manager := newLazyManager(
@@ -136,7 +138,8 @@ func TestLazyManagerPollReportsADeviceThatFailedAfterTheFirstSound(t *testing.T)
 		t.Fatalf("reported %v before the device settled", stages)
 	}
 
-	backing.health = errors.New("oto: ALSA error at snd_pcm_open")
+	backing.opened = true
+	backing.health = errors.New("oto: ALSA error at snd_pcm_writei")
 	manager.Poll()
 	manager.Poll()
 
@@ -156,5 +159,32 @@ func TestLazyManagerPollIsSafeBeforeAnySound(t *testing.T) {
 	manager.Poll()
 	if len(stages) != 0 {
 		t.Fatalf("reported %v with no device constructed", stages)
+	}
+}
+
+// TestLazyManagerCallsAnUnopenedDeviceAnInitFailure covers the AerynOS
+// follow-up. oto opens the device on its own goroutine, so a setup failure
+// (there: snd_pcm_hw_params_set_format rejecting FLOAT_LE) surfaces only after
+// the first sound was requested. Reporting that as "play" claims a device
+// played and then broke, when it never opened at all, and the two call for
+// different fixes.
+func TestLazyManagerCallsAnUnopenedDeviceAnInitFailure(t *testing.T) {
+	setupErr := errors.New("oto: ALSA error at snd_pcm_hw_params_set_format: Invalid argument")
+	backing := &fakeManager{}
+	var stages []string
+	manager := newLazyManager(
+		func() (SoundManager, error) { return backing, nil },
+		func(stage string, err error) { stages = append(stages, stage) },
+	)
+	manager.SetMaster(0.8, false)
+	manager.Play(SFXChoiceClick)
+
+	// The device setup fails asynchronously, after the sound was requested.
+	backing.health = setupErr
+
+	manager.Poll()
+
+	if len(stages) != 1 || stages[0] != "init" {
+		t.Fatalf("reported stages = %v, want exactly one \"init\": the device never opened", stages)
 	}
 }

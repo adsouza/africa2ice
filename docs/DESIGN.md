@@ -8141,7 +8141,12 @@ also unrecoverable once raised: `oto.Context.Err()` never clears and only one `o
 exist per process. A device failure is therefore reported, never returned: `Manager.Err()` surfaces
 it, `LazyManager` polls that once per tick because `oto` opens the device asynchronously, and the
 host records it as `audio.failure` with a `stage` of `init` (never opened) or `play` (stopped
-working) on the session log, the console, and a HUD notice. Each of those three is the only reader
+working) on the session log, the console, and a HUD notice. `Manager.Opened()` draws that
+distinction by watching `oto`'s ready channel: both stages arrive through the same `Err()` after the
+same first sound request, but a device can open and still fail setup — `oto`'s ALSA driver asks for
+`SND_PCM_FORMAT_FLOAT_LE` unconditionally, which a raw `hw:` device rejects — and that is a device
+which never played, not one that broke. The two call for different remedies, so the label must
+separate them. Each of those three is the only reader
 some player has. `-no-sound` skips construction entirely for a machine known to lack a usable
 device.
 
