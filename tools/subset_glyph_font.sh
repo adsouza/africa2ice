@@ -39,6 +39,27 @@ python3 -m fontTools.subset "$work/static.ttf" \
   --layout-features='' \
   --drop-tables+=DSIG,GSUB,GPOS
 
+# Pin head.modified to the upstream font's own value. fontTools stamps a fresh
+# wall-clock second into head.modified on every save (TTFont defaults to
+# recalcTimestamp=True), so without this, two runs of this script over the
+# exact same upstream input produce different bytes and every regeneration
+# shows up as a spurious `git diff`. Carrying the upstream font's own
+# head.modified keeps the field honest (it still moves when upstream actually
+# changes) while making output deterministic for a fixed input. Every other
+# table (glyf, cmap, hmtx, ...) is already reproducible; this is the only
+# source of run-to-run drift.
+python3 - "$work/upstream.ttf" "$scratch" <<'PY'
+import sys
+from fontTools.ttLib import TTFont
+
+upstream_path, scratch_path = sys.argv[1], sys.argv[2]
+upstream_modified = TTFont(upstream_path)["head"].modified
+
+font = TTFont(scratch_path, recalcTimestamp=False)
+font["head"].modified = upstream_modified
+font.save(scratch_path)
+PY
+
 python3 - "$scratch" <<'PY'
 import sys
 from fontTools.ttLib import TTFont
