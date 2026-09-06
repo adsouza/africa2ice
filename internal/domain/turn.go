@@ -278,7 +278,7 @@ func (world *World) advanceTurn() error {
 			if valid {
 				band.TileID = band.QueuedMigration
 				geography, _ := world.grid.Tile(band.TileID)
-				world.appendEvent(Event{Turn: nextTurn, Kind: EventMigration, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d migrated.", band.ID)})
+				world.appendBandEvent(*band, Event{Turn: nextTurn, Kind: EventMigration, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d migrated.", band.ID)})
 				if band.QueueUsesPassage {
 					work[index].crossed, work[index].crossedPassage = true, band.QueuedPassage
 				}
@@ -310,7 +310,7 @@ func (world *World) advanceTurn() error {
 			band.Health = Health(clamp01(float64(band.Health) - impact.HealthLoss))
 			band.LastMortality.Macro = before - float64(band.Population)
 			band.LastOutcomeReport.MacroHealthLoss = float64(healthBefore - band.Health)
-			world.appendEvent(Event{Turn: nextTurn, Kind: EventMacroEpisode, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d was affected by the Campanian eruption.", band.ID)})
+			world.appendBandEvent(*band, Event{Turn: nextTurn, Kind: EventMacroEpisode, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d was affected by the Campanian eruption.", band.ID)})
 		}
 		healthBeforeAcute := band.Health
 		kind, loss, occurred, err := ResolveAcute(band, geography, nextHabitat[band.TileID], season, work[index].acuteRisk, work[index].crossed, work[index].crossedPassage, kinContacts[index], world.rng)
@@ -319,7 +319,7 @@ func (world *World) advanceTurn() error {
 		}
 		if occurred {
 			band.LastMortality.Acute = loss
-			world.appendEvent(Event{Turn: nextTurn, Kind: EventAcuteIncident, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d suffered %s.", band.ID, acuteIncidentPhrase(kind))})
+			world.appendBandEvent(*band, Event{Turn: nextTurn, Kind: EventAcuteIncident, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d suffered %s.", band.ID, acuteIncidentPhrase(kind))})
 		}
 		band.LastOutcomeReport.AcuteDiseaseHealthLoss = float64(healthBeforeAcute - band.Health)
 		band.LastOutcomeReport.EndingPopulation = band.Population
@@ -346,7 +346,7 @@ func (world *World) advanceTurn() error {
 			continue
 		}
 		geography, _ := world.grid.Tile(band.TileID)
-		world.appendEvent(Event{Turn: nextTurn, Kind: EventExtinction, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: extinctionSummary(band)})
+		world.appendBandEvent(band, Event{Turn: nextTurn, Kind: EventExtinction, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: extinctionSummary(band)})
 	}
 	nextBands = live
 	preGainBands := append([]Band(nil), nextBands...)
@@ -356,12 +356,12 @@ func (world *World) advanceTurn() error {
 		for technology := Technology(0); technology < TechCount; technology++ {
 			if learned&(1<<technology) != 0 {
 				geography, _ := world.grid.Tile(nextBands[index].TileID)
-				world.appendEvent(Event{Turn: nextTurn, Kind: EventTechnology, BandID: nextBands[index].ID, TileID: nextBands[index].TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d learned %s.", nextBands[index].ID, technologyName(technology))})
+				world.appendBandEvent(nextBands[index], Event{Turn: nextTurn, Kind: EventTechnology, BandID: nextBands[index].ID, TileID: nextBands[index].TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d learned %s.", nextBands[index].ID, technologyName(technology))})
 			}
 		}
 		if completedInterbreeding[nextBands[index].ID] {
 			geography, _ := world.grid.Tile(nextBands[index].TileID)
-			world.appendEvent(Event{Turn: nextTurn, Kind: EventInterbreeding, BandID: nextBands[index].ID, TileID: nextBands[index].TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d interbred with an archaic band.", nextBands[index].ID)})
+			world.appendBandEvent(nextBands[index], Event{Turn: nextTurn, Kind: EventInterbreeding, BandID: nextBands[index].ID, TileID: nextBands[index].TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d interbred with an archaic band.", nextBands[index].ID)})
 		}
 		nextBands[index].HasInterbreedTarget = false
 	}

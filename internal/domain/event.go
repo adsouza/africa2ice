@@ -108,6 +108,33 @@ func technologyName(technology Technology) string {
 	return [...]string{"Firecraft", "Hafted Tools", "Plant Knowledge", "Tailored Clothing", "Cordage and Nets", "Campcraft", "Medicinal Knowledge", "Trapping", "Coastal Navigation"}[technology]
 }
 
+// appendBandEvent records an event about a specific band, dropping the
+// computer's routine activity before it reaches the feed. Archaic bands move,
+// research, split and suffer hazards every turn, and there are dozens of them:
+// measured at turn 200 of a reference campaign, all 128 retained events were
+// archaic and 125 were migrations, so not one of the player's own events
+// survived the window. Milestones (extinction, macro episodes) and anything a
+// sapiens band is party to (interbreeding) still surface for archaic bands.
+//
+// Every band-scoped emission goes through here rather than testing the species
+// at each call site, so a later event kind inherits the policy instead of
+// having to remember it.
+func (world *World) appendBandEvent(band Band, event Event) {
+	if band.Species == ArchaicHominin && archaicBackgroundNoise(event.Kind) {
+		return
+	}
+	world.appendEvent(event)
+}
+
+func archaicBackgroundNoise(kind EventKind) bool {
+	switch kind {
+	case EventMigration, EventTechnology, EventSplit, EventAcuteIncident:
+		return true
+	default:
+		return false
+	}
+}
+
 func (world *World) appendEvent(event Event) {
 	world.events = append(world.events, event)
 	if overflow := len(world.events) - MaxEvents; overflow > 0 {

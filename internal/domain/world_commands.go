@@ -125,7 +125,7 @@ func (world *World) Split(id BandID, destination TileID, player bool) error {
 	world.bands = append(world.bands, right)
 	world.nextBandID++
 	geography, _ := world.grid.Tile(right.TileID)
-	world.appendEvent(Event{Turn: world.turn, Kind: EventSplit, BandID: right.ID, TileID: right.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d split from band %d.", right.ID, left.ID)})
+	world.appendBandEvent(right, Event{Turn: world.turn, Kind: EventSplit, BandID: right.ID, TileID: right.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d split from band %d.", right.ID, left.ID)})
 	world.revealFromSapiens()
 	return nil
 }
