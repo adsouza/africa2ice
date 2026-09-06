@@ -210,3 +210,16 @@ func TestRuneGlyphPaintsInkAtFocusTileSize(t *testing.T) {
 		}
 	}
 }
+
+// The embedded subset is a transfer-size cost against a ratcheting ceiling, so
+// a wider vocabulary must be a visible decision rather than silent growth.
+// Raise this only alongside a measured wasm-size check.
+func TestEmbeddedGlyphFontStaysWithinItsBudget(t *testing.T) {
+	const maxBiomeGlyphFontBytes = 8192
+	if len(biomeGlyphFont) == 0 {
+		t.Fatal("embedded glyph font is empty")
+	}
+	if len(biomeGlyphFont) > maxBiomeGlyphFontBytes {
+		t.Errorf("embedded glyph font = %d B, above the %d B budget", len(biomeGlyphFont), maxBiomeGlyphFontBytes)
+	}
+}
