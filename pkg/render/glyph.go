@@ -66,7 +66,7 @@ const (
 // into antialiasing, while a filled region merely shrinks. The six chosen
 // glyphs measured on the survivable side, but riverine woodland is closest to
 // the line at 173/576 px changed in TestRuneGlyphPaintsInkAtFocusTileSize,
-// against 253-273/576 for the other five. This ships empty; an entry here
+// against 234-273/576 for the other five. This ships empty; an entry here
 // needs no caller changes.
 var biomeGlyphOverrides = map[gameapi.Biome]glyphPainter{}
 
