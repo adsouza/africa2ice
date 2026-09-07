@@ -8,7 +8,9 @@ import (
 
 	"github.com/ebitenui/ebitenui/image"
 	"github.com/ebitenui/ebitenui/widget"
+	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"github.com/hajimehoshi/ebiten/v2/vector"
 	"golang.org/x/image/font/gofont/goregular"
 )
 
@@ -237,4 +239,19 @@ func (t *theme) rowOf(spacingDIP float64, opts ...widget.WidgetOpt) *widget.Cont
 // stretch is the row-layout data that makes a child fill the cross axis.
 func stretch() widget.WidgetOpt {
 	return widget.WidgetOpts.LayoutData(widget.RowLayoutData{Stretch: true})
+}
+
+func (t *theme) checkboxImages() *widget.CheckboxImage {
+	makeImage := func(checked bool, ink color.RGBA) *image.NineSlice {
+		size := t.px(18)
+		img := ebiten.NewImage(size, size)
+		img.Fill(colorButtonIdle)
+		vector.StrokeRect(img, 1, 1, float32(size-2), float32(size-2), 1, ink, false)
+		if checked {
+			vector.StrokeLine(img, float32(size)*0.2, float32(size)*0.5, float32(size)*0.43, float32(size)*0.73, float32(t.px(2)), ink, true)
+			vector.StrokeLine(img, float32(size)*0.43, float32(size)*0.73, float32(size)*0.8, float32(size)*0.25, float32(t.px(2)), ink, true)
+		}
+		return image.NewFixedNineSlice(img)
+	}
+	return &widget.CheckboxImage{Unchecked: makeImage(false, colorText), Checked: makeImage(true, colorGold), UncheckedDisabled: makeImage(false, colorDim), CheckedDisabled: makeImage(true, colorDim)}
 }

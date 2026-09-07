@@ -9,9 +9,10 @@ import (
 	"math"
 )
 
-const UISettingsSchemaVersion = 3
+const UISettingsSchemaVersion = 4
 
 type UISettings struct {
+	EasyMode           bool    `json:"EasyMode"`
 	SchemaVersion      int     `json:"SchemaVersion"`
 	FieldNotesVisible  bool    `json:"FieldNotesVisible"`
 	MasterVolume       float64 `json:"MasterVolume"`
@@ -22,7 +23,7 @@ type UISettings struct {
 }
 
 func DefaultUISettings() UISettings {
-	return UISettings{SchemaVersion: UISettingsSchemaVersion, FieldNotesVisible: true, MasterVolume: 0.5}
+	return UISettings{EasyMode: true, SchemaVersion: UISettingsSchemaVersion, FieldNotesVisible: true, MasterVolume: 0.5}
 }
 
 func NormalizeUISettings(settings UISettings) UISettings {
@@ -48,7 +49,7 @@ func DecodeUISettings(payload []byte) (UISettings, error) {
 		}
 		return DefaultUISettings(), fmt.Errorf("decode UI settings: %w", err)
 	}
-	var settings UISettings
+	settings := DefaultUISettings()
 	if raw, ok := fields["SchemaVersion"]; !ok || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		return DefaultUISettings(), errors.New("decode UI settings: missing or null SchemaVersion")
 	} else if err := json.Unmarshal(raw, &settings.SchemaVersion); err != nil {
@@ -60,6 +61,9 @@ func DecodeUISettings(payload []byte) (UISettings, error) {
 		// Schema 1 predates the guide and drawer height; both default to false.
 	case 2:
 		required = append(required, "GuideDismissed", "FieldNotesExpanded")
+	case 4:
+		required = append(required, "EasyMode")
+		fallthrough
 	case 3:
 		required = append(required, "GuideDismissed", "FieldNotesExpanded", "ReducedMotion")
 	default:
@@ -96,6 +100,11 @@ func DecodeUISettings(payload []byte) (UISettings, error) {
 			return DefaultUISettings(), fmt.Errorf("decode ReducedMotion: %w", err)
 		}
 	}
+	if settings.SchemaVersion >= 4 {
+		if err := json.Unmarshal(fields["EasyMode"], &settings.EasyMode); err != nil {
+			return DefaultUISettings(), fmt.Errorf("decode EasyMode: %w", err)
+		}
+	}
 	return NormalizeUISettings(settings), nil
 }
 
@@ -118,7 +127,7 @@ type UISettingsCompletion struct {
 	Err       error
 }
 
-// UISettingsStore is the asynchronous, presentation-only preference port.
+// UISettingsStore is the asynchronous preference port.
 // Implementations enqueue completions; they never mutate live UI from a
 // goroutine or JavaScript callback.
 type UISettingsStore interface {

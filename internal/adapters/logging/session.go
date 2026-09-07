@@ -191,6 +191,8 @@ func (session *Session) LogUIPointer(x, y int, overChrome bool, intents int) {
 func commandLogAttributes(command gameapi.Command) []any {
 	attributes := []any{"command", fmtCommandKind(command), "band_id", uint64(command.ActingBandID())}
 	switch value := command.(type) {
+	case gameapi.SetEasyMode:
+		attributes = append(attributes, "enabled", value.Enabled)
 	case gameapi.SetAssignment:
 		attributes = append(attributes,
 			"foraging_bp", value.AllocationBP[gameapi.Foraging],
@@ -213,6 +215,8 @@ func commandLogAttributes(command gameapi.Command) []any {
 
 func fmtCommandKind(command gameapi.Command) string {
 	switch command.(type) {
+	case gameapi.SetEasyMode:
+		return "set_easy_mode"
 	case gameapi.SetAssignment:
 		return "set_assignment"
 	case gameapi.QueueMigration:

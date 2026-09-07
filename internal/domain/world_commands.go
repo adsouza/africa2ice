@@ -94,7 +94,7 @@ func (world *World) Split(id BandID, destination TileID, player bool) error {
 	if world.nextBandID == 0 || world.nextBandID == ^BandID(0) {
 		return ErrBandIDExhausted
 	}
-	if world.BandStress(id) <= SplitStressThreshold {
+	if !world.easyMode && world.BandStress(id) <= SplitStressThreshold {
 		return ErrSplitStressTooLow
 	}
 	adjacent := false
@@ -116,7 +116,11 @@ func (world *World) Split(id BandID, destination TileID, player bool) error {
 	if destination >= TileCount || world.habitat[destination].BaselineK <= 0 {
 		return ErrSplitDestinationUninhabitable
 	}
-	left, right, err := splitBand(band, world.nextBandID)
+	minimum := MinSplitSourcePopulation
+	if world.easyMode {
+		minimum = EasyMinSplitSourcePopulation
+	}
+	left, right, err := splitBandWithMinimum(band, world.nextBandID, minimum)
 	if err != nil {
 		return err
 	}

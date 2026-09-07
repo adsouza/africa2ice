@@ -164,6 +164,21 @@ func (p *Panel) settingsPanel(state State) *widget.Container {
 	p.handles.volumeSlider = slider
 	volume.AddChild(slider)
 	frame.AddChild(volume)
+	checked := widget.WidgetUnchecked
+	if state.Overlay.EasyMode {
+		checked = widget.WidgetChecked
+	}
+	easy := widget.NewCheckbox(
+		widget.CheckboxOpts.Text("Easy mode", t.face(13), &widget.LabelColor{Idle: colorText, Disabled: colorDim}),
+		widget.CheckboxOpts.Spacing(t.px(10)),
+		widget.CheckboxOpts.Image(t.checkboxImages()),
+		widget.CheckboxOpts.InitialState(checked),
+		widget.CheckboxOpts.StateChangedHandler(func(args *widget.CheckboxChangedEventArgs) { p.emit(Intent{Kind: IntentToggleEasyMode}) }),
+	)
+	p.handles.easyModeCheckbox = easy
+	easy.GetWidget().Disabled = state.Overlay.SettingsDisabled
+	frame.AddChild(easy)
+	frame.AddChild(t.label("More exploration · easier splits · 10% loss cap · no acute incidents", 11, colorDim))
 	mute := "Muted: off · M"
 	if state.Overlay.Muted {
 		mute = "Muted: on · M"

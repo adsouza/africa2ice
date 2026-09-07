@@ -57,6 +57,7 @@ type OverlayState struct {
 	SettingsDisabled bool
 	MasterVolume     float64
 	Muted            bool
+	EasyMode         bool
 	ReducedMotion    bool
 }
 

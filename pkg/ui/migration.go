@@ -257,13 +257,17 @@ func DiagnoseSplit(frame *gameapi.Frame, band *gameapi.Band) gameapi.ErrorCode {
 	if len(frame.Bands) >= gameapi.MaxBands {
 		return gameapi.ErrBandLimitReached
 	}
-	if band.Stress <= gameapi.SplitStressThreshold {
+	if !frame.EasyMode && band.Stress <= gameapi.SplitStressThreshold {
 		return gameapi.ErrSplitStressTooLow
 	}
 	if !HasOrdinaryLandCandidate(*band) {
 		return gameapi.ErrSplitDestinationNotAdjacent
 	}
-	if band.Population < gameapi.MinSplitSourcePopulation {
+	minimum := gameapi.MinSplitSourcePopulation
+	if frame.EasyMode {
+		minimum = gameapi.EasyMinSplitSourcePopulation
+	}
+	if band.Population < uint32(minimum) {
 		return gameapi.ErrSplitPopulationTooLow
 	}
 	return ""
@@ -325,6 +329,9 @@ func DiagnoseMoveActions(frame *gameapi.Frame, band *gameapi.Band, target TileLi
 	}
 
 	blocks := MoveActionBlocks{Split: ErrorCodeMessage(DiagnoseSplit(frame, band))}
+	if frame.EasyMode && DiagnoseSplit(frame, band) == gameapi.ErrSplitPopulationTooLow {
+		blocks.Split = easySplitPopulationMessage()
+	}
 	switch {
 	case source == TargetNone:
 		// Nothing has gone wrong yet, so this says what to do instead.

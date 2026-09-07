@@ -149,6 +149,9 @@ func newGameWithPresentation(port gameapi.Game, sound gameaudio.SoundManager, se
 		game.settingsLoading = true
 		game.settingsRevision = 1
 	}
+	if !game.settingsLoading {
+		game.syncEasyMode()
+	}
 	game.ensureSelection()
 	game.syncAssignmentDraft(true)
 	game.resetDisclosure()
@@ -222,8 +225,13 @@ func (g *Game) Update() error {
 	if g.startupRestorePending {
 		return nil
 	}
-	if g.frame == nil {
+	// Wait for preferences before allowing the first gameplay action.
+	if g.frame == nil || g.settingsLoading {
 		return nil
+	}
+	if g.pendingManualLoadID == 0 {
+		// Retry after a startup load failed while preferences were arriving.
+		g.syncEasyMode()
 	}
 	if g.viewportInitialized && !g.viewport.SupportsGameplay() {
 		return nil
@@ -309,6 +317,7 @@ func (g *Game) pollUISettings() {
 			g.guide = ui.NewGuideState(g.settings.GuideDismissed)
 			g.sound.SetMaster(g.settings.MasterVolume, g.settings.Muted)
 			g.scene.SetReducedMotion(g.settings.ReducedMotion)
+			g.syncEasyMode()
 			if completion.Err != nil {
 				g.showNotice("Preferences could not be loaded; using defaults")
 			}
@@ -1221,7 +1230,7 @@ func (g *Game) dispatchBatch(actions []ui.Action) (actionBatchResult, bool) {
 			}
 		}
 		if err != nil {
-			g.showNotice(ui.ErrorMessage(err))
+			g.showNotice(ui.ErrorMessageForMode(err, g.settings.EasyMode))
 			return result, false
 		}
 	}
@@ -1637,6 +1646,7 @@ func (g *Game) pollStorage() {
 
 		if result.ReplacementFrame != nil {
 			g.frame = result.ReplacementFrame
+			g.syncEasyMode()
 			g.publishFrame()
 			g.setFieldNote(ui.CampaignOverviewFieldNote())
 			g.breakthroughFrames = 0
@@ -1807,4 +1817,33 @@ func (g *Game) logicalCursorPosition() (int, int, bool) {
 	}
 	logicalX, logicalY, inside := render.FitPresentation(g.viewport.RenderWidthPx, g.viewport.RenderHeightPx).RenderToLogical(float64(x), float64(y))
 	return int(logicalX), int(logicalY), inside
+}
+
+func (g *Game) syncEasyMode() {
+	if g.settingsLoading || g.frame == nil || g.frame.EasyMode == g.settings.EasyMode {
+		return
+	}
+	frame, err := g.port.Apply(gameapi.SetEasyMode{Enabled: g.settings.EasyMode})
+	if err != nil {
+		g.showNotice(ui.ErrorMessageForMode(err, g.settings.EasyMode))
+		return
+	}
+	g.frame = frame
+	g.publishFrame()
+}
+
+func (g *Game) toggleEasyMode() {
+	if g.settingsLoading {
+		return
+	}
+	settings := g.settings
+	settings.EasyMode = !settings.EasyMode
+	frame, err := g.port.Apply(gameapi.SetEasyMode{Enabled: settings.EasyMode})
+	if err != nil {
+		g.showNotice(ui.ErrorMessageForMode(err, g.settings.EasyMode))
+		return
+	}
+	g.frame = frame
+	g.publishFrame()
+	g.updateUISettings(settings)
 }

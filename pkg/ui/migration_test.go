@@ -353,3 +353,20 @@ func TestUninhabitableMessageStillOffersHopeForATileThatRecovers(t *testing.T) {
 		t.Errorf("message for a tile that does recover hides that fact: %q", message)
 	}
 }
+
+func TestEasyModeSplitDiagnostics(t *testing.T) {
+	frame := &gameapi.Frame{EasyMode: true, CampaignResult: gameapi.Ongoing}
+	band := gameapi.Band{Species: gameapi.HomoSapiens, Population: 20, MigrationCandidates: []gameapi.MigrationCandidate{{TileID: 1}}}
+	if code := DiagnoseSplit(frame, &band); code != "" {
+		t.Fatalf("easy split blocked: %v", code)
+	}
+	frame.EasyMode = false
+	if code := DiagnoseSplit(frame, &band); code != gameapi.ErrSplitStressTooLow {
+		t.Fatalf("normal split: %v", code)
+	}
+	frame.EasyMode = true
+	band.Population = 19
+	if code := DiagnoseSplit(frame, &band); code != gameapi.ErrSplitPopulationTooLow {
+		t.Fatalf("small split: %v", code)
+	}
+}

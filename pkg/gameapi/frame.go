@@ -4,6 +4,7 @@ type TileID uint16
 type BandID uint64
 
 type Frame struct {
+	EasyMode                  bool
 	WorldRevision             uint64
 	TerrainRevision           uint64
 	Turn                      int

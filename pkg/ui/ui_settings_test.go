@@ -71,8 +71,8 @@ func TestUISettingsSchemaTwoRoundTripsAndUpgradesSchemaOne(t *testing.T) {
 	if _, err := DecodeUISettings(missing); err == nil {
 		t.Fatal("schema 2 payload without FieldNotesExpanded was accepted")
 	}
-	if _, err := DecodeUISettings([]byte(`{"SchemaVersion":4,"FieldNotesVisible":true,"MasterVolume":0.5,"Muted":false,"GuideDismissed":false,"FieldNotesExpanded":false,"ReducedMotion":false}`)); err == nil {
-		t.Fatal("unknown schema 4 was accepted")
+	if _, err := DecodeUISettings([]byte(`{"SchemaVersion":5,"FieldNotesVisible":true,"MasterVolume":0.5,"Muted":false,"GuideDismissed":false,"FieldNotesExpanded":false,"ReducedMotion":false}`)); err == nil {
+		t.Fatal("unknown schema 5 was accepted")
 	}
 }
 
@@ -101,5 +101,25 @@ func TestSchemaThreeRoundTripsReducedMotion(t *testing.T) {
 	missing := []byte(`{"SchemaVersion":3,"FieldNotesVisible":true,"MasterVolume":0.5,"Muted":false,"GuideDismissed":false,"FieldNotesExpanded":false}`)
 	if _, err := DecodeUISettings(missing); err == nil {
 		t.Fatal("schema 3 payload without ReducedMotion was accepted")
+	}
+}
+
+func TestEasyModePreferenceDefaultsMigrationAndOptOut(t *testing.T) {
+	if !DefaultUISettings().EasyMode {
+		t.Fatal("easy mode should default on")
+	}
+	old := []byte(`{"SchemaVersion":3,"FieldNotesVisible":true,"MasterVolume":0.5,"Muted":false,"GuideDismissed":false,"FieldNotesExpanded":false,"ReducedMotion":true}`)
+	settings, err := DecodeUISettings(old)
+	if err != nil || !settings.EasyMode || !settings.ReducedMotion {
+		t.Fatalf("upgrade: %+v %v", settings, err)
+	}
+	settings.EasyMode = false
+	payload, err := EncodeUISettings(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := DecodeUISettings(payload)
+	if err != nil || restored != settings {
+		t.Fatalf("opt-out round trip: %+v %v", restored, err)
 	}
 }

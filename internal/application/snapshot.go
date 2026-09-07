@@ -36,6 +36,7 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 	}
 	climate := service.world.Climate()
 	frame := &gameapi.Frame{
+		EasyMode:      service.world.EasyMode(),
 		WorldRevision: service.worldRevision, TerrainRevision: service.terrainRevision,
 		Turn: date.Turn, YearBP: date.YearBP, Era: mapEra(date.Era), CalendarProgress: date.CalendarProgress,
 		Season: mapSeason(season), CampaignResult: mapResult(service.world.Result()),

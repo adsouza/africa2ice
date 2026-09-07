@@ -88,7 +88,7 @@ func (world *World) advanceTurn() error {
 
 	work := make([]turnBandWork, len(nextBands))
 	for index, band := range nextBands {
-		if band.Population <= 0 || nextHabitat[band.TileID].BaselineK <= 0 {
+		if band.Population <= 0 || (!world.easyMode && nextHabitat[band.TileID].BaselineK <= 0) {
 			continue
 		}
 		geography, _ := world.grid.Tile(band.TileID)
@@ -182,7 +182,7 @@ func (world *World) advanceTurn() error {
 
 	for index := range nextBands {
 		band := &nextBands[index]
-		if band.Population <= 0 || nextHabitat[band.TileID].BaselineK <= 0 {
+		if band.Population <= 0 || (!world.easyMode && nextHabitat[band.TileID].BaselineK <= 0) {
 			band.Population = 0
 			continue
 		}
@@ -225,6 +225,10 @@ func (world *World) advanceTurn() error {
 		effectiveK := float64(float64(nextHabitat[band.TileID].BaselineK*(1-nextTiles[band.TileID].Degradation)) * band.Technology.CapacityMultiplier())
 		effectiveK = float64(effectiveK * macroImpacts[band.TileID].HabitatFactor)
 		growth := LogisticGrowth(startPopulation, float64(populationByTile[band.TileID]), effectiveK, deficitFraction)
+		// Share an integer death budget across crowding and all mortality phases.
+		if world.easyMode {
+			growth = max(growth, -float64(startingPopulation/10))
+		}
 		band.LastOutcomeReport.Growth = growth
 		grownPopulation := startPopulation + growth
 		if grownPopulation < 0 {
@@ -236,8 +240,12 @@ func (world *World) advanceTurn() error {
 		rawChronic := float64(startPopulation * chronicRate)
 		rawMortality := rawStarvation + rawSeasonal + rawChronic
 		mortalityScale := 1.0
+		if world.easyMode && rawMortality > 0 {
+			budget := max(0, float64(startingPopulation/10)+min(0, growth))
+			mortalityScale = min(1, budget/rawMortality)
+		}
 		if rawMortality > grownPopulation && rawMortality > 0 {
-			mortalityScale = grownPopulation / rawMortality
+			mortalityScale = min(mortalityScale, grownPopulation/rawMortality)
 		}
 		starvation := float64(rawStarvation * mortalityScale)
 		seasonalLoss := float64(rawSeasonal * mortalityScale)
@@ -249,6 +257,9 @@ func (world *World) advanceTurn() error {
 		band.Population, err = RoundPopulation(population, world.rng)
 		if err != nil {
 			return err
+		}
+		if world.easyMode {
+			band.Population = max(band.Population, startingPopulation-startingPopulation/10)
 		}
 		band.LastMortality = MortalityReport{Starvation: starvation, Seasonal: seasonalLoss, Chronic: chronicLoss}
 		band.LastOutcomeReport.EndingPopulation = band.Population
@@ -303,9 +314,19 @@ func (world *World) advanceTurn() error {
 			before := float64(band.Population)
 			healthBefore := band.Health
 			macroLoss := float64(before * impact.LossFraction)
+			if world.easyMode {
+				report := band.LastOutcomeReport
+				m := band.LastMortality
+				budget := max(0, float64(report.StartingPopulation/10)+min(0, report.Growth)-m.Starvation-m.Seasonal-m.Chronic)
+				macroLoss = min(macroLoss, budget)
+			}
 			band.Population, err = RoundPopulation(before-macroLoss, world.rng)
 			if err != nil {
 				return err
+			}
+			if world.easyMode {
+				start := band.LastOutcomeReport.StartingPopulation
+				band.Population = max(band.Population, start-start/10)
 			}
 			band.Health = Health(clamp01(float64(band.Health) - impact.HealthLoss))
 			band.LastMortality.Macro = before - float64(band.Population)
@@ -313,13 +334,15 @@ func (world *World) advanceTurn() error {
 			world.appendBandEvent(*band, Event{Turn: nextTurn, Kind: EventMacroEpisode, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d was affected by the Campanian eruption.", band.ID)})
 		}
 		healthBeforeAcute := band.Health
-		kind, loss, occurred, err := ResolveAcute(band, geography, nextHabitat[band.TileID], season, work[index].acuteRisk, work[index].crossed, work[index].crossedPassage, kinContacts[index], world.rng)
-		if err != nil {
-			return err
-		}
-		if occurred {
-			band.LastMortality.Acute = loss
-			world.appendBandEvent(*band, Event{Turn: nextTurn, Kind: EventAcuteIncident, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d suffered %s.", band.ID, acuteIncidentPhrase(kind))})
+		if !world.easyMode {
+			kind, loss, occurred, err := ResolveAcute(band, geography, nextHabitat[band.TileID], season, work[index].acuteRisk, work[index].crossed, work[index].crossedPassage, kinContacts[index], world.rng)
+			if err != nil {
+				return err
+			}
+			if occurred {
+				band.LastMortality.Acute = loss
+				world.appendBandEvent(*band, Event{Turn: nextTurn, Kind: EventAcuteIncident, BandID: band.ID, TileID: band.TileID, Region: geography.Region, Summary: fmt.Sprintf("Band %d suffered %s.", band.ID, acuteIncidentPhrase(kind))})
+			}
 		}
 		band.LastOutcomeReport.AcuteDiseaseHealthLoss = float64(healthBeforeAcute - band.Health)
 		band.LastOutcomeReport.EndingPopulation = band.Population

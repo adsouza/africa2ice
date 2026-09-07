@@ -86,7 +86,11 @@ func (band *Band) SetAssignment(allocation [AssignmentCount]AssignmentBP) error 
 }
 
 func splitBand(parent Band, childID BandID) (Band, Band, error) {
-	if parent.Population < MinSplitSourcePopulation {
+	return splitBandWithMinimum(parent, childID, MinSplitSourcePopulation)
+}
+
+func splitBandWithMinimum(parent Band, childID BandID, minimum Population) (Band, Band, error) {
+	if parent.Population < minimum {
 		return Band{}, Band{}, ErrSplitPopulationTooLow
 	}
 	childPopulation := parent.Population / 2

@@ -78,7 +78,8 @@ func SupportedCompatibility() (int, AlgorithmVersions) {
 }
 
 type SaveState struct {
-	SchemaVersion int `json:"schema_version"`
+	EasyMode      bool `json:"easy_mode,omitempty"`
+	SchemaVersion int  `json:"schema_version"`
 	AlgorithmVersions
 	WorldRevision      uint64                              `json:"world_revision"`
 	WorldSeed          uint64                              `json:"world_seed"`
@@ -194,7 +195,7 @@ func SaveStateFromWorld(world *domain.World, revision uint64) (SaveState, error)
 		return SaveState{}, err
 	}
 	save := SaveState{
-		SchemaVersion: SaveSchemaVersion, AlgorithmVersions: supportedAlgorithms, WorldRevision: revision,
+		EasyMode: state.EasyMode, SchemaVersion: SaveSchemaVersion, AlgorithmVersions: supportedAlgorithms, WorldRevision: revision,
 		WorldSeed: state.Seed, GridWidth: domain.MapWidth, GridHeight: domain.MapHeight, Turn: state.Turn,
 		Result: uint8(state.Result), NextBandID: uint64(state.NextBandID), ExploredTiles: state.ExploredTiles,
 		RNGState: append([]byte(nil), state.RNGState...),
@@ -247,7 +248,7 @@ func (save SaveState) RestoreWorld() (*domain.World, error) {
 	if save.GridWidth != domain.MapWidth || save.GridHeight != domain.MapHeight {
 		return nil, fmt.Errorf("invalid grid dimensions")
 	}
-	state := domain.State{Seed: save.WorldSeed, Turn: save.Turn, Result: domain.CampaignResult(save.Result), NextBandID: domain.BandID(save.NextBandID), ExploredTiles: save.ExploredTiles, RNGState: append([]byte(nil), save.RNGState...)}
+	state := domain.State{EasyMode: save.EasyMode, Seed: save.WorldSeed, Turn: save.Turn, Result: domain.CampaignResult(save.Result), NextBandID: domain.BandID(save.NextBandID), ExploredTiles: save.ExploredTiles, RNGState: append([]byte(nil), save.RNGState...)}
 	previous := -1
 	for _, region := range save.EstablishedRegions {
 		if int(region) <= previous || region >= uint8(domain.RegionCount) {

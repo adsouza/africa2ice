@@ -129,6 +129,9 @@ func (world *World) scoreMigration(band Band, destination TileID, cost float64, 
 	arrivingTotal := float64(destinationPopulation) + arriving
 	if growth := LogisticGrowth(arriving, arrivingTotal, arrivalK, 0); growth < 0 {
 		crowdingDecline = -growth
+		if world.easyMode {
+			crowdingDecline = min(crowdingDecline, float64(band.Population/10))
+		}
 	}
 	// The share of the arriving population the destination can actually support.
 	//

@@ -162,3 +162,26 @@ func TestEndSceneShowsNewCampaignButton(t *testing.T) {
 		t.Fatalf("new campaign = %+v", intents)
 	}
 }
+
+func TestSettingsEasyModeCheckbox(t *testing.T) {
+	panel := New()
+	state := testState(testFrame(1), 1)
+	state.Overlay = OverlayState{Scene: ui.SceneSettings, EasyMode: true}
+	panel.Update(state)
+	checkbox := panel.handles.easyModeCheckbox
+	if checkbox == nil || checkbox.State() != widget.WidgetChecked {
+		t.Fatal("easy mode is not checked")
+	}
+	checkbox.Click()
+	intents := panel.Update(state)
+	if len(intents) != 1 || intents[0].Kind != IntentToggleEasyMode {
+		t.Fatalf("checkbox intents: %+v", intents)
+	}
+	state.Overlay.EasyMode = false
+	state.Overlay.SettingsDisabled = true
+	panel.Update(state)
+	checkbox = panel.handles.easyModeCheckbox
+	if checkbox.State() != widget.WidgetUnchecked || !checkbox.GetWidget().Disabled {
+		t.Fatal("checkbox state/loading guard incorrect")
+	}
+}

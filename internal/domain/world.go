@@ -7,6 +7,7 @@ import (
 )
 
 type World struct {
+	easyMode           bool
 	seed               uint64
 	turn               int
 	result             CampaignResult
@@ -78,7 +79,7 @@ func RestoreWorld(state State) (*World, error) {
 		return nil, fmt.Errorf("%w: RNG state: %v", ErrInvalidValue, err)
 	}
 	world := &World{
-		seed: state.Seed, turn: state.Turn, result: state.Result, nextBandID: state.NextBandID,
+		easyMode: state.EasyMode, seed: state.Seed, turn: state.Turn, result: state.Result, nextBandID: state.NextBandID,
 		bands: append([]Band(nil), state.Bands...), events: append([]Event(nil), state.Events...), tiles: state.Tiles, exploredTiles: state.ExploredTiles,
 		establishedRegions: state.EstablishedRegions, rng: rng, grid: grid, habitat: habitat, climate: climate,
 	}
@@ -97,7 +98,7 @@ func (world *World) ExportState() (State, error) {
 		return State{}, err
 	}
 	return State{
-		Seed: world.seed, Turn: world.turn, Result: world.result, NextBandID: world.nextBandID,
+		EasyMode: world.easyMode, Seed: world.seed, Turn: world.turn, Result: world.result, NextBandID: world.nextBandID,
 		Bands: append([]Band(nil), world.bands...), Events: append([]Event(nil), world.events...), Tiles: world.tiles, ExploredTiles: world.exploredTiles,
 		EstablishedRegions: world.establishedRegions, RNGState: append([]byte(nil), rngState...),
 	}, nil
@@ -152,14 +153,25 @@ func (world *World) revealInitialEastAfrica() {
 	}
 }
 
+func (world *World) EasyMode() bool { return world.easyMode }
+
+func (world *World) SetEasyMode(enabled bool) {
+	world.easyMode = enabled
+	world.revealFromSapiens()
+}
+
 func (world *World) revealFromSapiens() {
+	radius := 1
+	if world.easyMode {
+		radius = 2
+	}
 	for _, band := range world.bands {
 		if band.Species != HomoSapiens || band.Population <= 0 {
 			continue
 		}
 		x, y, _ := TileXY(band.TileID)
-		for dy := -1; dy <= 1; dy++ {
-			for dx := -1; dx <= 1; dx++ {
+		for dy := -radius; dy <= radius; dy++ {
+			for dx := -radius; dx <= radius; dx++ {
 				id, err := TileIDAt(x+dx, y+dy)
 				if err == nil {
 					world.markExplored(id)
@@ -229,8 +241,12 @@ func (world *World) validate() error {
 		if band.TileID >= TileCount || band.Species >= SpeciesCount {
 			return fmt.Errorf("%w: band identity", ErrInvalidValue)
 		}
-		if band.Population > 0 && world.habitat[band.TileID].BaselineK <= 0 {
-			return fmt.Errorf("%w: living band on uninhabitable tile", ErrInvalidValue)
+		// Easy-mode survivors can remain on land whose capacity collapsed.
+		// This remains a valid save immediately after disabling easy mode;
+		// normal mortality resumes next turn. Destination commands still require K > 0.
+		geography, _ := world.grid.Tile(band.TileID)
+		if band.Population > 0 && !geography.Land {
+			return fmt.Errorf("%w: living band on water", ErrInvalidValue)
 		}
 		if err := ValidateHealth(band.Health); err != nil {
 			return err

@@ -4,6 +4,7 @@ package gameapi
 // the simulation and the release-verification driver cannot silently drift.
 const (
 	MinEstablishedBand                = 20
+	EasyMinSplitSourcePopulation      = 20
 	MinSplitSourcePopulation          = 2 * MinEstablishedBand
 	SplitStressThreshold              = 0.67
 	ReferenceRouteDeparturePopulation = 5 * MinEstablishedBand / 2

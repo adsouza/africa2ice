@@ -44,3 +44,9 @@ type Interbreed struct {
 
 func (Interbreed) isCommand()             {}
 func (c Interbreed) ActingBandID() BandID { return c.BandID }
+
+// SetEasyMode changes the gameplay difficulty immediately.
+type SetEasyMode struct{ Enabled bool }
+
+func (SetEasyMode) isCommand()           {}
+func (SetEasyMode) ActingBandID() BandID { return 0 }

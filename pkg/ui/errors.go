@@ -44,15 +44,24 @@ func ErrorCodeMessage(code gameapi.ErrorCode) string {
 // ErrorMessage turns the public typed error contract into actionable player
 // copy without importing the domain. Unknown adapter errors retain their text
 // so diagnostics are not replaced by a generic failure.
-func ErrorMessage(err error) string {
+func ErrorMessage(err error) string { return ErrorMessageForMode(err, false) }
+
+func ErrorMessageForMode(err error, easyMode bool) string {
 	if err == nil {
 		return ""
 	}
 	var gameError *gameapi.GameError
 	if errors.As(err, &gameError) {
+		if easyMode && gameError.Code == gameapi.ErrSplitPopulationTooLow {
+			return easySplitPopulationMessage()
+		}
 		if message := ErrorCodeMessage(gameError.Code); message != "" {
 			return message
 		}
 	}
 	return err.Error()
+}
+
+func easySplitPopulationMessage() string {
+	return fmt.Sprintf("This band needs at least %d people to split.", gameapi.EasyMinSplitSourcePopulation)
 }

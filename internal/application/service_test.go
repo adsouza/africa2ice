@@ -453,3 +453,37 @@ func TestFrameCarriesTheProjectedCrowdingDecline(t *testing.T) {
 		t.Fatal("no candidate ever projected a crowding decline, so the comparison above proves nothing")
 	}
 }
+
+func TestEasyModeSaveLoadAndNewCampaign(t *testing.T) {
+	repository := &repositoryStub{writable: true}
+	service, _ := NewGameServiceWithRepository(42, repository)
+	before, _ := service.Snapshot()
+	after, err := service.Apply(gameapi.SetEasyMode{Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.EasyMode || after.WorldRevision != before.WorldRevision+1 || after.TerrainRevision != before.TerrainRevision+1 {
+		t.Fatal("difficulty change not published")
+	}
+	if _, err := service.BeginSave(1); err != nil {
+		t.Fatal(err)
+	}
+	service.PollStorage()
+	if !repository.written.EasyMode {
+		t.Fatal("difficulty missing from save")
+	}
+	if _, err := service.Apply(gameapi.SetEasyMode{Enabled: false}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.BeginLoad(1); err != nil {
+		t.Fatal(err)
+	}
+	results := service.PollStorage()
+	if len(results) != 1 || results[0].Err != nil || !results[0].ReplacementFrame.EasyMode {
+		t.Fatalf("load lost difficulty: %+v", results)
+	}
+	after, err = service.NewCampaign()
+	if err != nil || !after.EasyMode {
+		t.Fatal("new campaign lost difficulty")
+	}
+}

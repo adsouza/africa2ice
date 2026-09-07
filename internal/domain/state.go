@@ -12,6 +12,7 @@ const (
 const ExplorationWordCount = (TileCount + 63) / 64
 
 type State struct {
+	EasyMode           bool
 	Seed               uint64
 	Turn               int
 	Result             CampaignResult

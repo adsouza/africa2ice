@@ -64,6 +64,7 @@ func (service *GameService) NewCampaign() (*gameapi.Frame, error) {
 	if err != nil {
 		return nil, err
 	}
+	world.SetEasyMode(service.world.EasyMode())
 	service.world = world
 	service.worldRevision = 1
 	service.terrainRevision++
@@ -79,6 +80,9 @@ func (service *GameService) Apply(command gameapi.Command) (*gameapi.Frame, erro
 	var err error
 	terrainChanged := false
 	switch value := command.(type) {
+	case gameapi.SetEasyMode:
+		service.world.SetEasyMode(value.Enabled)
+		terrainChanged = true
 	case gameapi.SetAssignment:
 		var allocation [domain.AssignmentCount]domain.AssignmentBP
 		for index, item := range value.AllocationBP {

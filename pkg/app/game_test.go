@@ -39,17 +39,18 @@ func TestMaximumProfileFrameRendersWithCompleteHUD(t *testing.T) {
 }
 
 type gameStub struct {
-	frame           *gameapi.Frame
-	results         []gameapi.StorageResult
-	nextStorageID   gameapi.StorageOpID
-	loadedSlot      int
-	savedSlot       int
-	deletedSlot     int
-	appliedCommand  gameapi.Command
-	appliedCommands []gameapi.Command
-	applyErrorAt    int
-	endTurns        int
-	newCampaigns    int
+	frame             *gameapi.Frame
+	results           []gameapi.StorageResult
+	nextStorageID     gameapi.StorageOpID
+	loadedSlot        int
+	savedSlot         int
+	deletedSlot       int
+	difficultyChanges []bool
+	appliedCommand    gameapi.Command
+	appliedCommands   []gameapi.Command
+	applyErrorAt      int
+	endTurns          int
+	newCampaigns      int
 }
 
 type soundRecorder struct {
@@ -102,6 +103,13 @@ func (stub *gameStub) NewCampaign() (*gameapi.Frame, error) {
 }
 
 func (stub *gameStub) Apply(command gameapi.Command) (*gameapi.Frame, error) {
+	// Difficulty setup is tracked separately from band actions.
+	if mode, ok := command.(gameapi.SetEasyMode); ok {
+		stub.difficultyChanges = append(stub.difficultyChanges, mode.Enabled)
+		stub.frame.EasyMode = mode.Enabled
+		return stub.frame, nil
+	}
+
 	stub.appliedCommand = command
 	stub.appliedCommands = append(stub.appliedCommands, command)
 	if stub.applyErrorAt > 0 && len(stub.appliedCommands) == stub.applyErrorAt {
@@ -135,6 +143,11 @@ func (stub *gameStub) BeginListSlots() (gameapi.StorageOpID, error) { return stu
 func (stub *gameStub) PollStorage() []gameapi.StorageResult {
 	results := stub.results
 	stub.results = nil
+	for _, result := range results {
+		if result.ReplacementFrame != nil {
+			stub.frame = result.ReplacementFrame
+		}
+	}
 	return results
 }
 
@@ -1157,5 +1170,39 @@ func TestShowNoticeScalesDurationWithLength(t *testing.T) {
 	game.showNotice(message)
 	if game.notice != message || game.noticeFrames != ui.NoticeFrames(message) || game.noticeFrames <= 120 {
 		t.Fatalf("showNotice = %q for %d frames, want ui.NoticeFrames %d (> 120)", game.notice, game.noticeFrames, ui.NoticeFrames(message))
+	}
+}
+
+func TestEasyModeDefaultsAndPersistedOptOutReachSimulation(t *testing.T) {
+	service, _ := application.NewGameService(42)
+	game := New(service)
+	if !game.frame.EasyMode || !game.settings.EasyMode {
+		t.Fatal("new player did not get easy mode")
+	}
+	game.toggleEasyMode()
+	if game.frame.EasyMode || game.settings.EasyMode {
+		t.Fatal("checkbox did not disable easy mode")
+	}
+	frame, err := service.NewCampaign()
+	if err != nil || frame.EasyMode {
+		t.Fatalf("new campaign lost opt-out: %v", err)
+	}
+	store := &settingsStoreStub{}
+	service, _ = application.NewGameService(42)
+	game = newGameWithPresentation(service, &soundRecorder{}, store)
+	initial, _ := service.Snapshot()
+	settings := ui.DefaultUISettings()
+	settings.EasyMode = false
+	store.completions = []ui.UISettingsCompletion{{Operation: ui.UISettingsRead, Revision: 1, Settings: settings}}
+	game.pollUISettings()
+	if game.frame.EasyMode || game.settings.EasyMode {
+		t.Fatal("persisted opt-out ignored")
+	}
+	if game.frame.WorldRevision != initial.WorldRevision {
+		t.Fatal("opt-out briefly enabled easy mode before preferences arrived")
+	}
+	game.toggleEasyMode()
+	if !game.frame.EasyMode || len(store.writes) != 1 || !store.writes[0].Settings.EasyMode {
+		t.Fatal("enabling easy mode did not update simulation and preference store")
 	}
 }

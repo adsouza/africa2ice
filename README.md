@@ -180,3 +180,11 @@ go run . -headless -turns 400 -seed 0x9e3779b97f4a7c15 -policy reference
 ```
 
 The complete product and architecture contract is in [`docs/DESIGN.md`](docs/DESIGN.md).
+
+Easy mode is on by default. Uncheck **Easy mode** in Settings to use normal
+rules. Easy mode reveals two rings of nearby tiles instead of one, allows
+splitting from 20 people without a crowding requirement, caps each band's total
+population loss at 10% per turn (rounding deaths down), and disables acute
+incidents. Splits still require an explored, habitable neighboring tile and an
+unused spatial action. The preference is remembered across launches and applies
+to new and loaded campaigns; explored tiles remain visible when it is disabled.

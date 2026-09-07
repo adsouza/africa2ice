@@ -170,9 +170,10 @@ type handles struct {
 	guideNext   *widget.Button
 	guideX      *widget.Button
 
-	overlayButtons []*widget.Button
-	deleteButtons  []*widget.Button
-	newCampaign    *widget.Button
+	easyModeCheckbox *widget.Checkbox
+	overlayButtons   []*widget.Button
+	deleteButtons    []*widget.Button
+	newCampaign      *widget.Button
 	// endScene is the terminal dialog's modal window (see buildEndScene):
 	// closed alongside overlay and bandList on every rebuild so a stale
 	// window never lingers over a fresh campaign.

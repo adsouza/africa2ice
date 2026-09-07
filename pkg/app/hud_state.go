@@ -53,7 +53,7 @@ func (g *Game) hudState() hud.State {
 // overlayState derives the modal scene's widget content from UI-local
 // storage/settings fields; it never stores anything of its own.
 func (g *Game) overlayState() hud.OverlayState {
-	overlay := hud.OverlayState{Scene: g.scenes.Current(), MasterVolume: g.settings.MasterVolume, Muted: g.settings.Muted, ReducedMotion: g.settings.ReducedMotion, SettingsDisabled: g.settingsLoading}
+	overlay := hud.OverlayState{Scene: g.scenes.Current(), MasterVolume: g.settings.MasterVolume, Muted: g.settings.Muted, EasyMode: g.settings.EasyMode, ReducedMotion: g.settings.ReducedMotion, SettingsDisabled: g.settingsLoading}
 	if overlay.Scene != ui.SceneStorage {
 		return overlay
 	}

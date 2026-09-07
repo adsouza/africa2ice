@@ -209,19 +209,20 @@ func TestRestoreRejectsContradictoryTerminalState(t *testing.T) {
 	}
 }
 
-func TestRestoreRejectsLivingBandOnUninhabitableTile(t *testing.T) {
+func TestRestoreRejectsLivingBandOnWater(t *testing.T) {
 	world, _ := NewWorld(23)
 	state, _ := world.ExportState()
-	for id, habitat := range world.habitat {
-		if habitat.BaselineK <= 0 {
+	for id := range TileCount {
+		geography, _ := world.grid.Tile(TileID(id))
+		if !geography.Land {
 			state.Bands[0].TileID = TileID(id)
 			if _, err := RestoreWorld(state); err == nil {
-				t.Fatal("living band on uninhabitable tile restored")
+				t.Fatal("living band on water restored")
 			}
 			return
 		}
 	}
-	t.Fatal("fixture has no uninhabitable tile")
+	t.Fatal("fixture has no water tile")
 }
 
 func TestRestoreRejectsInfiniteFoodReport(t *testing.T) {
