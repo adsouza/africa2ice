@@ -6715,11 +6715,21 @@ serialized and never a simulation input.
 - **Overview**: the whole 96 × 64 grid at 8 px cells from origin `(20, 74)`, as above.
 - **Focus**: 3× scale (24 px cells) centered on the selected band's tile, clamped so the visible
   window (about 36 × 26 tiles) stays inside the grid.
-- Focus is requested when the Move row is open and the selected sapiens band's spatial action is
-  still available. It follows selection changes and returns to Overview when the row closes or the
-  action is consumed. `Z` and a map-corner `Overview · Z` / `Focus · Z` button toggle a per-selection
-  override that inverts this automatic choice and resets whenever the selection changes. The button
-  itself is omitted while the campaign-terminal end scene is showing, so it never draws over that
+- The mode is stored, not re-derived each tick, and Focus is sticky. Once the camera is in Focus it
+  stays there through a committed move, a change of open row, and a change of selection — a new
+  selection recenters the zoomed map on that band's tile rather than zooming out. Only `Z` and a
+  map-corner `Overview · Z` / `Focus · Z` button leave it, and that choice holds for as long as the
+  player stays on one band.
+- The one automatic zoom-in is arming: a selection change, a load, a new campaign, or a completed
+  turn puts the camera into Focus when the newly selected band is a sapiens band whose spatial
+  action is still available. Arming is one-sided — a selection that cannot act leaves the current
+  zoom untouched — so an explicit `Z` is overridden only by moving to a band that can still act, and
+  never by the selected band merely spending its move.
+- Focus needs a centre, so with no band selected the camera shows Overview; the stored mode is read
+  but not cleared, and reselecting restores the player's zoom. The toggle is offered whenever a band
+  is selected, including one that has already acted and an archaic band, because Focus outlives the
+  move that armed it and the player would otherwise have no on-screen way back to Overview. The
+  button is omitted while the campaign-terminal end scene is showing, so it never draws over that
   dialog.
 - Transitions interpolate scale and center over 15 update ticks (250 ms at 60 TPS).
 - The camera's visible window is computed against the map area above the Field Notes drawer: the
@@ -7101,8 +7111,10 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   a completed turn, the open row resets to the first of Move/Research not yet done, falling back to
   Move; Workforce is never chosen by this default because it never blocks. Clicking a row header,
   `Shift+Up`/`Shift+Down`, or `PgUp`/`PgDn` opens a row explicitly. Details, the band-chip overflow
-  list, and the camera override are independent transient toggles that reset with selection; Field
-  Notes drawer visibility and height persist as a local preference instead.
+  list are independent transient toggles that reset with selection; the camera's Overview/Focus mode
+  is not one of them, since it persists across selections and is re-armed rather than reset
+  (Two-state camera, §8); Field Notes drawer visibility and height persist as a local preference
+  instead.
 - **Move row, open:** a HERE/TARGET comparison grid — Biome, Food, Capacity (with degradation),
   Water, Shelter, Mortality (seasonal · chronic), Route (cost multiplier, turns), Archaic presence.
   The TARGET header names its source in precedence order — `cursor`, then `queued`, then `hover` —
@@ -7246,7 +7258,7 @@ Every mouse action documented above has a keyboard alias; the two paths converge
 | `D` | Toggle the band details disclosure — except while the Workforce row is open, where `D` is row-owned instead (Row-owned, below) |
 | `1`–`9` | Choose the numbered research target |
 | `M` | Mute/unmute |
-| `Z` | Toggle the camera override (Two-state camera, above) |
+| `Z` | Toggle Overview / Focus; the choice sticks until a band that can still move is selected (Two-state camera, above) |
 | `Shift+/` (`?`) | Toggle the shortcut sheet |
 | `PgUp`/`PgDn`, `Shift+Up`/`Shift+Down` | Change the open checklist row |
 | `Ctrl`/`Cmd+S` | Quick-save |

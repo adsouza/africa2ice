@@ -91,7 +91,7 @@ type Game struct {
 	shortcutsOpen          bool
 	researchCursor         gameapi.Tech
 	camera                 render.Camera
-	cameraOverride         bool
+	cameraFocused          bool
 }
 
 const (
@@ -712,15 +712,24 @@ func (g *Game) selected() *gameapi.Band {
 	return nil
 }
 
-// desiredCameraMode applies spec §6: focus while the Move row is open and the
-// selected sapiens band still has its spatial action, inverted by Z.
-func (g *Game) desiredCameraMode() render.CameraMode {
+// cameraFocusEligible reports whether the selection is one the camera leans
+// in for: a player band that can still act on the map. It arms Focus on a
+// new selection (resetDisclosure) and keeps the map-corner toggle honest; it
+// is deliberately not consulted once Focus is armed, since a mode that kept
+// reading it would zoom back out the moment the move was spent.
+func (g *Game) cameraFocusEligible() bool {
 	band := g.selected()
-	auto := g.openRow == ui.RowMove && band != nil && band.Species == gameapi.HomoSapiens && !ui.MoveDone(*band)
-	if g.cameraOverride {
-		auto = !auto
-	}
-	if auto {
+	return band != nil && band.Species == gameapi.HomoSapiens && !ui.MoveDone(*band)
+}
+
+// desiredCameraMode reads the stored zoom (spec §6). Focus is sticky: only Z
+// and the map-corner button leave it, so committing a move, changing the open
+// row, or selecting another band never zooms the player out mid-plan. The one
+// clamp is the selection — stepCamera refreshes CenterTile only while a band
+// is selected, so Focus with nothing selected would zoom a stale tile. The
+// clamp reads the flag without clearing it, so reselecting restores the zoom.
+func (g *Game) desiredCameraMode() render.CameraMode {
+	if g.cameraFocused && g.selected() != nil {
 		return render.CameraFocus
 	}
 	return render.CameraOverview
@@ -749,7 +758,7 @@ func (g *Game) mapVisibleHeight() float64 {
 	}
 }
 
-func (g *Game) toggleCameraOverride() { g.cameraOverride = !g.cameraOverride }
+func (g *Game) toggleCameraFocus() { g.cameraFocused = !g.cameraFocused }
 
 // toggleDetails flips the band details disclosure (spec §8). It is `D`'s
 // global meaning; while the Workforce row is open, D is row-owned instead

@@ -25,10 +25,14 @@ type WorkforceDraft struct {
 	Valid        bool
 }
 
-// CameraState tells the panel whether the Focus toggle applies (spec §6).
+// CameraState tells the panel whether the Overview/Focus toggle applies
+// (spec §6) and which way it currently reads. ToggleAvailable is any
+// selection at all, not one that can still move: Focus outlives the move
+// that armed it, so gating the button on the move would strand a zoomed-in
+// player with Z as their only way back out.
 type CameraState struct {
-	FocusAvailable bool
-	Focused        bool
+	ToggleAvailable bool
+	Focused         bool
 }
 
 // StorageRow is one save-slot line in the storage browser overlay.

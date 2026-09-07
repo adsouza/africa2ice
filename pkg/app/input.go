@@ -53,7 +53,7 @@ func (g *Game) handleGameplayKeys() {
 	case inpututil.IsKeyJustPressed(ebiten.KeyM):
 		g.toggleMute()
 	case inpututil.IsKeyJustPressed(ebiten.KeyZ):
-		g.toggleCameraOverride()
+		g.toggleCameraFocus()
 	case inpututil.IsKeyJustPressed(ebiten.KeySlash) && shift:
 		g.toggleShortcutSheet()
 	case inpututil.IsKeyJustPressed(ebiten.KeyPageUp):

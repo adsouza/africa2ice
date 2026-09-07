@@ -3,34 +3,117 @@ package app
 import (
 	"testing"
 
+	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/adsouza/africa2ice/pkg/hud"
 	"github.com/adsouza/africa2ice/pkg/render"
 	"github.com/adsouza/africa2ice/pkg/ui"
 )
 
-func TestCameraFocusesWhileTheMoveRowIsOpenAndTheActionIsAvailable(t *testing.T) {
-	game := New(&gameStub{frame: migrationPreviewFrame()})
+// cameraFrame is the camera's own fixture: band 7 opens the campaign with
+// its spatial action available, band 8 has already acted, and band 9 is a
+// second still-movable band to re-arm Focus with.
+func cameraFrame() *gameapi.Frame {
+	frame := migrationPreviewFrame()
+	frame.Bands = append(frame.Bands,
+		gameapi.Band{ID: 8, Species: gameapi.HomoSapiens, TileID: 1, Population: 120, SpatialActionUsed: true},
+		gameapi.Band{ID: 9, Species: gameapi.HomoSapiens, TileID: 2, Population: 120},
+	)
+	return frame
+}
+
+// TestSpendingTheMoveLeavesTheCameraFocused pins the sticky half of the
+// camera contract. The mode used to be re-derived every tick from
+// "Move row open ∧ sapiens ∧ !MoveDone", so committing a move falsified two
+// of those conjuncts at once — MoveDone flips, and advanceOpenRow walks the
+// open row off Move — and the map zoomed out from under the player mid-plan.
+// The mode is stored state now, and nothing about the band clears it.
+func TestSpendingTheMoveLeavesTheCameraFocused(t *testing.T) {
+	game := New(&gameStub{frame: cameraFrame()})
 	if game.desiredCameraMode() != render.CameraFocus {
-		t.Fatal("fresh band with Move open should request Focus")
+		t.Fatal("a fresh band with its move open should start in Focus")
+	}
+	game.frame.Bands[0].SpatialActionUsed = true
+	game.advanceOpenRow()
+	if game.desiredCameraMode() != render.CameraFocus {
+		t.Fatal("spending the move zoomed out; Focus must hold")
 	}
 	game.openRow, game.rowChosen = ui.RowResearch, true
-	if game.desiredCameraMode() != render.CameraOverview {
-		t.Fatal("Research open should return to Overview")
+	if game.desiredCameraMode() != render.CameraFocus {
+		t.Fatal("opening another row zoomed out; Focus must hold")
 	}
-	game.openRow = ui.RowMove
+}
+
+// TestSwitchingBandsRecentersWithoutLeavingFocus is the other half of the
+// ask. Band 8 has already acted, which under the derived mode was exactly
+// the selection that snapped back to Overview; the camera should do nothing
+// here but follow its new centre.
+func TestSwitchingBandsRecentersWithoutLeavingFocus(t *testing.T) {
+	game := New(&gameStub{frame: cameraFrame()})
+	game.stepCamera()
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentSelectBand, Band: 8}})
+	game.stepCamera()
+	if game.camera.Mode != render.CameraFocus {
+		t.Fatal("selecting an already-moved band zoomed out")
+	}
+	if game.camera.CenterTile != game.frame.Bands[1].TileID {
+		t.Fatalf("camera centre = %d, want band 8's tile %d", game.camera.CenterTile, game.frame.Bands[1].TileID)
+	}
+}
+
+// TestCameraToggleHoldsUntilANewMovableSelectionRearmsIt covers Z's new
+// meaning. It sets the mode outright rather than inverting a derived answer,
+// so it survives everything that happens to the band it was pressed on. A
+// selection change onto a band that can still act re-arms Focus, and that is
+// the only automatic zoom-in the camera keeps.
+func TestCameraToggleHoldsUntilANewMovableSelectionRearmsIt(t *testing.T) {
+	game := New(&gameStub{frame: cameraFrame()})
+	game.toggleCameraFocus()
+	if game.desiredCameraMode() != render.CameraOverview {
+		t.Fatal("Z should leave Focus")
+	}
+	game.openRow, game.rowChosen = ui.RowMove, true
+	if game.desiredCameraMode() != render.CameraOverview {
+		t.Fatal("reopening Move on the same selection re-armed Focus")
+	}
 	game.frame.Bands[0].SpatialActionUsed = true
 	if game.desiredCameraMode() != render.CameraOverview {
-		t.Fatal("spent action should return to Overview")
+		t.Fatal("spending the move after Z zoomed in; the toggle sets the mode, it does not invert one")
 	}
-	game.frame.Bands[0].SpatialActionUsed = false
-	game.toggleCameraOverride()
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentSelectBand, Band: 8}})
 	if game.desiredCameraMode() != render.CameraOverview {
-		t.Fatal("Z should invert the automatic choice")
+		t.Fatal("selecting a band that has already acted re-armed Focus")
 	}
-	game.handleIntents([]hud.Intent{{Kind: hud.IntentSelectBand, Band: 7}})
-	game.resetDisclosure()
+	game.handleIntents([]hud.Intent{{Kind: hud.IntentSelectBand, Band: 9}})
 	if game.desiredCameraMode() != render.CameraFocus {
-		t.Fatal("override should reset with disclosure")
+		t.Fatal("selecting a band that can still act should re-arm Focus")
+	}
+}
+
+// TestCameraNeedsASelectionToFocus guards the one clamp on the stored flag:
+// stepCamera refreshes CenterTile only while a band is selected, so Focus
+// with nothing selected would zoom a stale tile. The clamp reads the flag
+// without clearing it, so reselecting restores the player's zoom.
+func TestCameraNeedsASelectionToFocus(t *testing.T) {
+	game := New(&gameStub{frame: cameraFrame()})
+	game.selectedBand = 0
+	if game.desiredCameraMode() != render.CameraOverview {
+		t.Fatal("Focus with nothing selected should fall back to Overview")
+	}
+	game.selectedBand = 7
+	if game.desiredCameraMode() != render.CameraFocus {
+		t.Fatal("reselecting should restore the stored Focus")
+	}
+}
+
+// TestCameraToggleStaysAvailableAfterTheMoveIsSpent keeps the map-corner
+// button reachable. It used to be gated on the same predicate the mode was
+// derived from, so a Focus that outlives the move would otherwise strand the
+// player zoomed in with Z as the only way back out.
+func TestCameraToggleStaysAvailableAfterTheMoveIsSpent(t *testing.T) {
+	game := New(&gameStub{frame: cameraFrame()})
+	game.frame.Bands[0].SpatialActionUsed = true
+	if !game.hudState().Camera.ToggleAvailable {
+		t.Fatal("the map-corner toggle vanished with the move it must outlive")
 	}
 }
 

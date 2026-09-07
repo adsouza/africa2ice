@@ -41,9 +41,7 @@ func (g *Game) hudState() hud.State {
 	}
 	if band := g.selected(); band != nil {
 		state.Workforce.Population = band.Population
-	}
-	if band := g.selected(); band != nil {
-		state.Camera = hud.CameraState{FocusAvailable: band.Species == gameapi.HomoSapiens && !ui.MoveDone(*band), Focused: g.camera.Mode == render.CameraFocus}
+		state.Camera = hud.CameraState{ToggleAvailable: true, Focused: g.camera.Mode == render.CameraFocus}
 	}
 	if frame != nil && frame.CampaignResult != gameapi.Ongoing {
 		state.EndTurn = ui.EndTurnGate{}
@@ -89,7 +87,13 @@ func (g *Game) resetDisclosure() {
 	g.detailsOpen = false
 	g.bandListOpen = false
 	g.endTurnArmed = false
-	g.cameraOverride = false
+	// Arming is one-sided on purpose. Assigning the eligibility outright
+	// would zoom the player out again the moment they selected a band that
+	// had already acted, which is the behaviour the stored mode exists to
+	// remove; a selection that cannot act simply leaves the zoom alone.
+	if g.cameraFocusEligible() {
+		g.cameraFocused = true
+	}
 }
 
 // advanceOpenRow moves to the next unfinished row after an accepted action

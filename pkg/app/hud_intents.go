@@ -135,7 +135,7 @@ func (g *Game) handleIntent(intent hud.Intent) {
 	case hud.IntentOpenMenu:
 		g.dispatchBatch([]ui.Action{ui.PushSceneAction(ui.SceneMenu)})
 	case hud.IntentCameraToggle:
-		g.toggleCameraOverride()
+		g.toggleCameraFocus()
 	default:
 		g.handleOverlayIntent(intent)
 	}

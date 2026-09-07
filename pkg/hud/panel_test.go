@@ -1183,7 +1183,7 @@ func TestEndTurnButtonReflectsTheGate(t *testing.T) {
 func TestCameraButtonReflectsFocusAndEmitsToggle(t *testing.T) {
 	panel := New()
 	state := testState(testFrame(1), 1)
-	state.Camera = CameraState{FocusAvailable: true, Focused: true}
+	state.Camera = CameraState{ToggleAvailable: true, Focused: true}
 	panel.Update(state)
 	if panel.handles.camera == nil || panel.handles.camera.Text().Label != "Overview · Z" {
 		t.Fatal("focused camera should offer Overview")
@@ -1195,7 +1195,7 @@ func TestCameraButtonReflectsFocusAndEmitsToggle(t *testing.T) {
 	state.Camera = CameraState{}
 	panel.Update(state)
 	if panel.handles.camera != nil {
-		t.Fatal("camera button shown when focus is unavailable")
+		t.Fatal("camera button shown with no selection to toggle")
 	}
 }
 
@@ -1208,7 +1208,7 @@ func TestCameraButtonReflectsFocusAndEmitsToggle(t *testing.T) {
 func TestEndSceneHidesTheCameraButtonAndCentersNewCampaign(t *testing.T) {
 	panel := New()
 	state := testState(testFrame(1), 1)
-	state.Camera = CameraState{FocusAvailable: true}
+	state.Camera = CameraState{ToggleAvailable: true}
 	state.Ending = render.EndScene{Visible: true}
 	panel.Update(state)
 	if panel.handles.camera != nil {
@@ -1232,7 +1232,7 @@ func TestEndSceneHidesTheCameraButtonAndCentersNewCampaign(t *testing.T) {
 		t.Fatalf("New Campaign right edge %d spills past the dialog's right edge %d", button.Max.X, dialog.Max.X)
 	}
 
-	state.Camera = CameraState{FocusAvailable: true}
+	state.Camera = CameraState{ToggleAvailable: true}
 	state.Ending = render.EndScene{}
 	panel.Update(state)
 	if panel.handles.camera == nil {

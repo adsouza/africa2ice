@@ -356,7 +356,7 @@ func (p *Panel) rebuild(state State) {
 	}
 	p.root.AddChild(p.buildPanel(state))
 	p.root.AddChild(p.buildDrawer(state))
-	if state.Camera.FocusAvailable && !state.Ending.Visible {
+	if state.Camera.ToggleAvailable && !state.Ending.Visible {
 		p.root.AddChild(p.buildCameraButton(state))
 	}
 	p.buildEndScene(state)
