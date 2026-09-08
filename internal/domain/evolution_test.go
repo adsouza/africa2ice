@@ -97,3 +97,89 @@ func TestKnowledgeDiffusionCannotUsePrerequisiteLearnedInSameTurn(t *testing.T) 
 		t.Fatalf("dependent gained %v research from a prerequisite learned in the same turn", got)
 	}
 }
+
+func TestCompletedResearchAutomaticallyContinues(t *testing.T) {
+	grid, err := (WorldGenerator{}).Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name      string
+		target    Technology
+		learned   []Technology
+		want      Technology
+		finished  bool
+		diffusion bool
+		archaic   bool
+	}{
+		{name: "next in sequence", target: Firecraft, want: HaftedTools},
+		{name: "skip learned", target: Firecraft, learned: []Technology{HaftedTools}, want: PlantKnowledge},
+		{name: "skip locked and wrap", target: PlantKnowledge, want: Firecraft},
+		{name: "newly unlocked", target: HaftedTools, learned: []Technology{PlantKnowledge}, want: TailoredClothing},
+		{name: "diffusion completion", target: Firecraft, want: HaftedTools, diffusion: true},
+		{name: "skip simultaneous diffusion completion", target: Firecraft, want: PlantKnowledge, diffusion: true, learned: nil},
+		{name: "all learned", target: CoastalNavigation, learned: []Technology{Firecraft, HaftedTools, PlantKnowledge, TailoredClothing, CordageAndNets, Campcraft, MedicinalKnowledge, Trapping}, finished: true},
+		{name: "archaic keeps own policy", target: Firecraft, finished: true, archaic: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state := TechnologyState{Target: tc.target, HasTarget: true}
+			for _, tech := range tc.learned {
+				state.Acquired |= 1 << tech
+				state.Progress[tech] = ResearchCost[tech]
+			}
+			state.Progress[tc.target] = ResearchCost[tc.target] - 1
+			species := HomoSapiens
+			if tc.archaic {
+				species = ArchaicHominin
+			}
+			bands := []Band{{ID: 1, Species: species, TileID: StartingTileIDs[0], Population: 100, Technology: state}}
+			gains := map[BandID]float64{1: 1}
+			if tc.diffusion {
+				gains = nil
+				source := TechnologyState{}
+				source.AdvanceResearch(tc.target, ResearchCost[tc.target])
+				if tc.name == "skip simultaneous diffusion completion" {
+					source.AdvanceResearch(HaftedTools, ResearchCost[HaftedTools])
+					bands[0].Technology.Progress[HaftedTools] = ResearchCost[HaftedTools] - 1
+				}
+				bands = append(bands, Band{ID: 2, Species: species, TileID: StartingTileIDs[0], Population: 100, Technology: source})
+			}
+			applyKnowledgeAndGenetics(bands, grid, gains, nil, NewWorldRNG(1))
+			got := bands[0].Technology
+			if !got.Has(tc.target) || got.HasTarget == tc.finished || (!tc.finished && got.Target != tc.want) {
+				t.Fatalf("unexpected research state: %+v", got)
+			}
+			if !tc.finished && got.Progress[tc.want] != 0 {
+				t.Fatalf("new target received old target's production: %v", got.Progress[tc.want])
+			}
+			if err := got.Validate(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestAutomaticResearchPreservesProgressAndManualChoice(t *testing.T) {
+	grid, err := (WorldGenerator{}).Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bands := []Band{{ID: 1, Species: HomoSapiens, TileID: StartingTileIDs[0], Population: 100}}
+	state := &bands[0].Technology
+	if err := state.Select(Firecraft); err != nil {
+		t.Fatal(err)
+	}
+	state.Progress[Firecraft] = ResearchCost[Firecraft] - 1
+	state.Progress[HaftedTools] = 12
+	applyKnowledgeAndGenetics(bands, grid, map[BandID]float64{1: 1}, nil, NewWorldRNG(1))
+	if state.Target != HaftedTools || state.Progress[HaftedTools] != 12 {
+		t.Fatalf("next target lost its saved progress: %+v", state)
+	}
+	if err := state.Select(PlantKnowledge); err != nil {
+		t.Fatal(err)
+	}
+	applyKnowledgeAndGenetics(bands, grid, map[BandID]float64{1: 1}, nil, NewWorldRNG(1))
+	if state.Target != PlantKnowledge || state.Progress[PlantKnowledge] != 1 || state.Progress[HaftedTools] != 12 {
+		t.Fatalf("manual override was not preserved: %+v", state)
+	}
+}

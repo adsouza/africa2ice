@@ -101,6 +101,20 @@ func ResearchGain(workers float64) float64 {
 	return float64(MaxResearchPerTurn * q)
 }
 
+// selectNextResearch follows the displayed sequence, wrapping to earlier
+// entries and skipping acquired or locked technologies. Existing progress is
+// preserved, and a completed tree remains without a target.
+func (state *TechnologyState) selectNextResearch(after Technology) {
+	state.HasTarget = false
+	for offset := Technology(1); offset <= TechCount; offset++ {
+		technology := (after + offset) % TechCount
+		if !state.Has(technology) && state.PrerequisitesMet(technology) {
+			state.Target, state.HasTarget = technology, true
+			return
+		}
+	}
+}
+
 // PlannedResearchGain is what one turn of toolcraft adds to the band's current
 // research target: the production curve, capped by what the target still needs.
 // It returns zero when there is nothing to research.

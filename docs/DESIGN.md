@@ -4225,7 +4225,13 @@ research separately for each archaic band.
 The closed `ResearchCost[TechCount]` table contains finite positive thresholds. Progress for
 technology `k` is always clamped to `[0, ResearchCost[k]]`. When research or diffusion reaches its
 threshold, the band acquires the technology, its progress remains normalized at the threshold, and
-an active target for that technology clears. Acquired technology is never lost. `ResearchTech`
+an active target for that technology clears. After all research and diffusion gains resolve, a
+sapiens band whose target completed automatically selects the next unlearned, unlocked technology
+in the displayed order, wrapping to the beginning if necessary. Existing progress is preserved;
+the new target receives original research starting next turn. When all technologies are learned,
+the target remains absent. Players may still select a different available target manually; the
+initial choice and the archaic computer's separate priority remain unchanged.
+Acquired technology is never lost. `ResearchTech`
 rejects an already acquired target and rejects a locked target with that same typed error,
 without mutation. A valid target remains unlocked because its acquired prerequisites cannot be lost.
 The cost table is versioned with the technology state contract; changing a threshold requires an
@@ -4381,7 +4387,8 @@ until the next turn. A newly completed technology also cannot teach another band
 just-completed turn's extraction, demographics, movement, or acute events. It is available in the
 next planning frame and participates in that frame's `T_tech` stress. Zero total gain leaves
 progress unchanged. Reaching or exceeding the threshold normalizes progress to exactly
-`ResearchCost[k]`, sets the acquired bit, and clears a matching research target. A band that already
+`ResearchCost[k]`, sets the acquired bit, and clears a matching research target before the sapiens
+automatic selection described above runs at the end of knowledge resolution. A band that already
 has `k` receives neither gain. At the selected diffusion rate, one knowledgeable source moves a
 zero-progress recipient 20% of the way to that technology's cost, and five sources complete it in a
 single contact turn — in both cases only when the recipient's prerequisites were already met in the

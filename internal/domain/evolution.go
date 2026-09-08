@@ -68,6 +68,12 @@ func applyKnowledgeAndGenetics(bands []Band, grid *Grid, research map[BandID]flo
 			}
 			state.AdvanceResearch(technology, gain)
 		}
+		// Choose only after all gains have landed, so this turn's production
+		// cannot be reused on a newly selected target. Archaic bands retain
+		// their own research priority in planArchaicOwned.
+		if bands[index].Species == HomoSapiens && frozen.HasTarget && state.Has(frozen.Target) {
+			state.selectNextResearch(frozen.Target)
+		}
 		bands[index].Technology = state
 	}
 
