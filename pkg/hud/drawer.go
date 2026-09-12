@@ -62,6 +62,18 @@ func (c notesContent) PreferredSize() (int, int) {
 }
 
 func noteBody(note render.FieldNote) string {
+	if note.Instructions[0] != "" {
+		parts := []string{
+			"[color=9fb1ae]HISTORICAL CONTEXT[/color] · " + note.Context,
+			"[color=9fb1ae]HOW TO PLAY[/color] · " + note.Introduction,
+		}
+		for index, instruction := range note.Instructions {
+			parts = append(parts, fmt.Sprintf("%d. %s", index+1, instruction))
+		}
+		parts = append(parts, note.Hint)
+		parts = append(parts, "[color=9fb1ae]SOURCES[/color] · "+ui.FieldNoteReferenceMarkup(note.References))
+		return strings.Join(parts, "\n")
+	}
 	parts := []string{"[color=9fb1ae]SUMMARY[/color] · " + note.Introduction}
 	if note.Context != "" {
 		parts = append(parts, "[color=9fb1ae]HISTORICAL CONTEXT[/color] · "+note.Context)
@@ -197,7 +209,6 @@ func (p *Panel) buildDrawer(state State) widget.PreferredSizeLocateableWidget {
 	noteText := widget.NewText(
 		widget.TextOpts.Text(noteBody(state.Note), t.face(9), colorText),
 		widget.TextOpts.ProcessBBCode(true),
-		widget.TextOpts.LinkColor(&widget.TextLinkColor{Idle: colorGoldDeep, Hover: colorGold}),
 		widget.TextOpts.LinkClickedHandler(func(args *widget.LinkEventArgs) {
 			// Text's link hit testing does not clip to ancestor scroll views
 			// or respect modal windows. Only accept visible gameplay clicks.
@@ -209,6 +220,11 @@ func (p *Panel) buildDrawer(state State) widget.PreferredSizeLocateableWidget {
 		}),
 		widget.TextOpts.MaxWidth(float64(t.px(notesWidth))),
 	)
+	// ebitenui v0.7.3 ignores TextOpts.LinkColor when computing text params;
+	// the widget theme is the supported path that actually reaches rendering.
+	noteText.GetWidget().SetTheme(&widget.Theme{TextTheme: &widget.TextParams{
+		LinkColor: &widget.TextLinkColor{Idle: colorGold, Hover: colorText},
+	}})
 	p.handles.noteText = noteText
 	noteTextHolder.AddChild(noteText)
 	// notesContent floors its reported height at the column body (the

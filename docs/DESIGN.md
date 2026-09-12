@@ -7358,9 +7358,13 @@ the newest events, turn-stamped and newest first, as many as the column's height
 clickable and focuses that event kind's entry, and a summary too wide for the column is truncated
 against the column's measured width rather than a fixed rune count.
 
+The welcome entry starts with historical context, followed by a How to Play section with four
+numbered keyboard steps (Tab, arrows, Enter, Space), then one collapse tip. It omits the regular
+Summary, Game Abstraction, and Hint headings to keep the introduction focused.
+
 Academic author/year references in the Sources line open the publication's DOI link in the
 system's default browser (a new tab in the web build). They retain their compact citation labels
-and use a distinct link color with hover feedback. Game-model and internal DESIGN references
+and use bright gold links with pale hover feedback. Game-model and internal DESIGN references
 remain plain text. Publication links are available only within the visible drawer body, with no
 modal covering gameplay; opening one does not change campaign state or the focused note.
 

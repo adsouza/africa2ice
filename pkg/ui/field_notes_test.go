@@ -70,7 +70,7 @@ func TestFieldNotesCoverClosedContextCatalogs(t *testing.T) {
 func TestCampaignOverviewIdentifiesTheDenisovanBand(t *testing.T) {
 	note := CampaignOverviewFieldNote()
 	assertFieldNoteHasNoManualLineBreaks(t, note)
-	if !strings.Contains(note.Hint, "Denisovan") {
+	if !strings.Contains(note.Introduction, "Denisovan") {
 		t.Fatalf("campaign overview does not identify the Denisovan band: %#v", note)
 	}
 }

@@ -288,11 +288,16 @@ func AbruptClimateFieldNote(region gameapi.Region, magnitude float64) (render.Fi
 func CampaignOverviewFieldNote() render.FieldNote {
 	return render.FieldNote{
 		Topic:        "WELCOME",
-		Introduction: "Play faster with the keyboard: Tab cycles bands; arrow keys select a tile; Enter locks in a destination; Space ends your turn.",
-		Context:      "Begin in East Africa 80,000 years before present; the map reveals as sapiens expand.",
-		GameEffect:   "With the Move panel open, arrows choose reachable tiles and Enter queues migration for the end of the turn.",
-		Hint:         "When done reading, click ▼ less or press Shift+F to collapse Field Notes and see more of the map. Choose destinations for your bands before pressing Space. Archaic hominins—including a Tibetan Denisovan band—are computer-controlled.",
-		References:   "Reich et al. (2010); Chen et al. (2019).",
+		Context:      "It is 80,000 years before present. Your journey begins in East Africa, in a world also inhabited by Neanderthals and Denisovans.",
+		Introduction: "Guide your Homo sapiens bands across the map. Other hominins, including a Tibetan Denisovan band, are computer-controlled. Use the keyboard for faster turns:",
+		Instructions: [4]string{
+			"Tab cycles through your bands.",
+			"With the Move panel open, use the arrow keys to select a reachable tile.",
+			"Enter locks in that band's destination. Repeat for your other bands.",
+			"Space ends your turn and resolves the queued moves.",
+		},
+		Hint:       "When done reading, click ▼ less or press Shift+F to collapse Field Notes and see more of the map.",
+		References: "Reich et al. (2010); Chen et al. (2019).",
 	}
 }
 

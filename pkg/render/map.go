@@ -143,6 +143,7 @@ type FieldNote struct {
 	GameEffect   string
 	Hint         string
 	References   string
+	Instructions [4]string
 	Celebration  bool
 	// Trait and HasTrait identify the heritable variant this note is about,
 	// so pkg/hud's details grid can highlight the matching cell. Only
