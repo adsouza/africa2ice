@@ -125,6 +125,35 @@ func TestTargetTileLiveabilityHidesFogAndExplainsUnreachable(t *testing.T) {
 	}
 }
 
+func TestUninhabitableTilesRetainExploredGeography(t *testing.T) {
+	for _, water := range []bool{false, true} {
+		frame := liveabilityFrame()
+		frame.Tiles[1].Land = !water
+		frame.Tiles[1].BaselineK = 0
+		frame.Tiles[1].Region = gameapi.Levant
+		frame.Tiles[1].WaterBody = "Red Sea"
+		band := &frame.Bands[0]
+		target := TargetTileLiveability(frame, band, 1)
+		rows := rowsByLabel(band, CurrentTileLiveability(frame, band), target)
+		biome, region := frame.Tiles[1].Biome.String(), "Levant"
+		if water {
+			biome, region = "Open water", "Red Sea"
+		}
+		if target.Available || target.Reachable || rows["Biome"].Target != biome || rows["Region"].Target != region {
+			t.Fatalf("water=%t: summary %+v, geography %+v %+v", water, target, rows["Biome"], rows["Region"])
+		}
+		if rows["Food"].Target != "—" || rows["Route"].Target != "—" {
+			t.Fatal("unoccupiable tile exposed habitability metrics")
+		}
+		frame.Tiles[1].Explored = false
+		target = TargetTileLiveability(frame, band, 1)
+		rows = rowsByLabel(band, CurrentTileLiveability(frame, band), target)
+		if rows["Biome"].Target != "—" || rows["Region"].Target != "—" {
+			t.Fatal("geography leaked through fog")
+		}
+	}
+}
+
 func TestMortalityDeltaIgnoresCrowdingHeadcount(t *testing.T) {
 	frame := liveabilityFrame()
 	band := &frame.Bands[0]

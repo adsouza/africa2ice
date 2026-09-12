@@ -18,6 +18,13 @@ func TestSnapshotNamesLakesAtGeographicAnchors(t *testing.T) {
 	}
 	count := 0
 	for _, tile := range frame.Tiles {
+		if tile.Explored && !tile.Land {
+			if tile.WaterBody != service.world.Grid().WaterBodyName(domain.TileID(tile.ID)) || tile.WaterBody == "" {
+				t.Fatalf("explored water tile lacks its geographic name: %+v", tile)
+			}
+		} else if tile.WaterBody != "" {
+			t.Fatalf("water name exposed on land or in fog: %+v", tile)
+		}
 		if tile.NearbyLake != "" {
 			count++
 			if !tile.Land || !tile.Explored {

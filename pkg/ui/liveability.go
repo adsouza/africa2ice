@@ -152,11 +152,18 @@ func summarizeTile(frame *gameapi.Frame, tileID gameapi.TileID, self *gameapi.Ba
 		return summary
 	}
 	tile := frame.Tiles[tileID]
-	switch {
-	case !tile.Explored:
+	if !tile.Explored {
 		summary.Status = "Unexplored · details hidden"
 		return summary
+	}
+	summary.Biome, summary.Region = tile.Biome.String(), tile.Region.String()
+	summary.NearbyLake = tile.NearbyLake
+	switch {
 	case !tile.Land:
+		summary.Biome, summary.Region = "Open water", tile.WaterBody
+		if summary.Region == "" {
+			summary.Region = "Open ocean"
+		}
 		summary.Status = "Open water · cannot occupy"
 		return summary
 	case tile.BaselineK <= 0:
@@ -164,8 +171,6 @@ func summarizeTile(frame *gameapi.Frame, tileID gameapi.TileID, self *gameapi.Ba
 		return summary
 	}
 	summary.Available = true
-	summary.Biome, summary.Region = tile.Biome.String(), tile.Region.String()
-	summary.NearbyLake = tile.NearbyLake
 	summary.FoodStock, summary.FoodCap = tile.FloraStock+tile.FaunaStock, tile.FloraCap+tile.FaunaCap
 	summary.WaterStock, summary.WaterCap = tile.WaterStock, tile.WaterCap
 	summary.EcologicalK, summary.BaselineK, summary.Degradation = tile.EcologicalK, tile.BaselineK, tile.Degradation
@@ -350,15 +355,20 @@ func LiveabilityRows(band *gameapi.Band, here, target TileLiveability) []Liveabi
 		}
 		return fmt.Sprintf("%d %s · pop %d", s.ResidentBands, noun, s.ResidentPopulation)
 	}
+	// Geography remains useful even when a tile cannot support a band.
+	geographyRow := func(label, hereValue, targetValue string) LiveabilityRow {
+		if hereValue == "" {
+			hereValue = "—"
+		}
+		if targetValue == "" {
+			targetValue = "—"
+		}
+		return LiveabilityRow{Label: label, Here: hereValue, Target: targetValue}
+	}
 	return []LiveabilityRow{
-		row("Biome", func(s TileLiveability) string { return s.Biome }, normal, true, nil),
-		row("Region", func(s TileLiveability) string { return s.Region }, normal, true, nil),
-		row("Nearby lake", func(s TileLiveability) string {
-			if s.NearbyLake == "" {
-				return "—"
-			}
-			return s.NearbyLake
-		}, normal, true, nil),
+		geographyRow("Biome", here.Biome, target.Biome),
+		geographyRow("Region", here.Region, target.Region),
+		geographyRow("Nearby lake", here.NearbyLake, target.NearbyLake),
 		row("Food", func(s TileLiveability) string { return fmt.Sprintf("%.0f / %.0f", s.FoodStock, s.FoodCap) }, foodTier, true, func(s TileLiveability) float64 { return s.FoodStock }),
 		row("Capacity", capacityValue, capacityTier, false, occupancy),
 		row("Water", func(s TileLiveability) string { return fmt.Sprintf("%.0f / %.0f", s.WaterStock, s.WaterCap) }, waterTier, true, func(s TileLiveability) float64 { return s.WaterStock }),

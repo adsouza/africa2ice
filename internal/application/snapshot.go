@@ -64,6 +64,9 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 			NaturalShelter: geography.NaturalShelter, BaseMoisture: geography.BaseMoisture,
 			LastHabitableTurn: grid.LastHabitableTurn(domain.TileID(id)),
 		}
+		if publicTile.Explored && !geography.Land {
+			publicTile.WaterBody = grid.WaterBodyName(domain.TileID(id))
+		}
 		if geography.Land {
 			macroImpact := domain.MacroImpactAt(geography, date.Turn)
 			publicTile.Region, publicTile.Biome = mapRegion(geography.Region), mapBiome(habitat[id].Biome)

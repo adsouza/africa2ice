@@ -7128,6 +7128,10 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   these are geographic labels for nearby lakes, not lake outlines or changes to land, resources,
   or movement. Uncataloged and unexplored tiles show an em dash. Labels are rebuilt from static
   metadata for snapshots, including loaded games, and do not add fields to campaign saves.
+  Explored tiles retain Biome, Region, and any Nearby lake label even when uninhabitable or
+  unoccupiable. Water tiles show `Open water` and the authored water-body name (for example,
+  `Red Sea`), with `Open ocean` as the unnamed-water fallback. Habitability metrics remain
+  unavailable and movement stays disabled; unexplored tiles reveal no geographic details.
   The TARGET header names its source in precedence order — `cursor`, then `queued`, then `hover` —
   or reads "hover or click an outlined tile" when none applies. Relative `▲`/`▼` marks compare
   TARGET to HERE (green/red) wherever both sides are available and no absolute tier already colors

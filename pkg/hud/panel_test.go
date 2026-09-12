@@ -1485,6 +1485,24 @@ func TestHoverRefreshesTargetWithoutRebuilding(t *testing.T) {
 	}
 }
 
+func TestHoverShowsWaterGeographyWithoutEnablingMovement(t *testing.T) {
+	frame := testFrame(1)
+	frame.Tiles[1].Land = false
+	frame.Tiles[1].WaterBody = "Red Sea"
+	frame.Bands[0].MigrationCandidates = nil
+	panel := New()
+	state := testState(frame, 1)
+	panel.Update(state)
+	state.Hover = render.TileHover{TileID: 1, Visible: true}
+	panel.Update(state)
+	if panel.handles.moveTargetValues[0].Label != "Open water" || panel.handles.moveTargetValues[1].Label != "Red Sea" {
+		t.Fatal("hovered water lost its biome or region")
+	}
+	if !panel.handles.moveHere.GetWidget().Disabled {
+		t.Fatal("water became a valid movement destination")
+	}
+}
+
 // TestSimultaneousExcludedFieldChangesAllRefresh covers a structural defect
 // in Update's dispatch: it was one switch over mutually exclusive cases
 // (rebuild / Workforce / MasterVolume / Hover), so if two of the
