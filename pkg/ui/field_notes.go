@@ -288,10 +288,10 @@ func AbruptClimateFieldNote(region gameapi.Region, magnitude float64) (render.Fi
 func CampaignOverviewFieldNote() render.FieldNote {
 	return render.FieldNote{
 		Topic:        "WELCOME",
-		Introduction: "The campaign begins in East Africa.",
-		Context:      "It is 80,000 years before present; the map reveals as sapiens expand.",
-		GameEffect:   "Outlined tiles are reachable; arrows choose and Enter queues migration.",
-		Hint:         "Archaic hominins—including a Tibetan Denisovan band—are computer-controlled.",
+		Introduction: "Play faster with the keyboard: Tab cycles bands; arrow keys select a tile; Enter locks in a destination; Space ends your turn.",
+		Context:      "Begin in East Africa 80,000 years before present; the map reveals as sapiens expand.",
+		GameEffect:   "With the Move panel open, arrows choose reachable tiles and Enter queues migration for the end of the turn.",
+		Hint:         "Choose destinations for your bands before pressing Space. Archaic hominins—including a Tibetan Denisovan band—are computer-controlled.",
 		References:   "Reich et al. (2010); Chen et al. (2019).",
 	}
 }
