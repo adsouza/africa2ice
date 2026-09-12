@@ -53,6 +53,8 @@ func TestTargetTilePrecedenceIsCursorThenQueuedThenHover(t *testing.T) {
 
 func TestLiveabilityRowsColorAbsoluteStateAndMarkRelativeDelta(t *testing.T) {
 	frame := liveabilityFrame()
+	frame.Tiles[0].NearbyLake = "Lake Turkana"
+	frame.Tiles[1].NearbyLake = "Lake Victoria"
 	band := &frame.Bands[0]
 	here := CurrentTileLiveability(frame, band)
 	target := TargetTileLiveability(frame, band, 1)
@@ -60,8 +62,11 @@ func TestLiveabilityRowsColorAbsoluteStateAndMarkRelativeDelta(t *testing.T) {
 		t.Fatalf("summaries = here %+v target %+v", here, target)
 	}
 	byLabel := rowsByLabel(band, here, target)
-	if len(byLabel) != 9 {
-		t.Fatalf("row count = %d, want 9", len(byLabel))
+	if lake := byLabel["Nearby lake"]; lake.Here != "Lake Turkana" || lake.Target != "Lake Victoria" || lake.Delta != 0 {
+		t.Fatalf("nearby lakes = %+v", lake)
+	}
+	if len(byLabel) != 10 {
+		t.Fatalf("row count = %d, want 10", len(byLabel))
 	}
 	// Food 212 is below last turn's 300 FU requirement: red here, normal there, target better.
 	if food := byLabel["Food"]; food.HereTier != TierRed || food.TargetTier != TierNormal || food.Delta != 1 || food.Here != "212 / 810" {
@@ -108,8 +113,9 @@ func TestLiveabilityTiersUseTheSpecThresholds(t *testing.T) {
 
 func TestTargetTileLiveabilityHidesFogAndExplainsUnreachable(t *testing.T) {
 	frame := liveabilityFrame()
+	frame.Tiles[2].NearbyLake = "Lake Victoria"
 	band := &frame.Bands[0]
-	if fog := TargetTileLiveability(frame, band, 2); fog.Available || fog.Status != "Unexplored · details hidden" {
+	if fog := TargetTileLiveability(frame, band, 2); fog.Available || fog.NearbyLake != "" || fog.Status != "Unexplored · details hidden" {
 		t.Fatalf("fog summary = %+v", fog)
 	}
 	frame.Tiles[1].Explored = true

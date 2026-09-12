@@ -113,6 +113,14 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 			Cost: passage.Cost, Status: status, Explored: service.world.IsExplored(passage.From) || service.world.IsExplored(passage.To),
 		})
 	}
+	// Lake labels describe fixed geographic anchors, not their starting bands.
+	// Rebuild them for every frame, including loaded games.
+	for index, anchor := range domain.StartingAnchors {
+		id := domain.StartingTileIDs[index]
+		if frame.Tiles[id].Explored {
+			frame.Tiles[id].NearbyLake = anchor.NearbyLake
+		}
+	}
 	for _, event := range service.world.Events() {
 		frame.Events = append(frame.Events, gameapi.Event{Turn: event.Turn, Kind: mapEventKind(event.Kind), BandID: gameapi.BandID(event.BandID), TileID: gameapi.TileID(event.TileID), Region: mapRegion(event.Region), Summary: event.Summary})
 	}

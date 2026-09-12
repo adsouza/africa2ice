@@ -1433,6 +1433,7 @@ func TestResearchCursorRowIsMarked(t *testing.T) {
 // position with it) on every tick.
 func TestHoverRefreshesTargetWithoutRebuilding(t *testing.T) {
 	frame := testFrame(1)
+	frame.Tiles[1].NearbyLake = "Lake Victoria"
 	panel := New()
 	state := testState(frame, 1)
 	panel.Update(state)
@@ -1463,6 +1464,9 @@ func TestHoverRefreshesTargetWithoutRebuilding(t *testing.T) {
 	}
 	if got := panel.handles.moveTargetValues[1].Label; got != frame.Tiles[1].Region.String() {
 		t.Fatalf("TARGET region cell = %q, want %q", got, frame.Tiles[1].Region.String())
+	}
+	if got := panel.handles.moveTargetValues[2].Label; got != "Lake Victoria" {
+		t.Fatalf("TARGET nearby lake = %q", got)
 	}
 	if panel.handles.moveHere.GetWidget().Disabled {
 		t.Fatal("Move here should be enabled once a reachable tile is hovered")
@@ -1852,6 +1856,7 @@ func TestMoveGridValuesFitTheirColumns(t *testing.T) {
 		// half degraded and over-full, with four-digit crowding and two-digit
 		// mortality percentages.
 		frame.Tiles[1].EcologicalK, frame.Tiles[1].Degradation = 100, 0.5
+		frame.Tiles[1].NearbyLake = "Lake Victoria"
 		frame.Tiles[1].FloraStock, frame.Tiles[1].FloraCap = 6_408, 8_100
 		frame.Tiles[1].WaterStock, frame.Tiles[1].WaterCap = 4_800, 5_000
 		frame.Bands[0].LastFoodReport = gameapi.FoodTurnReport{Turn: 12, RequiredFU: 300}
@@ -1945,7 +1950,7 @@ func TestTargetValueAndMarkAreSeparateLabels(t *testing.T) {
 
 	// The Food row compares 640 against 212 with neither tile short: a mark,
 	// but a dim one, and the value beside it stays untouched.
-	if value, mark := panel.handles.moveTargetValues[2], panel.handles.moveTargetMarks[2]; value.Label != "640 / 810" || mark.Label != " ▲" {
+	if value, mark := panel.handles.moveTargetValues[3], panel.handles.moveTargetMarks[3]; value.Label != "640 / 810" || mark.Label != " ▲" {
 		t.Fatalf("food cell = %q + %q, want \"640 / 810\" + \" ▲\"", value.Label, mark.Label)
 	}
 

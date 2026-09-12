@@ -7122,8 +7122,12 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   is not one of them, since it persists across selections and is re-armed rather than reset
   (Two-state camera, §8); Field Notes drawer visibility and height persist as a local preference
   instead.
-- **Move row, open:** a HERE/TARGET comparison grid — Biome, Region, Food, Capacity (with degradation),
+- **Move row, open:** a HERE/TARGET comparison grid — Biome, Region, Nearby lake, Food, Capacity (with degradation),
   Water, Shelter, Mortality (seasonal · chronic), Route (cost multiplier, turns), Archaic presence.
+  Nearby lake identifies Lake Turkana and Lake Victoria at their fixed starting-anchor tiles;
+  these are geographic labels for nearby lakes, not lake outlines or changes to land, resources,
+  or movement. Uncataloged and unexplored tiles show an em dash. Labels are rebuilt from static
+  metadata for snapshots, including loaded games, and do not add fields to campaign saves.
   The TARGET header names its source in precedence order — `cursor`, then `queued`, then `hover` —
   or reads "hover or click an outlined tile" when none applies. Relative `▲`/`▼` marks compare
   TARGET to HERE (green/red) wherever both sides are available and no absolute tier already colors

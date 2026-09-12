@@ -55,6 +55,7 @@ type TileLiveability struct {
 	Status          string
 	Biome           string
 	Region          string
+	NearbyLake      string
 	FoodStock       float64
 	FoodCap         float64
 	WaterStock      float64
@@ -164,6 +165,7 @@ func summarizeTile(frame *gameapi.Frame, tileID gameapi.TileID, self *gameapi.Ba
 	}
 	summary.Available = true
 	summary.Biome, summary.Region = tile.Biome.String(), tile.Region.String()
+	summary.NearbyLake = tile.NearbyLake
 	summary.FoodStock, summary.FoodCap = tile.FloraStock+tile.FaunaStock, tile.FloraCap+tile.FaunaCap
 	summary.WaterStock, summary.WaterCap = tile.WaterStock, tile.WaterCap
 	summary.EcologicalK, summary.BaselineK, summary.Degradation = tile.EcologicalK, tile.BaselineK, tile.Degradation
@@ -211,7 +213,7 @@ type LiveabilityRow struct {
 	DeltaMaterial bool
 }
 
-// LiveabilityRows builds the nine comparison rows. Absolute tiers color each
+// LiveabilityRows builds the ten comparison rows. Absolute tiers color each
 // side; Delta compares target to here where both are available.
 func LiveabilityRows(band *gameapi.Band, here, target TileLiveability) []LiveabilityRow {
 	required := 0.0
@@ -351,6 +353,12 @@ func LiveabilityRows(band *gameapi.Band, here, target TileLiveability) []Liveabi
 	return []LiveabilityRow{
 		row("Biome", func(s TileLiveability) string { return s.Biome }, normal, true, nil),
 		row("Region", func(s TileLiveability) string { return s.Region }, normal, true, nil),
+		row("Nearby lake", func(s TileLiveability) string {
+			if s.NearbyLake == "" {
+				return "—"
+			}
+			return s.NearbyLake
+		}, normal, true, nil),
 		row("Food", func(s TileLiveability) string { return fmt.Sprintf("%.0f / %.0f", s.FoodStock, s.FoodCap) }, foodTier, true, func(s TileLiveability) float64 { return s.FoodStock }),
 		row("Capacity", capacityValue, capacityTier, false, occupancy),
 		row("Water", func(s TileLiveability) string { return fmt.Sprintf("%.0f / %.0f", s.WaterStock, s.WaterCap) }, waterTier, true, func(s TileLiveability) float64 { return s.WaterStock }),

@@ -3,8 +3,54 @@ package application
 import (
 	"testing"
 
+	"github.com/adsouza/africa2ice/internal/domain"
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 )
+
+func TestSnapshotNamesLakesAtGeographicAnchors(t *testing.T) {
+	service, err := NewGameService(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame, err := service.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, tile := range frame.Tiles {
+		if tile.NearbyLake != "" {
+			count++
+			if !tile.Land || !tile.Explored {
+				t.Fatalf("lake context exposed on unsuitable tile: %+v", tile)
+			}
+		}
+	}
+	if count != 2 {
+		t.Fatalf("named lake tiles = %d, want 2", count)
+	}
+	for index, want := range map[int]string{1: "Lake Turkana", 2: "Lake Victoria"} {
+		if got := frame.Tiles[domain.StartingTileIDs[index]].NearbyLake; got != want {
+			t.Fatalf("anchor %d lake = %q, want %q", index, got, want)
+		}
+	}
+	save, err := service.ExportSaveState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.world, err = save.RestoreWorld()
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := service.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for id, tile := range frame.Tiles {
+		if loaded.Tiles[id].NearbyLake != tile.NearbyLake {
+			t.Fatalf("lake name changed after load at tile %d", id)
+		}
+	}
+}
 
 // The frame must never carry a migration candidate pointing at a tile the
 // player has not explored. The domain deliberately gives archaic bands

@@ -78,6 +78,7 @@ type Tile struct {
 	Longitude         float64
 	Land              bool
 	Region            Region
+	NearbyLake        string // Named lake near this land tile; empty when uncataloged.
 	ElevationKm       float64
 	Biome             Biome
 	Explored          bool

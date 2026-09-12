@@ -137,7 +137,7 @@ func (p *Panel) rowHeader(row ui.ChecklistRow, done, open bool, summary string) 
 }
 
 // buildMoveBody is the open Move row (spec §4.1). Every widget in its TARGET
-// column (the header cell, the nine comparison values, the optional
+// column (the header cell, the ten comparison values, the optional
 // "unavailable" status row, moveHere's Disabled state, and the hint line) is
 // also refreshed in place by refreshTarget, so a hover, arrow-key cursor, or
 // queued-migration change repaints without rebuilding the tree.

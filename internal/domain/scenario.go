@@ -4,14 +4,15 @@ type StartingAnchor struct {
 	Species    Species
 	Region     Region
 	Name       string
+	NearbyLake string // Geographic context for this anchor, not a water tile.
 	Point      GeoPoint
 	Population Population
 }
 
 var StartingAnchors = [...]StartingAnchor{
 	{Species: HomoSapiens, Region: EastAfrica, Name: "Afar", Point: g(41.0, 11.5), Population: 120},
-	{Species: HomoSapiens, Region: EastAfrica, Name: "Lake Turkana", Point: g(36.0, 3.5), Population: 120},
-	{Species: HomoSapiens, Region: EastAfrica, Name: "Lake Victoria Rift", Point: g(33.0, -1.0), Population: 120},
+	{Species: HomoSapiens, Region: EastAfrica, Name: "Lake Turkana", NearbyLake: "Lake Turkana", Point: g(36.0, 3.5), Population: 120},
+	{Species: HomoSapiens, Region: EastAfrica, Name: "Lake Victoria Rift", NearbyLake: "Lake Victoria", Point: g(33.0, -1.0), Population: 120},
 	{Species: HomoSapiens, Region: EastAfrica, Name: "Southern East African Rift", Point: g(35.0, -7.0), Population: 120},
 	{Species: ArchaicHominin, Region: Levant, Name: "Northern Levant", Point: g(36.0, 34.5), Population: 120},
 	{Species: ArchaicHominin, Region: Frangistan, Name: "Balkans", Point: g(22.0, 43.0), Population: 60},
