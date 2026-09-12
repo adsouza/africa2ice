@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/color"
 	"math"
@@ -82,6 +83,7 @@ type MapScene struct {
 	frameHeight     int
 	frameScale      float64
 	frameCached     bool
+	viewport        Viewport
 	hover           TileHover
 	camera          Camera
 	visibleHeight   float64
@@ -114,6 +116,8 @@ type mapFrameKey struct {
 	notice         string
 	ending         EndScene
 	resizeRequired bool
+	windowWidth    float64
+	windowHeight   float64
 	camera         Camera
 	visibleHeight  float64
 	guideHighlight bool
@@ -217,6 +221,9 @@ func (scene *MapScene) ReducedMotion() bool { return scene.reducedMotion }
 // exactly as ebiten last left it.
 func (scene *MapScene) SetChromeRevision(revision uint64) { scene.chromeRevision = revision }
 
+// SetViewport supplies the measured logical window size for the resize overlay.
+func (scene *MapScene) SetViewport(viewport Viewport) { scene.viewport = viewport }
+
 // effectiveVisibleHeight defaults an unset visible height to the full map
 // area, so a scene that never called SetCamera behaves as it always has.
 func (scene *MapScene) effectiveVisibleHeight() float64 {
@@ -253,6 +260,7 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 	key := mapFrameKey{
 		frame: frame, selectedBand: selectedBand, preview: preview, hover: scene.hover, notice: notice,
 		ending: ending, resizeRequired: resizeRequired,
+		windowWidth: scene.viewport.LogicalWidthDIP, windowHeight: scene.viewport.LogicalHeightDIP,
 		camera: scene.camera, visibleHeight: scene.visibleHeight, guideHighlight: scene.guideHighlight,
 		chromeRevision: scene.chromeRevision, shimmerStep: scene.shimmerPhase(),
 	}
@@ -289,6 +297,9 @@ func (scene *MapScene) drawResizeOverlay(screen logicalCanvas) {
 	vector.FillRect(screen, 0, 0, PresentationWidth, PresentationHeight, color.RGBA{R: 6, G: 11, B: 15, A: 238}, false)
 	scene.drawText(screen, "Window too small", 505, 310, 28, color.RGBA{R: 239, G: 220, B: 178, A: 255})
 	scene.drawText(screen, "Resize to at least 1280 × 720 to continue", 440, 360, 15, color.White)
+	size := fmt.Sprintf("Current window: %g × %g", scene.viewport.LogicalWidthDIP, scene.viewport.LogicalHeightDIP)
+	width, _ := text.Measure(size, &text.GoTextFace{Source: scene.faceSource, Size: 15}, 15*textLineSpacing)
+	scene.drawText(screen, size, float32((PresentationWidth-width)/2), 390, 15, color.White)
 }
 
 func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, ending EndScene) {

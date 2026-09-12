@@ -382,6 +382,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// chrome changed (details collapsing, the drawer shrinking, a settings
 	// window closing) even though the map itself did not.
 	g.scene.SetChromeRevision(maphash.Comparable(chromeRevisionSeed, g.panel.PresentationKey()))
+	g.scene.SetViewport(g.viewport)
 	displayFrame := g.displayFrame()
 	painted := g.scene.Draw(screen, displayFrame, g.selectedBand, render.MigrationPreview{
 		BandID: g.migrationPreviewBand, TileID: g.migrationPreviewTile, Visible: g.hasMigrationPreview,
