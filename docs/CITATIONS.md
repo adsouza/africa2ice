@@ -11,6 +11,11 @@ The source file and this bibliography are kept in exact lockstep by
 and stale bibliography markers fail the check. Titles, authorship, year, venue, and stable links
 were reviewed on 2026-09-01 against publisher, DOI, or institutional-repository records.
 
+Academic citations in the Field Notes Sources line are clickable author/year links. Their DOI
+destinations are cataloged in `pkg/ui/publications.go` and checked against this bibliography by
+the UI tests. Desktop builds open the system's default browser; the web build opens a new tab.
+Game-model and internal DESIGN references remain plain text.
+
 ## Human dispersal, archaic ancestry, and adaptation
 
 <!-- field-note-citation: Reich et al. (2010) -->

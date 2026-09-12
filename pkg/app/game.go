@@ -40,6 +40,7 @@ type Game struct {
 	notice                 string
 	noticeFrames           int
 	fieldNote              render.FieldNote
+	openExternalURL        func(string) error
 	breakthroughFrames     int
 	migrationPreviewBand   gameapi.BandID
 	migrationPreviewTile   gameapi.TileID
@@ -130,8 +131,9 @@ func newGameWithPresentation(port gameapi.Game, sound gameaudio.SoundManager, se
 	game := &Game{
 		port: port, sound: sound, frame: frame, scene: render.NewMapScene(),
 		panel: hud.New(), notesMode: hud.NotesCompact, guide: ui.NewGuideState(false),
-		fieldNote: ui.CampaignOverviewFieldNote(),
-		notice:    "Outlined tiles are reachable — arrows choose, Enter confirms", noticeFrames: 300,
+		fieldNote:       ui.CampaignOverviewFieldNote(),
+		openExternalURL: openExternalURL,
+		notice:          "Outlined tiles are reachable — arrows choose, Enter confirms", noticeFrames: 300,
 		pendingQuickSaveIDs: make(map[gameapi.StorageOpID]struct{}),
 		pendingSaveSoundIDs: make(map[gameapi.StorageOpID]struct{}),
 		settingsStore:       settingsStore, settings: settings,

@@ -7356,6 +7356,12 @@ the newest events, turn-stamped and newest first, as many as the column's height
 clickable and focuses that event kind's entry, and a summary too wide for the column is truncated
 against the column's measured width rather than a fixed rune count.
 
+Academic author/year references in the Sources line open the publication's DOI link in the
+system's default browser (a new tab in the web build). They retain their compact citation labels
+and use a distinct link color with hover feedback. Game-model and internal DESIGN references
+remain plain text. Publication links are available only within the visible drawer body, with no
+modal covering gameplay; opening one does not change campaign state or the focused note.
+
 The displayed entry follows a stable context priority:
 
 1. a focused heritable trait, technology, passage, or available interbreeding action;

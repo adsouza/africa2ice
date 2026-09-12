@@ -48,6 +48,7 @@ const (
 	IntentShowGuide
 	IntentToggleBandList
 	IntentToggleShortcuts
+	IntentOpenPublication
 	IntentKindCount
 )
 
@@ -132,6 +133,8 @@ func (kind IntentKind) String() string {
 		return "toggle-band-list"
 	case IntentToggleShortcuts:
 		return "toggle-shortcuts"
+	case IntentOpenPublication:
+		return "open-publication"
 	default:
 		return "unknown"
 	}
@@ -139,6 +142,7 @@ func (kind IntentKind) String() string {
 
 // Intent is a kind plus whichever payload fields that kind uses.
 type Intent struct {
+	URL    string
 	Kind   IntentKind
 	Band   gameapi.BandID
 	Tile   gameapi.TileID

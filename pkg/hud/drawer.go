@@ -2,10 +2,12 @@ package hud
 
 import (
 	"fmt"
+	"image"
 	"strings"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/adsouza/africa2ice/pkg/render"
+	"github.com/adsouza/africa2ice/pkg/ui"
 	"github.com/ebitenui/ebitenui/widget"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 )
@@ -71,7 +73,7 @@ func noteBody(note render.FieldNote) string {
 		parts = append(parts, "[color=9fb1ae]HINT[/color] · "+note.Hint)
 	}
 	if note.References != "" {
-		parts = append(parts, "[color=9fb1ae]SOURCES[/color] · "+note.References)
+		parts = append(parts, "[color=9fb1ae]SOURCES[/color] · "+ui.FieldNoteReferenceMarkup(note.References))
 	}
 	return strings.Join(parts, "\n")
 }
@@ -192,11 +194,23 @@ func (p *Panel) buildDrawer(state State) widget.PreferredSizeLocateableWidget {
 	columnBodyPx := t.px(colHeight) - t.lineHeightPx(drawerHeadingSizeDIP) - t.px(drawerColSpacing)
 
 	noteTextHolder := widget.NewContainer(widget.ContainerOpts.Layout(widget.NewRowLayout(widget.RowLayoutOpts.Direction(widget.DirectionVertical))))
-	noteTextHolder.AddChild(widget.NewText(
+	noteText := widget.NewText(
 		widget.TextOpts.Text(noteBody(state.Note), t.face(9), colorText),
 		widget.TextOpts.ProcessBBCode(true),
+		widget.TextOpts.LinkColor(&widget.TextLinkColor{Idle: colorGoldDeep, Hover: colorGold}),
+		widget.TextOpts.LinkClickedHandler(func(args *widget.LinkEventArgs) {
+			// Text's link hit testing does not clip to ancestor scroll views
+			// or respect modal windows. Only accept visible gameplay clicks.
+			point := args.Text.GetWidget().Rect.Min.Add(image.Pt(args.OffsetX, args.OffsetY))
+			if state.Overlay.Scene == ui.SceneGameplay && !state.ShortcutsOpen && !state.BandListOpen && !state.Ending.Visible &&
+				p.handles.notesScroll != nil && point.In(p.handles.notesScroll.ViewRect()) && ui.IsPublicationURL(args.Id) {
+				p.emit(Intent{Kind: IntentOpenPublication, URL: args.Id})
+			}
+		}),
 		widget.TextOpts.MaxWidth(float64(t.px(notesWidth))),
-	))
+	)
+	p.handles.noteText = noteText
+	noteTextHolder.AddChild(noteText)
 	// notesContent floors its reported height at the column body (the
 	// drawer's budget for the note) so a short note still gives the scroll
 	// container the same slot a long one does — RowLayoutData.MaxHeight below

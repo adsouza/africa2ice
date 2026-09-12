@@ -68,6 +68,14 @@ func bandActionIntent(kind hud.IntentKind) bool {
 }
 
 func (g *Game) handleIntent(intent hud.Intent) {
+	if intent.Kind == hud.IntentOpenPublication {
+		if ui.IsPublicationURL(intent.URL) {
+			if err := g.openExternalURL(intent.URL); err != nil {
+				g.showNotice("Could not open the publication in your browser")
+			}
+		}
+		return
+	}
 	if g.frame != nil && g.frame.CampaignResult != gameapi.Ongoing && bandActionIntent(intent.Kind) {
 		g.logSession.LogUIIntentRefused(intent.Kind.String(), "campaign-over")
 		return

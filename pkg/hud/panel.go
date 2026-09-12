@@ -165,6 +165,7 @@ type handles struct {
 	// hover-driven Update did not discard and recreate it (see
 	// refreshTarget).
 	notesScroll *widget.ScrollContainer
+	noteText    *widget.Text
 	events      []*widget.Button
 	camera      *widget.Button
 	guideNext   *widget.Button
