@@ -1488,9 +1488,9 @@ func (g *Game) toggleReducedMotion() {
 	settings.ReducedMotion = !settings.ReducedMotion
 	g.updateUISettings(settings)
 	if settings.ReducedMotion {
-		g.showNotice("Reduced motion on")
+		g.showNotice("Fog shimmer disabled")
 	} else {
-		g.showNotice("Reduced motion off")
+		g.showNotice("Fog shimmer enabled")
 	}
 }
 

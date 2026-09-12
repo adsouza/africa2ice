@@ -183,9 +183,9 @@ func (p *Panel) settingsPanel(state State) *widget.Container {
 	if state.Overlay.Muted {
 		mute = "Muted: on · M"
 	}
-	motion := "Reduced motion: off"
+	motion := "Disable fog shimmer: off"
 	if state.Overlay.ReducedMotion {
-		motion = "Reduced motion: on"
+		motion = "Disable fog shimmer: on"
 	}
 	for _, entry := range []menuEntry{
 		{mute, Intent{Kind: IntentToggleMute}},
