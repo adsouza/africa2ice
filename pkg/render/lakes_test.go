@@ -38,3 +38,25 @@ func TestLakeShapesRenderAtCameraAndDisplayScaleWithoutFogLeak(t *testing.T) {
 		}
 	}
 }
+
+func TestLakeContractionClearsOldOutlineWithCachedTerrain(t *testing.T) {
+	scene := NewMapScene()
+	screen := ebiten.NewImage(PresentationWidth, PresentationHeight)
+	makeFrame := func(right float64) *gameapi.Frame {
+		return &gameapi.Frame{TerrainRevision: 1, Tiles: []gameapi.Tile{{
+			ID: 0, Land: true, Explored: true, Lakes: []gameapi.LakeShape{{Name: "Lake Malawi / Nyasa", Points: []gameapi.LakePoint{
+				{X: 0.1, Y: 0.1}, {X: right, Y: 0.1}, {X: right, Y: 0.9}, {X: 0.1, Y: 0.9},
+			}}},
+		}}}
+	}
+	scene.Draw(screen, makeFrame(0.9), 0, MigrationPreview{}, "", EndScene{}, false)
+	wet := screen.At(mapOriginX+6, mapOriginY+4)
+	scene.Draw(screen, makeFrame(0.4), 0, MigrationPreview{}, "", EndScene{}, false)
+	dry := screen.At(mapOriginX+6, mapOriginY+4)
+	if color.RGBAModel.Convert(wet) == color.RGBAModel.Convert(dry) {
+		t.Fatal("old lake shoreline survived frame replacement")
+	}
+	if scene.terrainRebuilds != 1 {
+		t.Fatal("lake animation unnecessarily invalidated base terrain")
+	}
+}

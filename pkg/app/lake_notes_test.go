@@ -12,11 +12,13 @@ func TestLakeNoteQueuesBehindRegionAndDoesNotRepeat(t *testing.T) {
 	before.YearBP = 60100
 	before.Tiles[before.Bands[0].TileID].NearbyLake = "Lake Malawi / Nyasa"
 	before.Tiles[before.Bands[0].TileID].Explored = true
+	before.Tiles[before.Bands[0].TileID].Lakes = []gameapi.LakeShape{{Name: "Lake Malawi / Nyasa", Points: []gameapi.LakePoint{{X: 0, Y: 0}, {X: 0.5, Y: 0}, {X: 0.5, Y: 1}}}}
 	before.Bands[0].Species = gameapi.HomoSapiens
 	before.Bands[0].Population = 100
 	after := cloneAppFrame(before)
 	after.Turn++
 	after.YearBP = 59900
+	after.Tiles[before.Bands[0].TileID].Lakes = []gameapi.LakeShape{{Name: "Lake Malawi / Nyasa", Points: []gameapi.LakePoint{{X: 0, Y: 0}, {X: 1, Y: 0}, {X: 1, Y: 1}}}}
 	after.SapiensEstablishedRegions = append(after.SapiensEstablishedRegions, gameapi.Arabia)
 	game := New(&gameStub{frame: before})
 	game.acceptCompletedTurn(after)

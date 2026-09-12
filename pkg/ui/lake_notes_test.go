@@ -13,6 +13,9 @@ func lakeNoteFrames() (*gameapi.Frame, *gameapi.Frame) {
 		{X: 20, Y: 20, Explored: true},
 		{X: 21, Y: 21, Explored: true, NearbyLake: "Lake Malawi / Nyasa"},
 	}, Bands: []gameapi.Band{{Species: gameapi.HomoSapiens, Population: 100, TileID: 0}}}
+	after.Tiles[1].Lakes = []gameapi.LakeShape{{Name: "Lake Malawi / Nyasa", Points: []gameapi.LakePoint{{X: 0, Y: 0}, {X: 1, Y: 0}, {X: 1, Y: 1}}}}
+	before.Tiles = append([]gameapi.Tile(nil), after.Tiles...)
+	before.Tiles[1].Lakes = []gameapi.LakeShape{{Name: "Lake Malawi / Nyasa", Points: []gameapi.LakePoint{{X: 0, Y: 0}, {X: 0.5, Y: 0}, {X: 0.5, Y: 1}}}}
 	return before, after
 }
 
@@ -22,6 +25,9 @@ func TestLakeNotesRequireNearbyLivingSapiensAndDateCrossing(t *testing.T) {
 		change func(*gameapi.Frame, *gameapi.Frame)
 		want   int
 	}{
+		{"no actual outline change", func(b, a *gameapi.Frame) { b.Tiles[1].Lakes = a.Tiles[1].Lakes }, 0},
+		{"newly explored only", func(b, a *gameapi.Frame) { b.Tiles[1].Explored = false }, 0},
+		{"retreated from old shore", func(b, a *gameapi.Frame) { a.Tiles[1].Lakes = nil; a.Tiles[1].NearbyLake = "" }, 1},
 		{"nearby", func(b, a *gameapi.Frame) {}, 1},
 		{"distant", func(b, a *gameapi.Frame) { a.Tiles[0].X = 10 }, 0},
 		{"archaic", func(b, a *gameapi.Frame) { a.Bands[0].Species = gameapi.ArchaicHominin }, 0},
@@ -49,20 +55,23 @@ func TestLakeNotesRequireNearbyLivingSapiensAndDateCrossing(t *testing.T) {
 func TestLakeNotesCoverMilestonesWithLinkedResearchAndExplicitAbstraction(t *testing.T) {
 	for _, entry := range lakeHistory {
 		before, after := lakeNoteFrames()
-		before.YearBP = entry.yearBP + 1
-		after.YearBP = entry.yearBP
+		before.YearBP = gameapi.LakeStageStart(entry.stage) + 1
+		after.YearBP = gameapi.LakeStageStart(entry.stage)
 		after.Tiles[1].NearbyLake = entry.name
+		before.Tiles[1].NearbyLake = entry.name
+		after.Tiles[1].Lakes[0].Name = entry.name
+		before.Tiles[1].Lakes[0].Name = entry.name
 		notes := NearbyLakeHistoryNotes(before, after)
 		if len(notes) != 1 {
-			t.Fatalf("missing milestone %s %d", entry.name, entry.yearBP)
+			t.Fatalf("missing milestone %s %d", entry.name, gameapi.LakeStageStart(entry.stage))
 		}
 		note := notes[0]
 		assertFieldNoteHasNoManualLineBreaks(t, note)
 		if !strings.Contains(FieldNoteReferenceMarkup(note.References), "[link=https://doi.org/") {
 			t.Fatal("unlinked research")
 		}
-		if entry.yearBP != 70000 && !strings.Contains(note.GameEffect, "not simulated") {
-			t.Fatal("historical change presented as simulation")
+		if !strings.Contains(note.GameEffect, "different schematic shoreline") {
+			t.Fatal("missing explanation of schematic map change")
 		}
 	}
 }

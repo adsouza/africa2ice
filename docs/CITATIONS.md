@@ -225,7 +225,7 @@ Horn of Africa. The note presents demographic consequences as uncertain.
 
 Lake Malawi rose in stages toward near-modern levels by approximately 60 ka;
 levels were approximately 30–200 m below modern during 35–15 ka. These broad
-intervals support lake-change context, not precise shoreline areas or single-year events.
+intervals support the representative map transitions, not exact shoreline areas or single-year events.
 
 <!-- field-note-citation: Bartov et al. (2002) -->
 ### Bartov et al. (2002)
@@ -236,7 +236,29 @@ Precursor of the Dead Sea.” *Quaternary Research* 57, 9–21.
 
 Lake Lisan existed approximately 70–15 ka and rose sharply around 27 ka,
 reaching its maximum elevation during approximately 26–23 ka before declining.
-The chronology supports broad lake-change context, not exact outline scaling factors.
+The chronology supports the representative map transitions. The outlines summarize basin
+extent and are not uniformly scaled from water-level measurements.
+
+<!-- field-note-citation: Scholz et al. (2007) -->
+### Scholz et al. (2007)
+
+“East African megadroughts between 135 and 75 thousand years ago and bearing on
+early-modern human origins.” *Proceedings of the National Academy of Sciences* 104.
+[doi:10.1073/pnas.0703874104](https://doi.org/10.1073/pnas.0703874104).
+
+Supports Malawi's early lower state and subsequent recovery. The severe earlier
+megadrought minimum is outside the campaign; it is not one of the map states.
+
+<!-- field-note-citation: Eccles (1974) -->
+### Eccles (1974)
+
+“An outline of the physical limnology of Lake Malawi (Lake Nyasa).”
+*Limnology and Oceanography* 19, 730–742.
+[doi:10.4319/lo.1974.19.5.0730](https://doi.org/10.4319/lo.1974.19.5.0730).
+
+Supports the basin geometry behind Malawi's schematic shoreline changes.
+The shallow southern shelf retreats substantially; steep shores move much less.
+The authored vertices are a cartographic approximation, not surveyed palaeoshorelines.
 
 ## Non-bibliographic references
 

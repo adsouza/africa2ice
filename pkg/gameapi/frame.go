@@ -76,6 +76,7 @@ type LakePoint struct{ X, Y float64 }
 // LakeShape is an explored fragment of a schematic lake shoreline. The tile
 // retains its surrounding land biome and movement rules.
 type LakeShape struct {
+	Stage  LakeStage
 	Name   string
 	Points []LakePoint
 }

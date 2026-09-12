@@ -514,17 +514,16 @@ func regionReferences(region gameapi.Region) string {
 	}
 }
 
-// The map has schematic, fixed lake footprints (except Lisan's appearance).
-// These dated notes describe research context, never a measured simulation
-// change. Dates are representative markers within broad geological intervals.
+// Notes accompany changes to authored lake stages. The stage clock is shared
+// with map projection; dates summarize broad geological intervals.
 var lakeHistory = [...]struct {
 	name                        string
-	yearBP                      int
+	stage                       gameapi.LakeStage
 	change, context, references string
 }{
-	{"Lake Lisan", 70000, "LAKE DEVELOPING", "Around 70,000 years ago, Lake Lisan began occupying the Dead Sea basin. Its levels subsequently varied substantially. The map introduces its schematic outline at this approximate date.", "Bartov et al. (2002)"},
-	{"Lake Malawi / Nyasa", 60000, "LAKE EXPANSION", "After severe earlier droughts, Lake Malawi rose in stages, with reversals, toward near-modern levels by roughly 60,000 years ago. Expanding waters would have shifted shorelines and lakeside habitats over many generations.", "Cohen et al. (2007)"},
-	{"Lake Malawi / Nyasa", 35000, "LAKE CONTRACTION", "During roughly 35,000–15,000 years ago, Lake Malawi stood approximately 30–200 metres below its modern level. Lower waters changed the location and extent of shoreline habitats; this date marks a broad interval, not a sudden retreat.", "Cohen et al. (2007)"},
-	{"Lake Lisan", 27000, "LAKE EXPANSION", "Lake Lisan began rising sharply around 27,000 years ago, approaching its highest level during roughly 26,000–23,000 years ago. The expansion joined additional parts of the Jordan Rift basin.", "Bartov et al. (2002)"},
-	{"Lake Lisan", 23000, "LAKE CONTRACTION", "After its highstand around 26,000–23,000 years ago, Lake Lisan began a longer decline. Its shores retreated as lake levels fell toward the end of the last glacial period.", "Bartov et al. (2002)"},
+	{"Lake Lisan", gameapi.LisanInitial, "LAKE DEVELOPING", "Around 70,000 years ago, Lake Lisan began occupying the Dead Sea basin. Its levels subsequently varied substantially. The map introduces its schematic outline at this approximate date.", "Bartov et al. (2002)"},
+	{"Lake Malawi / Nyasa", gameapi.MalawiRecovered, "LAKE EXPANSION", "After severe earlier droughts, Lake Malawi rose in stages, with reversals, toward near-modern levels by roughly 60,000 years ago. Expanding waters would have shifted shorelines and lakeside habitats over many generations.", "Cohen et al. (2007); Scholz et al. (2007); Eccles (1974)"},
+	{"Lake Malawi / Nyasa", gameapi.MalawiGlacialLow, "LAKE CONTRACTION", "During roughly 35,000–15,000 years ago, Lake Malawi stood approximately 30–200 metres below its modern level. Lower waters changed the location and extent of shoreline habitats; this date marks a broad interval, not a sudden retreat.", "Cohen et al. (2007); Scholz et al. (2007); Eccles (1974)"},
+	{"Lake Lisan", gameapi.LisanHigh, "LAKE EXPANSION", "Lake Lisan began rising sharply around 27,000 years ago, approaching its highest level during roughly 26,000–23,000 years ago. The expansion joined additional parts of the Jordan Rift basin.", "Bartov et al. (2002)"},
+	{"Lake Lisan", gameapi.LisanDeclining, "LAKE CONTRACTION", "After its highstand around 26,000–23,000 years ago, Lake Lisan began a longer decline. Its shores retreated as lake levels fell toward the end of the last glacial period.", "Bartov et al. (2002)"},
 }

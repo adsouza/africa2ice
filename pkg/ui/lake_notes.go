@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"reflect"
 	"strings"
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
@@ -16,31 +17,34 @@ func NearbyLakeHistoryNotes(before, after *gameapi.Frame) []render.FieldNote {
 	}
 	var notes []render.FieldNote
 	for _, entry := range lakeHistory {
-		if before.YearBP <= entry.yearBP || after.YearBP > entry.yearBP || !sapiensNearLake(after, entry.name) {
+		yearBP := gameapi.LakeStageStart(entry.stage)
+		if before.YearBP <= yearBP || after.YearBP > yearBP || gameapi.LakeStageAt(entry.name, after.YearBP) != entry.stage || !visibleLakeChange(before, after, entry.name) {
 			continue
 		}
-		effect := "Historical context: lake-size changes are not simulated here. The outline stays schematic; this note does not change movement, resources, or habitability."
-		if entry.yearBP == 70000 {
-			effect = "The schematic Lake Lisan outline now appears on explored tiles. Surrounding land keeps its existing movement, resource, and habitability rules."
+		// Contraction can remove the nearby fragment entirely. Use both
+		// shores, but only bands still alive in the accepted frame.
+		if !sapiensNearLake(after, entry.name, after.Tiles) && !sapiensNearLake(after, entry.name, before.Tiles) {
+			continue
 		}
+		effect := "The map now shows a different schematic shoreline for this lake. The date and outline summarize a broad historical interval; surrounding tiles keep their movement, resource, and habitability rules."
 		notes = append(notes, render.FieldNote{
 			Topic:        entry.change + " · " + entry.name,
-			Introduction: "One of your sapiens bands was nearby as the campaign entered this lake-history interval.",
+			Introduction: "One of your sapiens bands was nearby when the mapped shoreline changed.",
 			Context:      entry.context, GameEffect: effect,
-			Hint:       "Inspect nearby tiles for their current water, food, and capacity before choosing a destination. The historical shoreline shift is not a forecast of those values.",
+			Hint:       "Inspect nearby tiles for their current water, food, and capacity before choosing a destination. The shoreline overlay does not forecast those values.",
 			References: entry.references,
 		})
 	}
 	return notes
 }
 
-func sapiensNearLake(frame *gameapi.Frame, name string) bool {
+func sapiensNearLake(frame *gameapi.Frame, name string, shores []gameapi.Tile) bool {
 	for _, band := range frame.Bands {
 		if band.Species != gameapi.HomoSapiens || band.Population == 0 || int(band.TileID) >= len(frame.Tiles) {
 			continue
 		}
 		camp := frame.Tiles[band.TileID]
-		for _, tile := range frame.Tiles {
+		for _, tile := range shores {
 			if !tile.Explored || !strings.Contains(tile.NearbyLake, name) {
 				continue
 			}
@@ -50,4 +54,29 @@ func sapiensNearLake(frame *gameapi.Frame, name string) bool {
 		}
 	}
 	return false
+}
+
+// Compare only geography already visible on both frames. Newly explored lake
+// fragments alone are not evidence of expansion, even at a stage boundary.
+func visibleLakeChange(before, after *gameapi.Frame, name string) bool {
+	for id, tile := range after.Tiles {
+		if id >= len(before.Tiles) || !tile.Explored || !before.Tiles[id].Explored {
+			continue
+		}
+		old := lakePoints(before.Tiles[id], name)
+		current := lakePoints(tile, name)
+		if !reflect.DeepEqual(old, current) {
+			return true
+		}
+	}
+	return false
+}
+
+func lakePoints(tile gameapi.Tile, name string) []gameapi.LakePoint {
+	for _, lake := range tile.Lakes {
+		if lake.Name == name {
+			return lake.Points
+		}
+	}
+	return nil
 }
