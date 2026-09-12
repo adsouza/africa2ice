@@ -289,7 +289,7 @@ func CampaignOverviewFieldNote() render.FieldNote {
 	return render.FieldNote{
 		Topic:        "WELCOME",
 		Context:      "It is 80,000 years before present. Your journey begins in East Africa, in a world also inhabited by Neanderthals and Denisovans.",
-		Introduction: "Guide your Homo sapiens bands across the map. Other hominins, including a Tibetan Denisovan band, are computer-controlled. Use the keyboard for faster turns:",
+		Introduction: "Guide your Homo sapiens bands across the map. Other hominins are computer-controlled. Use the keyboard for faster turns:",
 		Instructions: [4]string{
 			"Tab cycles through your bands.",
 			"With the Move panel open, use the arrow keys to select a reachable tile.",

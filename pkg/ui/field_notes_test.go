@@ -67,11 +67,11 @@ func TestFieldNotesCoverClosedContextCatalogs(t *testing.T) {
 	assertComplete("interbreeding", InterbreedingFieldNote(2), true)
 }
 
-func TestCampaignOverviewIdentifiesTheDenisovanBand(t *testing.T) {
+func TestCampaignOverviewIncludesDenisovanHistoricalContext(t *testing.T) {
 	note := CampaignOverviewFieldNote()
 	assertFieldNoteHasNoManualLineBreaks(t, note)
-	if !strings.Contains(note.Introduction, "Denisovan") {
-		t.Fatalf("campaign overview does not identify the Denisovan band: %#v", note)
+	if !strings.Contains(note.Context, "Denisovan") {
+		t.Fatalf("campaign overview lacks Denisovan historical context: %#v", note)
 	}
 }
 
