@@ -19,7 +19,7 @@ func TestHUDStateDerivesRowsAndGateFromTheFrame(t *testing.T) {
 	if !state.EndTurn.Enabled || state.EndTurn.Soft {
 		t.Fatalf("gate with every band moved = %+v", state.EndTurn)
 	}
-	if state.NotesMode != hud.NotesCompact {
+	if state.NotesMode != hud.NotesExpanded {
 		t.Fatalf("default notes mode = %v", state.NotesMode)
 	}
 }

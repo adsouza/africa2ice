@@ -7339,7 +7339,9 @@ future pulse is drawn and exact regional magnitude remains in the explored tile 
 
 A persistently available **Field Notes** drawer is visible by default and docked over the lower edge
 of the map area in one of three states: hidden (a full-width one-line bar, 20 logical px), compact
-(102 logical px), or expanded (300 logical px). The chosen height is a local UI preference. It never
+(102 logical px), or expanded (300 logical px). New campaigns open it fully expanded to show the
+welcome guidance, which suggests clicking `▼ less` or pressing `Shift+F` after reading to reveal
+more of the map. The default is expanded; resumed games retain the saved local height preference. It never
 covers the timeline rail or the right panel. Compact and expanded keep the small edge tab with hide
 and more/less controls; plain `F` performs the same action when no text-editing control has keyboard
 focus, and `Shift+F` toggles compact and expanded. Hidden, the drawer instead spans the map's full
@@ -7449,7 +7451,7 @@ Desktop stores it in
 
 Defaults are **per record, not per field**: an absent, malformed, or unsupported-schema record
 supplies all six preferences at once — Field Notes visible, `MasterVolume` `0.5`, `Muted` false,
-`GuideDismissed` false, `FieldNotesExpanded` false, and `ReducedMotion` false. A schema-3 record is
+`GuideDismissed` false, `FieldNotesExpanded` true, and `ReducedMotion` false. A schema-3 record is
 accepted only when all seven required fields are present, non-null, and have the exact JSON types
 above. A schema-2 record — the same six fields as before `ReducedMotion` existed — is still
 accepted when those are present, non-null, and correctly typed; `ReducedMotion` is not required
@@ -8932,7 +8934,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    focusing, and scrolling leave selection, draft, action batch, revision, RNG, and frame untouched.
    Exercise absent/malformed/unsupported-schema `UISettings`, local cross-session persistence of all
    six preferences, whole-record defaulting (Field Notes visible, `MasterVolume` `0.5`, `Muted`
-   false, `GuideDismissed` false, `FieldNotesExpanded` false, `ReducedMotion` false), required-field
+   false, `GuideDismissed` false, `FieldNotesExpanded` true, `ReducedMotion` false), required-field
    presence for schema 1 (three fields), schema 2 (five fields), and schema 3 (six fields), null and
    wrong-type rejection, decoding a schema-1 or schema-2 record and re-stamping it schema 3,
    `MasterVolume` clamping on read and write, write failure, and campaign load/delete

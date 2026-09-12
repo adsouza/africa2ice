@@ -210,7 +210,7 @@ func TestFieldNotesAndSplitHotkeysRemainDistinct(t *testing.T) {
 		rowGame.openRow = row
 		rowGame.handleRowKey(fieldNotesHotkey, false)
 		rowGame.handleRowKey(splitBandHotkey, false)
-		if rowGame.notesMode != hud.NotesCompact || rowGame.hasMigrationPreview {
+		if rowGame.notesMode != hud.NotesExpanded || rowGame.hasMigrationPreview {
 			t.Fatalf("row %v bound F or N: notes %v, preview %t", row, rowGame.notesMode, rowGame.hasMigrationPreview)
 		}
 	}
@@ -1055,6 +1055,7 @@ func TestStartingNewCampaignReplacesTerminalPresentationState(t *testing.T) {
 	terminal.Turn = 400
 	stub := &gameStub{frame: terminal}
 	game := New(stub)
+	game.setNotesMode(hud.NotesHidden)
 	game.fieldNote, _ = ui.TechnologyFieldNote(gameapi.Firecraft, 7, 1)
 	game.breakthroughFrames = breakthroughCelebrationFrames
 	game.hasMigrationPreview = true
@@ -1063,6 +1064,13 @@ func TestStartingNewCampaignReplacesTerminalPresentationState(t *testing.T) {
 	fresh := migrationPreviewFrame()
 	stub.frame = fresh
 	game.startNewCampaign()
+	if game.notesMode != hud.NotesExpanded || !game.settings.FieldNotesVisible || !game.settings.FieldNotesExpanded {
+		t.Fatalf("new campaign did not expand welcome notes: mode %v, settings %+v", game.notesMode, game.settings)
+	}
+	game.toggleNotesExpanded()
+	if game.notesMode != hud.NotesCompact || game.settings.FieldNotesExpanded {
+		t.Fatal("welcome collapse shortcut did not persist compact notes")
+	}
 
 	if stub.newCampaigns != 1 || game.frame != fresh || game.frame.CampaignResult != gameapi.Ongoing {
 		t.Fatalf("new campaign = calls %d, frame %#v", stub.newCampaigns, game.frame)

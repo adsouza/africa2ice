@@ -23,7 +23,7 @@ type UISettings struct {
 }
 
 func DefaultUISettings() UISettings {
-	return UISettings{EasyMode: true, SchemaVersion: UISettingsSchemaVersion, FieldNotesVisible: true, MasterVolume: 0.5}
+	return UISettings{EasyMode: true, SchemaVersion: UISettingsSchemaVersion, FieldNotesVisible: true, FieldNotesExpanded: true, MasterVolume: 0.5}
 }
 
 func NormalizeUISettings(settings UISettings) UISettings {
@@ -94,6 +94,9 @@ func DecodeUISettings(payload []byte) (UISettings, error) {
 		if err := json.Unmarshal(fields["FieldNotesExpanded"], &settings.FieldNotesExpanded); err != nil {
 			return DefaultUISettings(), fmt.Errorf("decode FieldNotesExpanded: %w", err)
 		}
+	} else {
+		// Preserve the compact height used before this preference existed.
+		settings.FieldNotesExpanded = false
 	}
 	if settings.SchemaVersion >= 3 {
 		if err := json.Unmarshal(fields["ReducedMotion"], &settings.ReducedMotion); err != nil {

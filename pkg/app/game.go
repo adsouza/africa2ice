@@ -130,7 +130,7 @@ func newGameWithPresentation(port gameapi.Game, sound gameaudio.SoundManager, se
 	settings := ui.DefaultUISettings()
 	game := &Game{
 		port: port, sound: sound, frame: frame, scene: render.NewMapScene(),
-		panel: hud.New(), notesMode: hud.NotesCompact, guide: ui.NewGuideState(false),
+		panel: hud.New(), notesMode: notesModeFor(settings), guide: ui.NewGuideState(false),
 		fieldNote:       ui.CampaignOverviewFieldNote(),
 		openExternalURL: openExternalURL,
 		notice:          "Outlined tiles are reachable — arrows choose, Enter confirms", noticeFrames: 300,
@@ -1256,6 +1256,7 @@ func (g *Game) startNewCampaign() {
 		g.guide = ui.NewGuideState(false)
 	}
 	g.setFieldNote(ui.CampaignOverviewFieldNote())
+	g.setNotesMode(hud.NotesExpanded)
 	g.breakthroughFrames = 0
 	g.regionalPulseFocused = false
 	g.clearMigrationPreview()

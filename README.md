@@ -34,7 +34,8 @@ Current controls:
 - the Field Notes drawer sits over the lower edge of the map in three states — hidden (a full-width
   one-line bar that still carries the newest campaign event), compact, and expanded. F hides or
   shows it, Shift+F switches compact and expanded, the drawer tab and its ▲ more control do the
-  same with the mouse, and the wheel scrolls longer entries, whose historical context includes
+  same with the mouse. New campaigns start fully expanded; click ▼ less or press Shift+F after
+  reading to reveal more of the map. The wheel scrolls longer entries, whose historical context includes
   compact references;
 - Z, or the map-corner button, switches the camera between the whole-map overview and a close view
   of the selected band;

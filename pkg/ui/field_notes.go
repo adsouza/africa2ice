@@ -291,7 +291,7 @@ func CampaignOverviewFieldNote() render.FieldNote {
 		Introduction: "Play faster with the keyboard: Tab cycles bands; arrow keys select a tile; Enter locks in a destination; Space ends your turn.",
 		Context:      "Begin in East Africa 80,000 years before present; the map reveals as sapiens expand.",
 		GameEffect:   "With the Move panel open, arrows choose reachable tiles and Enter queues migration for the end of the turn.",
-		Hint:         "Choose destinations for your bands before pressing Space. Archaic hominins—including a Tibetan Denisovan band—are computer-controlled.",
+		Hint:         "When done reading, click ▼ less or press Shift+F to collapse Field Notes and see more of the map. Choose destinations for your bands before pressing Space. Archaic hominins—including a Tibetan Denisovan band—are computer-controlled.",
 		References:   "Reich et al. (2010); Chen et al. (2019).",
 	}
 }
