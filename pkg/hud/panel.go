@@ -24,7 +24,7 @@ const (
 	mapBottom       = 700.0
 	drawerHiddenH   = 20.0
 	drawerCompactH  = 102.0
-	drawerExpandedH = 300.0
+	drawerExpandedH = 340.0
 	drawerTabW      = 150.0
 	drawerTabH      = 18.0
 	panelFooterH    = 62.0

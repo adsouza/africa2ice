@@ -7339,7 +7339,7 @@ future pulse is drawn and exact regional magnitude remains in the explored tile 
 
 A persistently available **Field Notes** drawer is visible by default and docked over the lower edge
 of the map area in one of three states: hidden (a full-width one-line bar, 20 logical px), compact
-(102 logical px), or expanded (300 logical px). New campaigns open it fully expanded to show the
+(102 logical px), or expanded (340 logical px). New campaigns open it fully expanded to show the
 welcome guidance, which suggests clicking `▼ less` or pressing `Shift+F` after reading to reveal
 more of the map. The default is expanded; resumed games retain the saved local height preference. It never
 covers the timeline rail or the right panel. Compact and expanded keep the small edge tab with hide
@@ -8918,7 +8918,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    activations and reject disabled/repeated/slider/hover paths; save-sound fixtures key exactly once
    by successful manual/quick-save operation ID and keep autosave/load/delete/failure silent.
    Implement and test Field Notes in this step: visible by default; hidden (20 px, full-width
-   bar)/compact (102 px)/expanded (300 px) drawer states docked over the lower edge of the map area;
+   bar)/compact (102 px)/expanded (340 px) drawer states docked over the lower edge of the map area;
    compact/expanded's edge tab with its `hide notes · F` and `▲ more`/`▼ less` controls, and
    hidden's own full-width `▲ notes · F` control; `F` toggles visibility and `Shift+F` toggles
    compact/expanded; the hidden bar retains the newest event as its own clickable text; stable
@@ -10117,7 +10117,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | Overview cell and drawn tile extent        | `8 × 8` cell; `7.6 × 7.6` drawn                                 | Locked                                          | §8    |
 | Terminal end-scene dialog rect             | origin `(60, 70)`; `784 × 508` logical pixels; centred on the top-down map area | Policy                          | §8    |
 | Focus camera scale and transition          | `3×`; `15` update ticks; clamped to the map area above the drawer | Policy                                        | §8    |
-| Field Notes drawer heights                 | hidden `20`, compact `102`, expanded `300` logical px           | Policy                                          | §8    |
+| Field Notes drawer heights                 | hidden `20`, compact `102`, expanded `340` logical px           | Policy                                          | §8    |
 | Liveability tiers (presentation only)      | food red `< RequiredFU`, amber `< 1.5 × RequiredFU`; water red `< 0.25 cap`, amber `< 0.5 cap`; degradation amber `≥ 0.25`, red `≥ 0.5`; mortality amber `≥ 0.004`, red `≥ 0.008`; shelter amber `< 0.3`; archaic present amber | Initial | §8 |
 | UI settings schema                         | `3`: `FieldNotesVisible`, `MasterVolume`, `Muted`, `GuideDismissed`, `FieldNotesExpanded`, `ReducedMotion`; schema 1 and schema 2 decode with the newer fields false | Policy | §8 |
 | `MaxRenderScale`                           | `2.0`                                                          | Policy                                          | §8    |
