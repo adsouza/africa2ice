@@ -7142,7 +7142,14 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   metadata for snapshots, including loaded games, and do not add fields to campaign saves.
   Explored tiles retain Biome, Region, and any Nearby lake label even when uninhabitable or
   unoccupiable. Water tiles show `Open water` and the authored water-body name (for example,
-  `Red Sea`), with `Open ocean` as the unnamed-water fallback. Habitability metrics remain
+  `Red Sea`). Water outside the named sea/gulf polygons shows Atlantic, Indian, Pacific, or
+  Arctic Ocean. Display-only boundaries approximate the ocean basins at grid scale: the
+  Atlantic/Indian split follows 20°E south of Africa; the Indian/Pacific split follows the
+  Sunda/Australia outline and approximately 147°E south of Tasmania. The northern coast is
+  Arctic, with the Norwegian Sea retaining its Atlantic connection. These are coarse labels,
+  informed by [NOAA's ocean-limit descriptions](https://www.ncei.noaa.gov/archive/archive-management-system/OAS/bin/prd/jquery/seaname/details/72),
+  not changes to terrain or movement. The map ends at 48°S and does not reach the Southern Ocean.
+  Habitability metrics remain
   unavailable and movement stays disabled; unexplored tiles reveal no geographic details.
   The TARGET header names its source in precedence order — `cursor`, then `queued`, then `hover` —
   or reads "hover or click an outlined tile" when none applies. Relative `▲`/`▼` marks compare

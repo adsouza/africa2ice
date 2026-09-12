@@ -17,7 +17,17 @@ func TestWaterBodyNamesFollowAuthoredGeography(t *testing.T) {
 		{49, 13, "Gulf of Aden"},
 		{35, 43, "Black Sea"},
 		{50, 42, "Caspian Sea"},
-		{-15, -30, "Open ocean"},
+		{-15, -30, "Atlantic Ocean"},
+		{15, -40, "Atlantic Ocean"},
+		{25, -40, "Indian Ocean"},
+		{70, -20, "Indian Ocean"},
+		{110, -20, "Indian Ocean"},
+		{140, -48, "Indian Ocean"},
+		{150, -48, "Pacific Ocean"},
+		{170, 0, "Pacific Ocean"},
+		{195, 40, "Pacific Ocean"},
+		{80, 72, "Arctic Ocean"},
+		{-15, 68, "Atlantic Ocean"},
 		{33, -1, ""},
 	} {
 		// Round the authored integer-degree coordinates to the nearest cell

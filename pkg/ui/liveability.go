@@ -161,9 +161,6 @@ func summarizeTile(frame *gameapi.Frame, tileID gameapi.TileID, self *gameapi.Ba
 	switch {
 	case !tile.Land:
 		summary.Biome, summary.Region = "Open water", tile.WaterBody
-		if summary.Region == "" {
-			summary.Region = "Open ocean"
-		}
 		summary.Status = "Open water · cannot occupy"
 		return summary
 	case tile.BaselineK <= 0:
