@@ -70,6 +70,16 @@ type Escarpment struct {
 	First, Second TileID
 }
 
+// LakePoint is a position within a tile, with X and Y in [0, 1].
+type LakePoint struct{ X, Y float64 }
+
+// LakeShape is an explored fragment of a schematic lake shoreline. The tile
+// retains its surrounding land biome and movement rules.
+type LakeShape struct {
+	Name   string
+	Points []LakePoint
+}
+
 type Tile struct {
 	ID                TileID
 	X                 int
@@ -78,6 +88,7 @@ type Tile struct {
 	Longitude         float64
 	Land              bool
 	Region            Region
+	Lakes             []LakeShape
 	NearbyLake        string // Named lake near this land tile; empty when uncataloged.
 	WaterBody         string // Geographic name for water tiles; empty on land.
 	ElevationKm       float64

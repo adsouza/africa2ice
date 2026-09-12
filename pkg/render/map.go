@@ -317,6 +317,7 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 	// discs drawn next (so those selection affordances stay readable over a
 	// biome's pictograph rather than getting obscured by it).
 	scene.drawBiomeGlyphs(mapCanvas, geometry, frame)
+	scene.drawLakes(mapCanvas, geometry, frame)
 	scene.drawReachableTiles(mapCanvas, geometry, frame, selectedBand)
 	scene.drawGuideHighlight(mapCanvas, geometry, frame, selectedBand)
 	// The pointer's tile is tinted on the map itself now that the bottom

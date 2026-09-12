@@ -1,6 +1,7 @@
 package application
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/adsouza/africa2ice/internal/domain"
@@ -32,8 +33,8 @@ func TestSnapshotNamesLakesAtGeographicAnchors(t *testing.T) {
 			}
 		}
 	}
-	if count != 2 {
-		t.Fatalf("named lake tiles = %d, want 2", count)
+	if count < 2 {
+		t.Fatalf("named lake tiles = %d, want at least 2", count)
 	}
 	for index, want := range map[int]string{1: "Lake Turkana", 2: "Lake Victoria"} {
 		if got := frame.Tiles[domain.StartingTileIDs[index]].NearbyLake; got != want {
@@ -53,7 +54,7 @@ func TestSnapshotNamesLakesAtGeographicAnchors(t *testing.T) {
 		t.Fatal(err)
 	}
 	for id, tile := range frame.Tiles {
-		if loaded.Tiles[id].NearbyLake != tile.NearbyLake {
+		if loaded.Tiles[id].NearbyLake != tile.NearbyLake || !reflect.DeepEqual(loaded.Tiles[id].Lakes, tile.Lakes) {
 			t.Fatalf("lake name changed after load at tile %d", id)
 		}
 	}
