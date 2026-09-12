@@ -19,14 +19,16 @@ func resolveRegion(x, y int, point GeoPoint) (Region, bool) {
 	if point.Longitude >= 96 && point.Longitude <= 122 && point.Latitude >= 30 && point.Latitude <= 42 {
 		return YellowRiverBasin, true
 	}
+	// The coarse Africa outline overlaps the Arabian Peninsula. Its land
+	// belongs to Arabia; the water cutouts already separate the two shores.
+	if insideFeature("Arabia", x, y) {
+		return Arabia, true
+	}
 	if insideFeature("Africa", x, y) && point.Longitude >= 28 && point.Latitude >= -15 && point.Latitude <= 18 {
 		return EastAfrica, true
 	}
 	if insideFeature("Africa", x, y) {
 		return RestOfAfrica, true
-	}
-	if insideFeature("Arabia", x, y) {
-		return Arabia, true
 	}
 	if point.Longitude >= 25 && point.Longitude <= 45 && point.Latitude >= 28 && point.Latitude <= 42 {
 		return Levant, true

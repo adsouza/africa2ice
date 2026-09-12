@@ -1173,7 +1173,7 @@ conversion, so a violation reads as a specific edit rather than a category of si
 
 - **Landmass polygons:** Africa, Arabia, the Levant/Anatolia, **Frangistan**, the rest of Eurasia
   through Siberia, India, SE Asia, Sahul, the Beringian coasts, and western Alaska.
-- **Water/negative polygons:** the Mediterranean, Red Sea, Persian Gulf, Caspian, Black Sea, the
+- **Water/negative polygons:** the Mediterranean, Red Sea, Gulf of Aden, Persian Gulf, Caspian, Black Sea, the
   deep-water Wallacea gaps between Sunda and Sahul, and the Bering Strait. The last two are named
   route gaps rather than coastlines accidentally erased by coarse rasterization.
 - **Height-valued highland polygons:** Atlas, Ethiopian Highlands, Zagros, the two Caucasus massifs, Himalaya / Tibetan Plateau, Alps,
@@ -1183,6 +1183,16 @@ conversion, so a violation reads as a specific edit rather than a category of si
   (Huang He), Amur, Lena, and Yukon — rasterized as high-moisture corridors.
 - **Natural-shelter regions:** a closed, authored geographic layer representing the relative
   availability of caves and rock overhangs at this map's scale, not individual archaeological sites.
+
+`dispersal-map-v5` connects the Red Sea water cutout through Bab-el-Mandeb and the Gulf of Aden
+to the open ocean. The gulf polygon is deliberately wide enough to preserve a continuous water
+barrier on the coarse grid: no ordinary land route connects Africa to Arabia south of Sinai,
+while the northern land route remains connected. This follows the geographic relationship shown
+by [NASA's Bab-el-Mandeb imagery](https://asterweb.jpl.nasa.gov/gallery-detail.asp?name=strait);
+the polygon vertices are a game-scale abstraction, not a reconstructed ancient shoreline.
+The correction changes land, region, coast, and derived habitat masks. Saves using earlier
+geography versions are rejected by the algorithm-version gate; they are not silently reinterpreted
+on the corrected map. The frozen geography checksums and supported-save fixtures use v5.
 
 **Projection** (`geo.go`): the map is **96×64**, widened from the earlier 64×64 crop so adding the
 far-northeastern route does not erase Africa's internal geography. `x=0 → 20°W` and `x=95 → 200°E`
@@ -1346,7 +1356,7 @@ destination region before turn 400, solved as a time-expanded graph with technol
 that the result is an upper bound on what any player could achieve.
 
 The catalog, strict threshold, land clipping, and maximum-overlap rule belong to
-`GeographyAlgorithm: "dispersal-map-v4"`. The resulting fixed tile elevations drive temperature,
+`GeographyAlgorithm: "dispersal-map-v5"`. The resulting fixed tile elevations drive temperature,
 biome classification, orographic moisture, altitude UV, hypoxia pressure, and the top-down highland
 classification and inspector, but are
 derived geography rather than mutable or serialized campaign state. The Initial values may be tuned
@@ -1380,7 +1390,7 @@ boundaries are deliberate passes, not data gaps.
 generation resolves the 17 entries after land and elevation rasterization and rejects an empty name,
 out-of-bounds endpoint, non-cardinal pair, water endpoint, duplicate boundary, or pair without an
 elevation change. The resulting stable catalog and a checked-in checksum belong to
-`GeographyAlgorithm: "dispersal-map-v4"`; they are reconstructed geography and add no save field.
+`GeographyAlgorithm: "dispersal-map-v5"`; they are reconstructed geography and add no save field.
 The barrier and diagonal-corner interpretation belong to `MovementAlgorithm` below. Changing either
 catalog or interpretation after release requires the corresponding algorithm-version migration.
 
@@ -1476,6 +1486,8 @@ explicit subregion replacing `EastAsia` on its rasterized tiles; region masks ne
 landmass north of the Mediterranean is **Frangistan**. Every user-visible region string reads from
 this table, so naming changes in one place, never at call sites. Region masks are deterministic
 geography, not biome labels, and therefore do not move with climate.
+Where the broad Africa and Arabia landmass outlines overlap, Arabia takes precedence so the
+Arabian side of the Red Sea is not labeled East Africa or Rest of Africa.
 
 Fauna uses these same non-overlapping regions together with the current biome (§7). Regional
 fauna profiles may differ even where biomes match; neighboring rows may also deliberately share
@@ -1573,7 +1585,7 @@ change visible without storing per-tile cave state in the save.
 The rating is immutable geography, independent of world seed, current biome, climate, degradation,
 and resident population. It is not inferred merely from elevation or a biome label: a biome change
 must not create or remove caves. World generation and load reconstruction use projection/land data
-under `GeographyAlgorithm: "dispersal-map-v4"` and shelter catalog/raster rules under
+under `GeographyAlgorithm: "dispersal-map-v5"` and shelter catalog/raster rules under
 `NaturalShelterMaskAlgorithm`, consume no `WorldRNG`, and validate finite in-range ratings. After
 release, changing the table, mask equation, or rating changes the natural-shelter-mask identifier;
 changing projection or land changes both identifiers because it changes the rasterized mask. Either
@@ -7601,7 +7613,7 @@ world. No JSON tag, slot ID, schema version, or migration branch appears in `int
 
 `SaveState.SchemaVersion` starts at `1`. The state includes `WorldSeed`,
 `CampaignClockAlgorithm: "four-era-v1"`,
-`GeographyAlgorithm: "dispersal-map-v4"`, `ClimateAlgorithm: "hybrid-abrupt-moisture-v1"`,
+`GeographyAlgorithm: "dispersal-map-v5"`, `ClimateAlgorithm: "hybrid-abrupt-moisture-v1"`,
 `NaturalShelterMaskAlgorithm: "authored-ellipse-v1"`,
 `TemperatureAlgorithm: "lat-elev-offset-v1"`,
 `MacroEventAlgorithm: "bounded-regional-v1"`,
@@ -8394,7 +8406,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    The combined acceptance contract implements §§6–7's clock, climate, habitat, and macro-event
    contracts with their fixtures as specified there: `four-era-v1`'s exact
    80,000/50,000/35,000/25,000/20,000 BP endpoints and 300/150/100/50-year spans;
-   `dispersal-map-v4`'s authored elevation and escarpment catalogs, strict highland threshold,
+   `dispersal-map-v5`'s authored elevation and escarpment catalogs, strict highland threshold,
    stable escarpment checksum, and deliberate pass fixtures;
    `lat-elev-offset-v1` with its 64-row table and checksum; the orbital, seasonal, and precession
    tables under that same bit-pattern, tolerance, and checksum discipline; the abrupt-pulse catalog

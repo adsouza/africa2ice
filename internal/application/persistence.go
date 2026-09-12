@@ -51,7 +51,7 @@ type AlgorithmVersions struct {
 }
 
 var supportedAlgorithms = AlgorithmVersions{
-	GeographyAlgorithm: "dispersal-map-v4", NaturalShelterMaskAlgorithm: "authored-ellipse-v1",
+	GeographyAlgorithm: "dispersal-map-v5", NaturalShelterMaskAlgorithm: "authored-ellipse-v1",
 	CampaignClockAlgorithm: "four-era-v1", ClimateAlgorithm: "hybrid-abrupt-moisture-v1",
 	TemperatureAlgorithm: "lat-elev-offset-v1", MacroEventAlgorithm: "bounded-regional-v1",
 	ExplorationAlgorithm: "sapiens-frontier-v1", BandAlgorithm: "capacity-safe-half-global-cap-v2",

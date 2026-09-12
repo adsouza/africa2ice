@@ -55,6 +55,10 @@ var landPolygons = []polygonFeature{
 var waterPolygons = []polygonFeature{
 	{"Mediterranean", []coordinate{c(-6*10, 36*10), c(0*10, 42*10), c(10*10, 45*10), c(20*10, 44*10), c(30*10, 41*10), c(37*10, 36*10), c(32*10, 31*10), c(20*10, 31*10), c(10*10, 35*10), c(0*10, 35*10)}},
 	{"RedSea", []coordinate{c(32*10, 29*10), c(37*10, 30*10), c(44*10, 13*10), c(39*10, 12*10), c(34*10, 22*10)}},
+	// Keep Bab-el-Mandeb connected to the Indian Ocean at this grid scale.
+	// Without the gulf cutout, the broad Africa/Arabia land polygons join
+	// immediately south of the Red Sea and create a false walking route.
+	{"GulfOfAden", []coordinate{c(42*10, 13*10), c(44*10, 13*10), c(48*10, 15*10), c(52*10, 16*10), c(58*10, 14*10), c(58*10, 10*10), c(52*10, 10*10), c(49*10, 11*10), c(45*10, 10*10), c(42*10, 10*10)}},
 	{"PersianGulf", []coordinate{c(47*10, 31*10), c(57*10, 30*10), c(57*10, 24*10), c(49*10, 24*10)}},
 	{"Caspian", []coordinate{c(46*10, 47*10), c(55*10, 47*10), c(55*10, 36*10), c(47*10, 36*10)}},
 	{"BlackSea", []coordinate{c(27*10, 47*10), c(42*10, 47*10), c(42*10, 40*10), c(28*10, 40*10)}},

@@ -17,6 +17,8 @@ func (grid *Grid) WaterBodyName(id TileID) string {
 			return "Mediterranean Sea"
 		case "RedSea":
 			return "Red Sea"
+		case "GulfOfAden":
+			return "Gulf of Aden"
 		case "PersianGulf":
 			return "Persian Gulf"
 		case "Caspian":

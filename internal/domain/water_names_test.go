@@ -14,6 +14,7 @@ func TestWaterBodyNamesFollowAuthoredGeography(t *testing.T) {
 		want     string
 	}{
 		{38, 20, "Red Sea"},
+		{49, 13, "Gulf of Aden"},
 		{35, 43, "Black Sea"},
 		{50, 42, "Caspian Sea"},
 		{-15, -30, "Open ocean"},
