@@ -211,7 +211,7 @@ type LiveabilityRow struct {
 	DeltaMaterial bool
 }
 
-// LiveabilityRows builds the eight comparison rows. Absolute tiers color each
+// LiveabilityRows builds the nine comparison rows. Absolute tiers color each
 // side; Delta compares target to here where both are available.
 func LiveabilityRows(band *gameapi.Band, here, target TileLiveability) []LiveabilityRow {
 	required := 0.0
@@ -350,6 +350,7 @@ func LiveabilityRows(band *gameapi.Band, here, target TileLiveability) []Liveabi
 	}
 	return []LiveabilityRow{
 		row("Biome", func(s TileLiveability) string { return s.Biome }, normal, true, nil),
+		row("Region", func(s TileLiveability) string { return s.Region }, normal, true, nil),
 		row("Food", func(s TileLiveability) string { return fmt.Sprintf("%.0f / %.0f", s.FoodStock, s.FoodCap) }, foodTier, true, func(s TileLiveability) float64 { return s.FoodStock }),
 		row("Capacity", capacityValue, capacityTier, false, occupancy),
 		row("Water", func(s TileLiveability) string { return fmt.Sprintf("%.0f / %.0f", s.WaterStock, s.WaterCap) }, waterTier, true, func(s TileLiveability) float64 { return s.WaterStock }),

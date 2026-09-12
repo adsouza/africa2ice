@@ -1461,6 +1461,9 @@ func TestHoverRefreshesTargetWithoutRebuilding(t *testing.T) {
 	if got := panel.handles.moveTargetValues[0].Label; got != frame.Tiles[1].Biome.String() {
 		t.Fatalf("TARGET biome cell = %q, want the hovered tile's biome %q", got, frame.Tiles[1].Biome.String())
 	}
+	if got := panel.handles.moveTargetValues[1].Label; got != frame.Tiles[1].Region.String() {
+		t.Fatalf("TARGET region cell = %q, want %q", got, frame.Tiles[1].Region.String())
+	}
 	if panel.handles.moveHere.GetWidget().Disabled {
 		t.Fatal("Move here should be enabled once a reachable tile is hovered")
 	}
@@ -1942,7 +1945,7 @@ func TestTargetValueAndMarkAreSeparateLabels(t *testing.T) {
 
 	// The Food row compares 640 against 212 with neither tile short: a mark,
 	// but a dim one, and the value beside it stays untouched.
-	if value, mark := panel.handles.moveTargetValues[1], panel.handles.moveTargetMarks[1]; value.Label != "640 / 810" || mark.Label != " ▲" {
+	if value, mark := panel.handles.moveTargetValues[2], panel.handles.moveTargetMarks[2]; value.Label != "640 / 810" || mark.Label != " ▲" {
 		t.Fatalf("food cell = %q + %q, want \"640 / 810\" + \" ▲\"", value.Label, mark.Label)
 	}
 

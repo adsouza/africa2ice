@@ -60,8 +60,8 @@ func TestLiveabilityRowsColorAbsoluteStateAndMarkRelativeDelta(t *testing.T) {
 		t.Fatalf("summaries = here %+v target %+v", here, target)
 	}
 	byLabel := rowsByLabel(band, here, target)
-	if len(byLabel) != 8 {
-		t.Fatalf("row count = %d, want 8", len(byLabel))
+	if len(byLabel) != 9 {
+		t.Fatalf("row count = %d, want 9", len(byLabel))
 	}
 	// Food 212 is below last turn's 300 FU requirement: red here, normal there, target better.
 	if food := byLabel["Food"]; food.HereTier != TierRed || food.TargetTier != TierNormal || food.Delta != 1 || food.Here != "212 / 810" {
@@ -100,6 +100,9 @@ func TestLiveabilityTiersUseTheSpecThresholds(t *testing.T) {
 	}
 	if byLabel["Biome"].Target != "—" {
 		t.Fatalf("unavailable target biome = %q, want an em dash", byLabel["Biome"].Target)
+	}
+	if byLabel["Region"].Here != "East Africa" || byLabel["Region"].Target != "—" {
+		t.Fatalf("region should show the current tile and hide an unavailable target: %+v", byLabel["Region"])
 	}
 }
 
