@@ -214,6 +214,30 @@ prove that the eruption had no local effects elsewhere.
 Field Notes use: continued occupation and flexible subsistence around the Toba ash horizon in the
 Horn of Africa. The note presents demographic consequences as uncertain.
 
+## Lake-level context
+
+<!-- field-note-citation: Cohen et al. (2007) -->
+### Cohen et al. (2007)
+
+“Ecological consequences of early Late Pleistocene megadroughts in tropical Africa.”
+*Proceedings of the National Academy of Sciences* 104.
+[doi:10.1073/pnas.0703873104](https://doi.org/10.1073/pnas.0703873104).
+
+Lake Malawi rose in stages toward near-modern levels by approximately 60 ka;
+levels were approximately 30–200 m below modern during 35–15 ka. These broad
+intervals support lake-change context, not precise shoreline areas or single-year events.
+
+<!-- field-note-citation: Bartov et al. (2002) -->
+### Bartov et al. (2002)
+
+“Lake Levels and Sequence Stratigraphy of Lake Lisan, the Late Pleistocene
+Precursor of the Dead Sea.” *Quaternary Research* 57, 9–21.
+[doi:10.1006/qres.2001.2284](https://doi.org/10.1006/qres.2001.2284).
+
+Lake Lisan existed approximately 70–15 ka and rose sharply around 27 ka,
+reaching its maximum elevation during approximately 26–23 ka before declining.
+The chronology supports broad lake-change context, not exact outline scaling factors.
+
 ## Non-bibliographic references
 
 References such as “Game model,” “Game abstraction,” and “sources in DESIGN §6/§7” are explicitly

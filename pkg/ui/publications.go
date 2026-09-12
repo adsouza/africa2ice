@@ -5,6 +5,8 @@ import "strings"
 // publicationLinks mirrors the reviewed DOI destinations in docs/CITATIONS.md.
 // Keep citation prose plain in FieldNote; link markup belongs only to the HUD.
 var publicationLinks = [...]struct{ citation, url string }{
+	{"Cohen et al. (2007)", "https://doi.org/10.1073/pnas.0703873104"},
+	{"Bartov et al. (2002)", "https://doi.org/10.1006/qres.2001.2284"},
 	{"Reich et al. (2010)", "https://doi.org/10.1038/nature09710"},
 	{"Chen et al. (2019)", "https://doi.org/10.1038/s41586-019-1139-x"},
 	{"Dannemann et al. (2016)", "https://doi.org/10.1016/j.ajhg.2015.11.015"},

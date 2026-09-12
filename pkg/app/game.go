@@ -40,6 +40,7 @@ type Game struct {
 	notice                 string
 	noticeFrames           int
 	fieldNote              render.FieldNote
+	pendingLakeNotes       []render.FieldNote
 	openExternalURL        func(string) error
 	breakthroughFrames     int
 	migrationPreviewBand   gameapi.BandID
@@ -413,6 +414,7 @@ type technologyDiscovery struct {
 
 func (g *Game) acceptCompletedTurn(frame *gameapi.Frame) {
 	previous := g.frame
+	g.pendingLakeNotes = append(g.pendingLakeNotes, ui.NearbyLakeHistoryNotes(previous, frame)...)
 	discoveries := newTechnologyDiscoveries(previous, frame, g.selectedBand)
 	newestEvent, hasNewEvent := newestAddedEvent(previous, frame)
 	newRegion, hasNewRegion := newlyEstablishedRegion(previous, frame)
@@ -444,6 +446,9 @@ func (g *Game) acceptCompletedTurn(frame *gameapi.Frame) {
 			g.setFieldNote(note)
 		case crossedTobaMarker(previous, frame):
 			g.setFieldNote(ui.TobaFieldNote())
+		case len(g.pendingLakeNotes) > 0:
+			g.setFieldNote(g.pendingLakeNotes[0])
+			g.pendingLakeNotes = g.pendingLakeNotes[1:]
 		case previous != nil && previous.Climate.Epoch != frame.Climate.Epoch:
 			if note, ok := ui.ClimateEpochFieldNote(frame.Climate.Epoch); ok {
 				g.setFieldNote(note)
@@ -1255,6 +1260,7 @@ func (g *Game) startNewCampaign() {
 	if !g.settings.GuideDismissed {
 		g.guide = ui.NewGuideState(false)
 	}
+	g.pendingLakeNotes = nil
 	g.setFieldNote(ui.CampaignOverviewFieldNote())
 	g.setNotesMode(hud.NotesExpanded)
 	g.breakthroughFrames = 0
@@ -1651,6 +1657,7 @@ func (g *Game) pollStorage() {
 			g.frame = result.ReplacementFrame
 			g.syncEasyMode()
 			g.publishFrame()
+			g.pendingLakeNotes = nil
 			g.setFieldNote(ui.CampaignOverviewFieldNote())
 			g.breakthroughFrames = 0
 			g.regionalPulseFocused = false

@@ -49,3 +49,21 @@ modern or maximum-highstand outline would imply more certainty than we have.
 Implementation: `internal/application/lakes.go` contains the presentation
 catalog and tile clipping; `pkg/render/lakes.go` paints the published fragments.
 The catalog is outside the domain's authoritative water polygons intentionally.
+
+## Nearby Field Notes
+
+Completed turns crossing approximate research milestones surface lake-level
+history when a living sapiens band is on the same or an adjacent tile to an
+explored lake fragment. Malawi has markers at 60 ka (recovery toward modern
+levels) and 35 ka (the later low-level interval); Lisan has markers at 70 ka
+(appearance), 27 ka (rise) and 23 ka (post-highstand decline). These are broad
+historical intervals, not sudden events or measured changes in the simulation.
+The notes explicitly distinguish historical shoreline changes from the fixed
+schematic map. Research citations open the publications through the existing
+browser-link controls; bibliography and limitations are in `CITATIONS.md`.
+
+Each crossed marker produces at most one note regardless of how many bands
+are nearby. Higher-priority discoveries and volcanic context defer the note
+to a later completed turn. Distant bands, archaic-only presence, and unexplored
+lakes do not trigger it. Loading a save does not replay past milestones; the
+small UI-local deferred queue is cleared on loading or starting a campaign.
