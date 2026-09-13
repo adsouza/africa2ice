@@ -295,11 +295,14 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 
 func (scene *MapScene) drawResizeOverlay(screen logicalCanvas) {
 	vector.FillRect(screen, 0, 0, PresentationWidth, PresentationHeight, color.RGBA{R: 6, G: 11, B: 15, A: 238}, false)
-	scene.drawText(screen, "Window too small", 505, 310, 28, color.RGBA{R: 239, G: 220, B: 178, A: 255})
-	scene.drawText(screen, "Resize to at least 1280 × 720 to continue", 440, 360, 15, color.White)
+	drawCentered := func(value string, y, size float32, textColor color.Color) {
+		width, _ := text.Measure(value, &text.GoTextFace{Source: scene.faceSource, Size: float64(size)}, float64(size)*textLineSpacing)
+		scene.drawText(screen, value, float32((PresentationWidth-width)/2), y, size, textColor)
+	}
+	drawCentered("Window too small", 220, 84, color.RGBA{R: 239, G: 220, B: 178, A: 255})
+	drawCentered("Resize to at least 1280 × 720 to continue", 350, 45, color.White)
 	size := fmt.Sprintf("Current window: %g × %g", scene.viewport.LogicalWidthDIP, scene.viewport.LogicalHeightDIP)
-	width, _ := text.Measure(size, &text.GoTextFace{Source: scene.faceSource, Size: 15}, 15*textLineSpacing)
-	scene.drawText(screen, size, float32((PresentationWidth-width)/2), 390, 15, color.White)
+	drawCentered(size, 425, 45, color.White)
 }
 
 func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, selectedBand gameapi.BandID, preview MigrationPreview, notice string, ending EndScene) {
