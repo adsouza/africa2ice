@@ -212,10 +212,8 @@ func TestEscapePeelsOneLayerAtATime(t *testing.T) {
 // TestDetailsHotkeyIsRowOwnedAgainstWorkforce covers D2: `D` toggles the band
 // details disclosure everywhere except while the Workforce row is open,
 // where it keeps its old meaning (discard the workforce draft) instead, the
-// same row-owned model arrows/Enter/-+ already use. Real key state cannot be
-// injected (see gameplayKeysActive's comment), so this drives the same seam
-// TestArrowsBelongToTheOpenRow does: handleRowKey directly for the row-owned
-// half, and the Game method the global switch calls for the other half.
+// same row-owned model arrows/Enter/-+ already use. This checks the actions;
+// keyboard_routing_test.go also verifies the complete keyboard dispatch path.
 func TestDetailsHotkeyIsRowOwnedAgainstWorkforce(t *testing.T) {
 	game := New(&gameStub{frame: migrationPreviewFrame()})
 	game.openRow = ui.RowMove

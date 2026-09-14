@@ -8,16 +8,8 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
-// gameplayKeysActive reports whether handleGameplayKeys should process
-// gameplay keys. It is false while the modal shortcut sheet is open: the
-// scene stays SceneGameplay while the sheet is shown, so without this guard
-// Space/Tab/etc. would fire behind a sheet that claims only ? or Esc closes
-// it. Esc itself is handled earlier in Update, via escape(), which peels
-// shortcutsOpen before handleGameplayKeys ever runs; only the ? (Shift+/)
-// toggle needs to keep working from inside this function while the guard is
-// closed. Factored out as its own method (rather than inlined into the
-// switch below) because Ebitengine key state cannot be injected in tests —
-// this predicate is the seam tests can exercise directly.
+// gameplayKeysActive blocks commands behind the shortcut sheet. Escape is
+// handled by the scene first; Shift+/ can still close the sheet here.
 func (g *Game) gameplayKeysActive() bool {
 	return !g.shortcutsOpen
 }
@@ -25,15 +17,21 @@ func (g *Game) gameplayKeysActive() bool {
 // handleGameplayKeys is the keyboard half of spec §8: global keys first, then
 // the keys the open checklist row owns.
 func (g *Game) handleGameplayKeys() {
-	shift := ebiten.IsKeyPressed(ebiten.KeyShift)
+	g.handleGameplayKeyState(ebiten.IsKeyPressed, inpututil.IsKeyJustPressed)
+}
+
+// Keep device polling at the edge so key priority and modal routing can be
+// exercised with the same input state in tests.
+func (g *Game) handleGameplayKeyState(pressed, justPressed func(ebiten.Key) bool) {
+	shift := pressed(ebiten.KeyShift)
 	if !g.gameplayKeysActive() {
-		if inpututil.IsKeyJustPressed(ebiten.KeySlash) && shift {
+		if justPressed(ebiten.KeySlash) && shift {
 			g.toggleShortcutSheet()
 		}
 		return
 	}
 	switch {
-	case inpututil.IsKeyJustPressed(ebiten.KeyTab):
+	case justPressed(ebiten.KeyTab):
 		if g.workforce.Dirty() {
 			g.showNotice("Apply or discard workforce changes")
 		} else {
@@ -44,49 +42,49 @@ func (g *Game) handleGameplayKeys() {
 				g.selectNextSapiens()
 			}
 		}
-	case inpututil.IsKeyJustPressed(fieldNotesHotkey):
+	case justPressed(fieldNotesHotkey):
 		if shift {
 			g.toggleNotesExpanded()
 		} else {
 			g.toggleFieldNotes()
 		}
-	case inpututil.IsKeyJustPressed(ebiten.KeyM):
+	case justPressed(ebiten.KeyM):
 		g.toggleMute()
-	case inpututil.IsKeyJustPressed(ebiten.KeyZ):
+	case justPressed(ebiten.KeyZ):
 		g.toggleCameraFocus()
-	case inpututil.IsKeyJustPressed(ebiten.KeySlash) && shift:
+	case justPressed(ebiten.KeySlash) && shift:
 		g.toggleShortcutSheet()
-	case inpututil.IsKeyJustPressed(ebiten.KeyPageUp):
+	case justPressed(ebiten.KeyPageUp):
 		g.changeOpenRow(-1)
-	case inpututil.IsKeyJustPressed(ebiten.KeyPageDown):
+	case justPressed(ebiten.KeyPageDown):
 		g.changeOpenRow(1)
-	case shift && inpututil.IsKeyJustPressed(ebiten.KeyArrowUp):
+	case shift && justPressed(ebiten.KeyArrowUp):
 		g.changeOpenRow(-1)
-	case shift && inpututil.IsKeyJustPressed(ebiten.KeyArrowDown):
+	case shift && justPressed(ebiten.KeyArrowDown):
 		g.changeOpenRow(1)
-	case inpututil.IsKeyJustPressed(ebiten.KeyD) && g.openRow != ui.RowWorkforce:
+	case justPressed(ebiten.KeyD) && g.openRow != ui.RowWorkforce:
 		g.toggleDetails()
-	case inpututil.IsKeyJustPressed(splitBandHotkey):
+	case justPressed(splitBandHotkey):
 		g.splitSelectedBand()
-	case inpututil.IsKeyJustPressed(ebiten.KeyI):
+	case justPressed(ebiten.KeyI):
 		g.requestInterbreed()
-	case inpututil.IsKeyJustPressed(ebiten.KeyJ):
+	case justPressed(ebiten.KeyJ):
 		g.selectNextInterbreedTarget()
-	case inpututil.IsKeyJustPressed(ebiten.KeyG):
+	case justPressed(ebiten.KeyG):
 		g.focusNextTraitNote()
-	case inpututil.IsKeyJustPressed(ebiten.KeyB):
+	case justPressed(ebiten.KeyB):
 		g.moveToBestTile()
-	case inpututil.IsKeyJustPressed(ebiten.KeySpace):
+	case justPressed(ebiten.KeySpace):
 		g.endTurn(true)
 	default:
 		for index, key := range [...]ebiten.Key{ebiten.Key1, ebiten.Key2, ebiten.Key3, ebiten.Key4, ebiten.Key5, ebiten.Key6, ebiten.Key7, ebiten.Key8, ebiten.Key9} {
-			if inpututil.IsKeyJustPressed(key) {
+			if justPressed(key) {
 				g.chooseResearchTechnology(gameapi.Tech(index))
 				return
 			}
 		}
 		for _, key := range [...]ebiten.Key{ebiten.KeyArrowUp, ebiten.KeyArrowDown, ebiten.KeyArrowLeft, ebiten.KeyArrowRight, ebiten.KeyEnter, ebiten.KeyMinus, ebiten.KeyEqual, ebiten.KeyA, ebiten.KeyD} {
-			if inpututil.IsKeyJustPressed(key) {
+			if justPressed(key) {
 				g.handleRowKey(key, shift)
 				return
 			}

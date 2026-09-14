@@ -170,7 +170,14 @@ func NewGameWithoutSound(seed uint64, session *logging.Session) (*Game, error) {
 }
 
 func newHostedGame(seed uint64, session *logging.Session, enableSound bool) (*Game, error) {
-	repository, err := newCampaignRepository()
+	return composeHostedGame(seed, session, enableSound, newCampaignRepository, newUISettingsStore, shouldResumeSavedGameOnStartup())
+}
+
+func composeHostedGame(seed uint64, session *logging.Session, enableSound bool,
+	openRepository func() (application.CampaignRepository, error),
+	openSettings func() (ui.UISettingsStore, error), resume bool,
+) (*Game, error) {
+	repository, err := openRepository()
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +194,7 @@ func newHostedGame(seed uint64, session *logging.Session, enableSound bool) (*Ga
 			game.showNotice(notice)
 		}))
 	}
-	settingsStore, settingsErr := newUISettingsStore()
+	settingsStore, settingsErr := openSettings()
 	settingsStore = logging.DecorateUISettingsStore(session, settingsStore)
 	game = newGameWithPresentation(logging.DecorateGame(session, service), sound, settingsStore)
 	game.logSession = session
@@ -196,7 +203,7 @@ func newHostedGame(seed uint64, session *logging.Session, enableSound bool) (*Ga
 		sound.SetMaster(ui.DefaultUISettings().MasterVolume, ui.DefaultUISettings().Muted)
 		game.showNotice("Preferences are unavailable; using defaults")
 	}
-	if shouldResumeSavedGameOnStartup() {
+	if resume {
 		game.beginStartupResume()
 	}
 	return game, nil
@@ -1229,9 +1236,13 @@ func (g *Game) beginManualLoad(slot int) {
 }
 
 func (g *Game) handleSceneInput() bool {
+	return g.handleSceneKeyState(ebiten.IsKeyPressed, inpututil.IsKeyJustPressed)
+}
+
+func (g *Game) handleSceneKeyState(pressed, justPressed func(ebiten.Key) bool) bool {
 	switch g.scenes.Current() {
 	case ui.SceneGameplay:
-		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+		if justPressed(ebiten.KeyEscape) {
 			if !g.escape() {
 				g.dispatchBatch([]ui.Action{ui.PushSceneAction(ui.SceneMenu)})
 			}
@@ -1239,40 +1250,40 @@ func (g *Game) handleSceneInput() bool {
 		}
 		return false
 	case ui.SceneTitle:
-		if inpututil.IsKeyJustPressed(ebiten.KeyEnter) || inpututil.IsKeyJustPressed(ebiten.KeyC) {
+		if justPressed(ebiten.KeyEnter) || justPressed(ebiten.KeyC) {
 			g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
 			return true
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyN) {
+		if justPressed(ebiten.KeyN) {
 			g.startNewCampaign()
 			g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
 			return true
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyL) {
+		if justPressed(ebiten.KeyL) {
 			g.openStorageBrowser(storageBrowserLoad)
 			return true
 		}
 		// The title overlay's rows are panel buttons now; they arrive as intents.
 		return true
 	case ui.SceneMenu:
-		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+		if justPressed(ebiten.KeyEscape) {
 			g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
 			return true
 		}
-		modifier := ebiten.IsKeyPressed(ebiten.KeyControl) || ebiten.IsKeyPressed(ebiten.KeyMeta)
-		if !modifier && inpututil.IsKeyJustPressed(ebiten.KeyS) {
+		modifier := pressed(ebiten.KeyControl) || pressed(ebiten.KeyMeta)
+		if !modifier && justPressed(ebiten.KeyS) {
 			g.openStorageBrowser(storageBrowserSave)
 			return true
 		}
-		if !modifier && inpututil.IsKeyJustPressed(ebiten.KeyL) {
+		if !modifier && justPressed(ebiten.KeyL) {
 			g.openStorageBrowser(storageBrowserLoad)
 			return true
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyO) {
+		if justPressed(ebiten.KeyO) {
 			g.dispatchBatch([]ui.Action{ui.PushSceneAction(ui.SceneSettings)})
 			return true
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyT) {
+		if justPressed(ebiten.KeyT) {
 			if g.workforce.Dirty() {
 				g.showNotice("Apply or discard workforce changes before returning to title")
 				return true
@@ -1281,53 +1292,53 @@ func (g *Game) handleSceneInput() bool {
 			g.scenes.Push(ui.SceneTitle)
 			return true
 		}
-		if inpututil.IsKeyJustPressed(fieldNotesHotkey) {
+		if justPressed(fieldNotesHotkey) {
 			g.toggleFieldNotes()
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyM) {
+		if justPressed(ebiten.KeyM) {
 			g.toggleMute()
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyMinus) {
+		if justPressed(ebiten.KeyMinus) {
 			g.adjustVolume(-0.1)
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyEqual) {
+		if justPressed(ebiten.KeyEqual) {
 			g.adjustVolume(0.1)
 		}
 		return true
 	case ui.SceneStorage:
-		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+		if justPressed(ebiten.KeyEscape) {
 			g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
 			return true
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyArrowUp) {
+		if justPressed(ebiten.KeyArrowUp) {
 			g.moveStorageSelection(-1)
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyArrowDown) {
+		if justPressed(ebiten.KeyArrowDown) {
 			g.moveStorageSelection(1)
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyEnter) {
+		if justPressed(ebiten.KeyEnter) {
 			g.activateStorageSelection()
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyDelete) || inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
+		if justPressed(ebiten.KeyDelete) || justPressed(ebiten.KeyBackspace) {
 			g.deleteStorageSelection()
 		}
 		return true
 	case ui.SceneSettings:
 		// The settings slider and check boxes are panel widgets now.
-		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) || inpututil.IsKeyJustPressed(ebiten.KeyO) {
+		if justPressed(ebiten.KeyEscape) || justPressed(ebiten.KeyO) {
 			g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
 			return true
 		}
-		if inpututil.IsKeyJustPressed(fieldNotesHotkey) {
+		if justPressed(fieldNotesHotkey) {
 			g.toggleFieldNotes()
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyM) {
+		if justPressed(ebiten.KeyM) {
 			g.toggleMute()
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyMinus) {
+		if justPressed(ebiten.KeyMinus) {
 			g.adjustVolume(-0.1)
 		}
-		if inpututil.IsKeyJustPressed(ebiten.KeyEqual) {
+		if justPressed(ebiten.KeyEqual) {
 			g.adjustVolume(0.1)
 		}
 		return true
