@@ -36,6 +36,17 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	// This fixture intentionally exercises the oldest reader contract, not
+	// the current writer. Materialize historical text for its v1 event feed.
+	frame, err := application.ProjectSaveState(state)
+	if err != nil {
+		fatal(err)
+	}
+	state.SchemaVersion = 1
+	for index := range state.Events {
+		state.Events[index].Summary = frame.Events[index].Summary
+		state.Events[index].Details = nil
+	}
 	payload, err := application.EncodeSaveState(state)
 	if err != nil {
 		fatal(err)

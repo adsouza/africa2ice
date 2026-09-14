@@ -11,8 +11,9 @@ import (
 )
 
 func main() {
-	schema, algorithms := application.SupportedCompatibility()
+	schema, oldestSchema, algorithms := application.SupportedCompatibility()
 	fmt.Printf("save_schema=%d\n", schema)
+	fmt.Printf("oldest_supported_save_schema=%d\n", oldestSchema)
 	value := reflect.ValueOf(algorithms)
 	typeOf := value.Type()
 	for index := 0; index < typeOf.NumField(); index++ {

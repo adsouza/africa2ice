@@ -176,10 +176,10 @@ func TestEventFeedDropsItsOldestEntryAtCapacity(t *testing.T) {
 	world, _ := NewWorld(21)
 	geography, _ := world.grid.Tile(world.bands[0].TileID)
 	for index := 0; index <= MaxEvents; index++ {
-		world.appendEvent(Event{Turn: 0, Kind: EventAchievement, BandID: world.bands[0].ID, TileID: world.bands[0].TileID, Region: geography.Region, Summary: fmt.Sprintf("event %d", index)})
+		world.appendEvent(Event{Turn: 0, Kind: EventAchievement, BandID: world.bands[0].ID, TileID: world.bands[0].TileID, Region: geography.Region, LegacySummary: fmt.Sprintf("event %d", index)})
 	}
-	if len(world.events) != MaxEvents || world.events[0].Summary != "event 1" || world.events[MaxEvents-1].Summary != fmt.Sprintf("event %d", MaxEvents) {
-		t.Fatalf("bounded event feed = first %q last %q length %d", world.events[0].Summary, world.events[MaxEvents-1].Summary, len(world.events))
+	if len(world.events) != MaxEvents || world.events[0].LegacySummary != "event 1" || world.events[MaxEvents-1].LegacySummary != fmt.Sprintf("event %d", MaxEvents) {
+		t.Fatalf("bounded event feed = first %q last %q length %d", world.events[0].LegacySummary, world.events[MaxEvents-1].LegacySummary, len(world.events))
 	}
 	if err := world.validate(); err != nil {
 		t.Fatal(err)

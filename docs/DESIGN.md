@@ -7618,7 +7618,16 @@ decoded DTO's schema and algorithm compatibility, maps it into a candidate domai
 `domain.RestoreWorld` so every aggregate invariant is rechecked. Only then does it swap the live
 world. No JSON tag, slot ID, schema version, or migration branch appears in `internal/domain`.
 
-`SaveState.SchemaVersion` starts at `1`. The state includes `WorldSeed`,
+`SaveState.SchemaVersion` is `2`; the reader also accepts schema `1` with the same supported
+algorithm identifiers. Version 2 persists structured event facts: a split's parent band, a learned
+technology, an acute hazard kind, or an extinction's species and leading mortality cause. The
+application frame projector produces the displayed summary from these facts. Imported schema-1
+events retain their original bounded summary verbatim because their missing facts cannot be
+reconstructed reliably; subsequent saves carry those legacy entries alongside new structured
+entries. A saved event has either structured details or a nonempty legacy summary, never both.
+The domain validates typed event details but does not compose sentences. This representation change
+does not change simulation equations or RNG consumption; canonical save hashes change with the
+schema. Older executables reject schema-2 saves. The state includes `WorldSeed`,
 `CampaignClockAlgorithm: "four-era-v1"`,
 `GeographyAlgorithm: "dispersal-map-v5"`, `ClimateAlgorithm: "hybrid-abrupt-moisture-v1"`,
 `NaturalShelterMaskAlgorithm: "authored-ellipse-v1"`,

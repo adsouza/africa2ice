@@ -126,7 +126,7 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 	}
 	projectLakes(frame)
 	for _, event := range service.world.Events() {
-		frame.Events = append(frame.Events, gameapi.Event{Turn: event.Turn, Kind: mapEventKind(event.Kind), BandID: gameapi.BandID(event.BandID), TileID: gameapi.TileID(event.TileID), Region: mapRegion(event.Region), Summary: event.Summary})
+		frame.Events = append(frame.Events, gameapi.Event{Turn: event.Turn, Kind: mapEventKind(event.Kind), BandID: gameapi.BandID(event.BandID), TileID: gameapi.TileID(event.TileID), Region: mapRegion(event.Region), Summary: eventSummary(event)})
 	}
 	allBands := service.world.Bands()
 	migrationCandidates := service.world.MigrationCandidatesByBand()

@@ -345,7 +345,7 @@ func (world *World) validate() error {
 	previousEventTurn := -1
 	for _, event := range world.events {
 		if event.Turn < 0 || event.Turn > world.turn || event.Turn < previousEventTurn || event.Kind >= EventKindCount ||
-			event.BandID >= world.nextBandID || event.TileID >= TileCount || event.Region >= RegionCount || event.Summary == "" || len(event.Summary) > 256 {
+			event.BandID >= world.nextBandID || event.TileID >= TileCount || event.Region >= RegionCount || !event.validDetails(world.nextBandID) {
 			return fmt.Errorf("%w: event feed", ErrInvalidValue)
 		}
 		previousEventTurn = event.Turn

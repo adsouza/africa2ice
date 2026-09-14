@@ -42,7 +42,7 @@ func TestSaveStateRoundTrip(t *testing.T) {
 func TestProjectedFrameIncludesPersistedEvents(t *testing.T) {
 	service, _ := NewGameService(31)
 	state, _ := service.world.ExportState()
-	state.Events = []domain.Event{{Turn: 0, Kind: domain.EventAchievement, Region: domain.EastAfrica, Summary: "A test achievement."}}
+	state.Events = []domain.Event{{Turn: 0, Kind: domain.EventAchievement, Region: domain.EastAfrica, LegacySummary: "A test achievement."}}
 	world, err := domain.RestoreWorld(state)
 	if err != nil {
 		t.Fatal(err)
@@ -61,7 +61,7 @@ func TestSaveDecoderRejectsUnknownAndUnsupportedFields(t *testing.T) {
 	service, _ := NewGameService(1)
 	save, _ := service.ExportSaveState()
 	encoded, _ := EncodeSaveState(save)
-	unknown := bytes.Replace(encoded, []byte(`"schema_version":1`), []byte(`"schema_version":1,"mystery":true`), 1)
+	unknown := bytes.Replace(encoded, []byte(`"schema_version":2`), []byte(`"schema_version":2,"mystery":true`), 1)
 	if _, err := DecodeSaveState(unknown); err == nil {
 		t.Fatal("unknown field accepted")
 	}

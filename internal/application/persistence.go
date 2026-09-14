@@ -11,7 +11,14 @@ import (
 	"github.com/adsouza/africa2ice/internal/domain"
 )
 
-const SaveSchemaVersion = 1
+// Version 2 stores event facts; version 1 summaries remain readable.
+const SaveSchemaVersion = 2
+
+// OldestSupportedSaveSchemaVersion is the lowest schema RestoreWorld accepts.
+// internal/adapters/storage/testdata/oldest_supported_save_v1.json.gz is frozen
+// at this version; raising it is a deliberate compatibility break, not a
+// consequence of bumping SaveSchemaVersion.
+const OldestSupportedSaveSchemaVersion = 1
 
 type AlgorithmVersions struct {
 	GeographyAlgorithm           string `json:"geography_algorithm"`
@@ -70,11 +77,14 @@ var supportedAlgorithms = AlgorithmVersions{
 	RNGAlgorithm: "pcg-splitmix-v1",
 }
 
-// SupportedCompatibility returns the complete persisted compatibility
-// identity used by release tooling and save validation. Keeping this as a
-// value prevents tooling from mutating the runtime contract.
-func SupportedCompatibility() (int, AlgorithmVersions) {
-	return SaveSchemaVersion, supportedAlgorithms
+// SupportedCompatibility returns the persisted compatibility identity release
+// tooling reports: the schema this build writes, the oldest schema it still
+// reads, and the algorithm versions it requires. RestoreWorld enforces the
+// schema range itself; this reports it so a release record answers "can this
+// build open my save?". Keeping this a value prevents tooling from mutating
+// the runtime contract.
+func SupportedCompatibility() (int, int, AlgorithmVersions) {
+	return SaveSchemaVersion, OldestSupportedSaveSchemaVersion, supportedAlgorithms
 }
 
 type SaveState struct {
@@ -158,12 +168,23 @@ type OutcomeReportSave struct {
 }
 
 type EventSave struct {
-	Turn    int    `json:"turn"`
-	Kind    uint8  `json:"kind"`
-	BandID  uint64 `json:"band_id"`
-	TileID  uint16 `json:"tile_id"`
-	Region  uint8  `json:"region"`
-	Summary string `json:"summary"`
+	Turn    int               `json:"turn"`
+	Kind    uint8             `json:"kind"`
+	BandID  uint64            `json:"band_id"`
+	TileID  uint16            `json:"tile_id"`
+	Region  uint8             `json:"region"`
+	Summary string            `json:"summary,omitempty"`
+	Details *EventDetailsSave `json:"details,omitempty"`
+}
+
+// EventDetailsSave contains no presentation text. A nil value identifies an
+// imported legacy event whose original summary must be retained.
+type EventDetailsSave struct {
+	ParentBandID   uint64 `json:"parent_band_id,omitempty"`
+	Technology     uint8  `json:"technology,omitempty"`
+	AcuteKind      uint8  `json:"acute_kind,omitempty"`
+	Species        uint8  `json:"species,omitempty"`
+	MortalityCause uint8  `json:"mortality_cause,omitempty"`
 }
 
 // SavedHomoSapiens and SavedArchaicHominin name the BandSave.Species encoding.
@@ -233,13 +254,17 @@ func SaveStateFromWorld(world *domain.World, revision uint64) (SaveState, error)
 		save.Bands = append(save.Bands, item)
 	}
 	for _, event := range state.Events {
-		save.Events = append(save.Events, EventSave{Turn: event.Turn, Kind: uint8(event.Kind), BandID: uint64(event.BandID), TileID: uint16(event.TileID), Region: uint8(event.Region), Summary: event.Summary})
+		item := EventSave{Turn: event.Turn, Kind: uint8(event.Kind), BandID: uint64(event.BandID), TileID: uint16(event.TileID), Region: uint8(event.Region), Summary: event.LegacySummary}
+		if event.LegacySummary == "" {
+			item.Details = &EventDetailsSave{ParentBandID: uint64(event.Details.ParentBandID), Technology: uint8(event.Details.Technology), AcuteKind: uint8(event.Details.AcuteKind), Species: uint8(event.Details.Species), MortalityCause: uint8(event.Details.MortalityCause)}
+		}
+		save.Events = append(save.Events, item)
 	}
 	return save, nil
 }
 
 func (save SaveState) RestoreWorld() (*domain.World, error) {
-	if save.SchemaVersion != SaveSchemaVersion {
+	if save.SchemaVersion < OldestSupportedSaveSchemaVersion || save.SchemaVersion > SaveSchemaVersion {
 		return nil, fmt.Errorf("unsupported save schema %d", save.SchemaVersion)
 	}
 	if save.AlgorithmVersions != supportedAlgorithms {
@@ -288,7 +313,19 @@ func (save SaveState) RestoreWorld() (*domain.World, error) {
 		state.Bands = append(state.Bands, band)
 	}
 	for _, item := range save.Events {
-		state.Events = append(state.Events, domain.Event{Turn: item.Turn, Kind: domain.EventKind(item.Kind), BandID: domain.BandID(item.BandID), TileID: domain.TileID(item.TileID), Region: domain.Region(item.Region), Summary: item.Summary})
+		event := domain.Event{Turn: item.Turn, Kind: domain.EventKind(item.Kind), BandID: domain.BandID(item.BandID), TileID: domain.TileID(item.TileID), Region: domain.Region(item.Region), LegacySummary: item.Summary}
+		if item.Details == nil {
+			if item.Summary == "" {
+				return nil, fmt.Errorf("event has neither facts nor legacy summary")
+			}
+		} else {
+			if save.SchemaVersion == 1 || item.Summary != "" {
+				return nil, fmt.Errorf("event facts conflict with legacy encoding")
+			}
+			d := item.Details
+			event.Details = domain.EventDetails{ParentBandID: domain.BandID(d.ParentBandID), Technology: domain.Technology(d.Technology), AcuteKind: domain.AcuteKind(d.AcuteKind), Species: domain.Species(d.Species), MortalityCause: domain.MortalityCause(d.MortalityCause)}
+		}
+		state.Events = append(state.Events, event)
 	}
 	return domain.RestoreWorld(state)
 }
