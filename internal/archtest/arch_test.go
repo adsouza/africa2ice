@@ -74,6 +74,13 @@ func importViolation(file, imported string) string {
 	if strings.HasPrefix(imported, "math/rand") && category == "domain" && !strings.HasSuffix(file, "/rng.go") {
 		return "domain randomness is confined to rng.go"
 	}
+	if category == "domain" && !strings.HasSuffix(file, "_test.go") && isStandardLibrary(imported) {
+		switch imported {
+		case "errors", "fmt", "math", "math/rand/v2", "sort", "sync":
+		default:
+			return "production domain standard-library imports require an explicit purity review"
+		}
+	}
 	allowed, strict := allowedImports(category)
 	if !strict || isStandardLibrary(imported) {
 		return ""
@@ -249,5 +256,23 @@ func TestDomainHasNoBuildTags(t *testing.T) {
 		if err := file.Close(); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// Standard-library status alone does not make an import safe for the domain:
+// clocks, filesystem access, and network clients would break deterministic isolation.
+func TestDomainStandardLibraryPurityBoundary(t *testing.T) {
+	for _, imported := range []string{"os", "os/exec", "io/fs", "net/http", "time", "syscall", "unsafe", "encoding/json"} {
+		if importViolation("internal/domain/world.go", imported) == "" {
+			t.Errorf("production domain accepted %q", imported)
+		}
+	}
+	for _, imported := range []string{"errors", "fmt", "math", "sort", "sync"} {
+		if reason := importViolation("internal/domain/world.go", imported); reason != "" {
+			t.Errorf("pure dependency %q rejected: %s", imported, reason)
+		}
+	}
+	if reason := importViolation("internal/domain/world_test.go", "time"); reason != "" {
+		t.Fatalf("test clocks must remain available: %s", reason)
 	}
 }

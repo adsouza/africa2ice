@@ -53,7 +53,9 @@ func newGameServiceWithRepositoryAndClock(seed uint64, repository CampaignReposi
 	return service, nil
 }
 
-func (service *GameService) Snapshot() (*gameapi.Frame, error) { return service.projectFrame() }
+func (service *GameService) Snapshot() (*gameapi.Frame, error) {
+	return projectFrame(service.world, service.worldRevision, service.terrainRevision)
+}
 
 func (service *GameService) NewCampaign() (*gameapi.Frame, error) {
 	if service.loadPending() {
@@ -70,7 +72,7 @@ func (service *GameService) NewCampaign() (*gameapi.Frame, error) {
 	service.terrainRevision++
 	service.autoNeeded = false
 	service.resetAutosaveClock()
-	return service.projectFrame()
+	return service.Snapshot()
 }
 
 func (service *GameService) Apply(command gameapi.Command) (*gameapi.Frame, error) {
@@ -112,7 +114,7 @@ func (service *GameService) Apply(command gameapi.Command) (*gameapi.Frame, erro
 	if terrainChanged {
 		service.terrainRevision++
 	}
-	return service.projectFrame()
+	return service.Snapshot()
 }
 
 func (service *GameService) EndTurn() (*gameapi.Frame, error) {
@@ -124,7 +126,7 @@ func (service *GameService) EndTurn() (*gameapi.Frame, error) {
 	}
 	service.worldRevision++
 	service.terrainRevision++
-	frame, err := service.projectFrame()
+	frame, err := service.Snapshot()
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +252,7 @@ func (service *GameService) acceptStorageCompletion(completion RepositoryComplet
 			service.autoNeeded = false
 			service.resetAutosaveClock()
 			result.WorldRevision = service.worldRevision
-			result.ReplacementFrame, result.Err = service.projectFrame()
+			result.ReplacementFrame, result.Err = service.Snapshot()
 		}
 	}
 	if result.Err == nil && request.operation == gameapi.StorageSave {

@@ -10,11 +10,10 @@ var calibrationResult uint64
 
 func BenchmarkFrameProjectionMaximumWorkload(b *testing.B) {
 	world := maximumProjectionWorld(b)
-	service := newProjectionService(world, 1)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		frame, err := service.Snapshot()
+		frame, err := projectFrame(world, 1, 1)
 		if err != nil {
 			b.Fatal(err)
 		}

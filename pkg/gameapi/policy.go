@@ -9,8 +9,8 @@ const (
 	SplitStressThreshold              = 0.67
 	ReferenceRouteDeparturePopulation = 5 * MinEstablishedBand / 2
 	// MaxBands caps the campaign's band count. It lives here, rather than in
-	// the domain alone, because the panel has to know whether a split could
-	// succeed before offering the button (see ui.DiagnoseSplit).
+	// the domain alone, because diagnostics and verification also name the
+	// limit. Action eligibility itself is projected from the domain.
 	MaxBands = 256
 )
 

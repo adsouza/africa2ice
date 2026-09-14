@@ -14,32 +14,27 @@ func ProjectSaveState(state SaveState) (*gameapi.Frame, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newProjectionService(world, state.WorldRevision).projectFrame()
+	return projectFrame(world, state.WorldRevision, 1)
 }
 
-// newProjectionService builds a service that only ever projects. It still
-// installs a clock: pollAutosaveClock dereferences that field unconditionally,
-// so leaving it nil would make the projection path one accidental method call
-// away from a nil-interface panic.
-func newProjectionService(world *domain.World, revision uint64) *GameService {
-	return &GameService{world: world, worldRevision: revision, terrainRevision: 1, clock: systemMonotonicClock{}}
-}
-
-func (service *GameService) projectFrame() (*gameapi.Frame, error) {
-	date, err := domain.CampaignDate(service.world.Turn())
+// projectFrame derives an isolated read model from the aggregate and its
+// publication revisions. Projection needs no repository, autosave clock, or
+// storage lifecycle state.
+func projectFrame(world *domain.World, worldRevision, terrainRevision uint64) (*gameapi.Frame, error) {
+	date, err := domain.CampaignDate(world.Turn())
 	if err != nil {
 		return nil, err
 	}
-	season, err := domain.SeasonForTurn(service.world.Turn())
+	season, err := domain.SeasonForTurn(world.Turn())
 	if err != nil {
 		return nil, err
 	}
-	climate := service.world.Climate()
+	climate := world.Climate()
 	frame := &gameapi.Frame{
-		EasyMode:      service.world.EasyMode(),
-		WorldRevision: service.worldRevision, TerrainRevision: service.terrainRevision,
+		EasyMode:      world.EasyMode(),
+		WorldRevision: worldRevision, TerrainRevision: terrainRevision,
 		Turn: date.Turn, YearBP: date.YearBP, Era: mapEra(date.Era), CalendarProgress: date.CalendarProgress,
-		Season: mapSeason(season), CampaignResult: mapResult(service.world.Result()),
+		Season: mapSeason(season), CampaignResult: mapResult(world.Result()),
 		Climate: gameapi.ClimateSummary{
 			LongTermTempOffset: climate.LongTermTempOffset, SeasonalTempOffset: climate.SeasonalTempOffset,
 			ClimateNoise: climate.ClimateNoise, GlobalTempOffset: climate.GlobalTempOffset,
@@ -54,13 +49,13 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 	for region := domain.Region(0); region < domain.RegionCount; region++ {
 		frame.Climate.RegionalAbrupt[mapRegion(region)] = climate.RegionalAbrupt[region]
 	}
-	habitat, tileStates, grid := service.world.Habitat(), service.world.TileStates(), service.world.Grid()
+	habitat, tileStates, grid := world.Habitat(), world.TileStates(), world.Grid()
 	frame.Tiles = make([]gameapi.Tile, domain.TileCount)
 	for id := range domain.TileCount {
 		geography, _ := grid.Tile(domain.TileID(id))
 		publicTile := gameapi.Tile{
 			ID: gameapi.TileID(id), X: geography.X, Y: geography.Y, Latitude: geography.Latitude, Longitude: geography.Longitude,
-			Land: geography.Land, ElevationKm: geography.ElevationKm, Explored: service.world.IsExplored(domain.TileID(id)),
+			Land: geography.Land, ElevationKm: geography.ElevationKm, Explored: world.IsExplored(domain.TileID(id)),
 			NaturalShelter: geography.NaturalShelter, BaseMoisture: geography.BaseMoisture,
 			LastHabitableTurn: grid.LastHabitableTurn(domain.TileID(id)),
 		}
@@ -94,12 +89,12 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 	}
 
 	for region := domain.Region(0); region < domain.RegionCount; region++ {
-		if service.world.EstablishedRegions()&(1<<region) != 0 {
+		if world.EstablishedRegions()&(1<<region) != 0 {
 			frame.SapiensEstablishedRegions = append(frame.SapiensEstablishedRegions, mapRegion(region))
 		}
 	}
 	for _, edge := range grid.Escarpments() {
-		if !service.world.IsExplored(edge.First) || !service.world.IsExplored(edge.Second) {
+		if !world.IsExplored(edge.First) || !world.IsExplored(edge.Second) {
 			continue
 		}
 		frame.Escarpments = append(frame.Escarpments, gameapi.Escarpment{
@@ -113,7 +108,7 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 		}
 		frame.Passages = append(frame.Passages, gameapi.Passage{
 			ID: gameapi.PassageID(passage.ID), From: gameapi.TileID(passage.From), To: gameapi.TileID(passage.To),
-			Cost: passage.Cost, Status: status, Explored: service.world.IsExplored(passage.From) || service.world.IsExplored(passage.To),
+			Cost: passage.Cost, Status: status, Explored: world.IsExplored(passage.From) || world.IsExplored(passage.To),
 		})
 	}
 	// Lake labels describe fixed geographic anchors, not their starting bands.
@@ -125,11 +120,11 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 		}
 	}
 	projectLakes(frame)
-	for _, event := range service.world.Events() {
+	for _, event := range world.Events() {
 		frame.Events = append(frame.Events, gameapi.Event{Turn: event.Turn, Kind: mapEventKind(event.Kind), BandID: gameapi.BandID(event.BandID), TileID: gameapi.TileID(event.TileID), Region: mapRegion(event.Region), Summary: eventSummary(event)})
 	}
-	allBands := service.world.Bands()
-	migrationCandidates := service.world.MigrationCandidatesByBand()
+	allBands := world.Bands()
+	migrationCandidates := world.MigrationCandidatesByBand()
 	for bandIndex, band := range allBands {
 		publicBand := gameapi.Band{
 			ID: gameapi.BandID(band.ID), Species: mapSpecies(band.Species), TileID: gameapi.TileID(band.TileID),
@@ -137,7 +132,7 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 			AcquiredTech: band.Technology.Acquired, HasResearchTarget: band.Technology.HasTarget,
 			SpatialActionUsed: band.SpatialActionUsed, QueuedMigration: gameapi.TileID(band.QueuedMigration), HasQueuedMigration: band.HasQueuedMigration,
 			HasInterbreedTarget: band.HasInterbreedTarget, InterbreedTargetID: gameapi.BandID(band.InterbreedTarget),
-			Stress:         service.world.BandStress(band.ID),
+			Stress:         world.BandStress(band.ID),
 			LastFoodReport: gameapi.FoodTurnReport{Turn: band.LastFoodReport.Turn, RequiredFU: band.LastFoodReport.RequiredFU, DeficitFU: band.LastFoodReport.DeficitFU},
 			LastMortality:  gameapi.MortalityReport{Starvation: band.LastMortality.Starvation, Seasonal: band.LastMortality.Seasonal, Chronic: band.LastMortality.Chronic, Macro: band.LastMortality.Macro, Acute: band.LastMortality.Acute},
 			LastOutcomeReport: gameapi.OutcomeReport{
@@ -172,7 +167,7 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 			publicBand.HeritableState[mapTrait(trait)] = float64(band.Heritable[trait])
 		}
 		for passageID := domain.PassageID(0); passageID < domain.PassageCount; passageID++ {
-			status := service.world.PassageStatus(band.ID, passageID)
+			status := world.PassageStatus(band.ID, passageID)
 			switch status {
 			case domain.PassageAvailable:
 				publicBand.PassageStatuses[passageID] = gameapi.PassageOpen
@@ -190,7 +185,7 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 			// affordances from them, none of it species-aware -- so a hidden
 			// target reaching the frame is a fog leak in every one of those
 			// readers at once. Drop it here rather than at each of them.
-			if !service.world.IsExplored(candidate.TileID) {
+			if !world.IsExplored(candidate.TileID) {
 				continue
 			}
 			destination, _ := grid.Tile(candidate.TileID)
@@ -226,7 +221,7 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 				break
 			}
 		}
-		if err := service.world.ValidateSplit(band.ID, splitDestination, true); err != nil {
+		if err := world.ValidateSplit(band.ID, splitDestination, true); err != nil {
 			publicBand.SplitBlock = domainErrorCode(err)
 		}
 		frame.Bands = append(frame.Bands, publicBand)
