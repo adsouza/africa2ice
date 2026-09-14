@@ -473,8 +473,8 @@ func TestCompletedTurnSelectsHighestAttentionBand(t *testing.T) {
 	}
 	game.acceptCompletedTurn(after)
 
-	if game.selectedBand != 9 || game.assignmentDraftBand != 9 {
-		t.Fatalf("completed-turn priority selection/draft = %d/%d, want band 9", game.selectedBand, game.assignmentDraftBand)
+	if game.selectedBand != 9 || game.workforce.BandID() != 9 {
+		t.Fatalf("completed-turn priority selection/draft = %d/%d, want band 9", game.selectedBand, game.workforce.BandID())
 	}
 }
 
@@ -487,8 +487,8 @@ func TestInitialSelectionSkipsArchaicAndExtinctBands(t *testing.T) {
 	}
 	game := New(&gameStub{frame: frame})
 
-	if game.selectedBand != 7 || !game.hasAssignmentDraft {
-		t.Fatalf("initial selection = band %d draft %t, want living sapiens band 7", game.selectedBand, game.hasAssignmentDraft)
+	if game.selectedBand != 7 || !game.workforce.Visible() {
+		t.Fatalf("initial selection = band %d draft %t, want living sapiens band 7", game.selectedBand, game.workforce.Visible())
 	}
 }
 
@@ -500,8 +500,8 @@ func TestWorkforceDraftPreservesExplicitSharesUntilValidApplyOrDiscard(t *testin
 	game := New(stub)
 
 	game.editAssignmentDraft(100)
-	if !game.assignmentDraftDirty() || game.assignmentDraftValid() || stub.appliedCommand != nil {
-		t.Fatalf("first independent edit = dirty %t valid %t command %T", game.assignmentDraftDirty(), game.assignmentDraftValid(), stub.appliedCommand)
+	if !game.workforce.Dirty() || game.workforce.Valid() || stub.appliedCommand != nil {
+		t.Fatalf("first independent edit = dirty %t valid %t command %T", game.workforce.Dirty(), game.workforce.Valid(), stub.appliedCommand)
 	}
 	game.applyAssignmentDraft()
 	if stub.appliedCommand != nil || game.notice != "Workforce allocation must total exactly 100%" {
@@ -512,24 +512,24 @@ func TestWorkforceDraftPreservesExplicitSharesUntilValidApplyOrDiscard(t *testin
 		t.Fatalf("dirty draft allowed selection to change to %d", game.selectedBand)
 	}
 
-	game.assignmentRole = gameapi.HuntingAndFishing
+	game.workforce.Role = gameapi.HuntingAndFishing
 	game.editAssignmentDraft(-100)
-	if !game.assignmentDraftValid() {
-		t.Fatalf("balanced explicit draft = %v", game.assignmentDraft)
+	if !game.workforce.Valid() {
+		t.Fatalf("balanced explicit draft = %v", game.workforce.Allocation())
 	}
 	game.applyAssignmentDraft()
 	command, ok := stub.appliedCommand.(gameapi.SetAssignment)
 	if !ok || command.AllocationBP != ([gameapi.AssignmentCount]uint16{2_100, 1_900, 2_000, 2_000, 2_000}) {
 		t.Fatalf("applied assignment = %#v", stub.appliedCommand)
 	}
-	if game.assignmentDraftDirty() {
+	if game.workforce.Dirty() {
 		t.Fatal("successful Apply left the draft dirty")
 	}
 
 	game.editAssignmentDraft(100)
 	game.discardAssignmentDraft()
-	if game.assignmentDraftDirty() || game.assignmentDraft != game.assignmentBaseline {
-		t.Fatalf("discarded assignment = draft %v baseline %v", game.assignmentDraft, game.assignmentBaseline)
+	if game.workforce.Dirty() || game.workforce.Allocation() != game.selected().AllocationBP {
+		t.Fatalf("discarded assignment = draft %v baseline %v", game.workforce.Allocation(), game.selected().AllocationBP)
 	}
 }
 
@@ -716,8 +716,8 @@ func TestStartupResumeLoadsNewestQuickOrAutosave(t *testing.T) {
 	if game.fieldNote.Topic != "WELCOME" || game.breakthroughFrames != 0 || game.regionalPulseFocused {
 		t.Fatalf("loaded game retained stale presentation: note %#v, breakthrough %d, pulse focus %t", game.fieldNote, game.breakthroughFrames, game.regionalPulseFocused)
 	}
-	if game.selectedBand != 9 || game.assignmentDraftBand != 9 {
-		t.Fatalf("loaded priority selection/draft = %d/%d, want band 9", game.selectedBand, game.assignmentDraftBand)
+	if game.selectedBand != 9 || game.workforce.BandID() != 9 {
+		t.Fatalf("loaded priority selection/draft = %d/%d, want band 9", game.selectedBand, game.workforce.BandID())
 	}
 }
 
@@ -763,15 +763,15 @@ func TestClickingSelectedBandPreservesDirtyAssignmentDraft(t *testing.T) {
 	game := New(stub)
 	game.editAssignmentDraft(100)
 	game.notice = "existing notice"
-	want := game.assignmentDraft
-	if !game.assignmentDraftDirty() {
+	want := game.workforce.Allocation()
+	if !game.workforce.Dirty() {
 		t.Fatal("test setup did not create a dirty assignment draft")
 	}
 	if !game.selectBandAtTile(game.frame.Bands[0].TileID) {
 		t.Fatal("selected band marker was not recognized")
 	}
-	if !game.assignmentDraftDirty() || game.assignmentDraft != want {
-		t.Fatalf("same-band click changed draft: got %#v want %#v", game.assignmentDraft, want)
+	if !game.workforce.Dirty() || game.workforce.Allocation() != want {
+		t.Fatalf("same-band click changed draft: got %#v want %#v", game.workforce.Allocation(), want)
 	}
 	if game.notice != "existing notice" {
 		t.Fatalf("same-band click replaced notice with %q", game.notice)
@@ -806,8 +806,8 @@ func TestTileClicksNeverSelectAnArchaicBandBesideASapiensOne(t *testing.T) {
 		t.Fatalf("initial selection = %d", game.selectedBand)
 	}
 	for click := 1; click <= 3; click++ {
-		if !game.selectBandAtTile(0) || game.selectedBand != 7 || !game.hasAssignmentDraft {
-			t.Fatalf("click %d selected %d (draft %t), want band 7 with a workforce draft", click, game.selectedBand, game.hasAssignmentDraft)
+		if !game.selectBandAtTile(0) || game.selectedBand != 7 || !game.workforce.Visible() {
+			t.Fatalf("click %d selected %d (draft %t), want band 7 with a workforce draft", click, game.selectedBand, game.workforce.Visible())
 		}
 	}
 }
@@ -835,8 +835,8 @@ func TestTileClicksStillSelectALoneArchaicBand(t *testing.T) {
 	frame := migrationPreviewFrame()
 	frame.Bands = append(frame.Bands, gameapi.Band{ID: 12, Species: gameapi.ArchaicHominin, TileID: 2, Population: 90})
 	game := New(&gameStub{frame: frame})
-	if !game.selectBandAtTile(2) || game.selectedBand != 12 || game.hasAssignmentDraft {
-		t.Fatalf("click selected %d (draft %t), want read-only archaic band 12", game.selectedBand, game.hasAssignmentDraft)
+	if !game.selectBandAtTile(2) || game.selectedBand != 12 || game.workforce.Visible() {
+		t.Fatalf("click selected %d (draft %t), want read-only archaic band 12", game.selectedBand, game.workforce.Visible())
 	}
 	if !strings.Contains(game.fieldNote.Introduction, "Computer controlled") {
 		t.Fatalf("archaic Field Notes = %#v", game.fieldNote)

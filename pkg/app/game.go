@@ -62,11 +62,7 @@ type Game struct {
 	settingsRevision       uint64
 	settingsWriteActive    bool
 	pendingSettings        *ui.UISettings
-	assignmentDraft        [gameapi.AssignmentCount]uint16
-	assignmentBaseline     [gameapi.AssignmentCount]uint16
-	assignmentDraftBand    gameapi.BandID
-	assignmentRole         gameapi.WorkforceRole
-	hasAssignmentDraft     bool
+	workforce              ui.AssignmentDraft
 	profileDisplayFrame    *gameapi.Frame
 	viewport               render.Viewport
 	viewportInitialized    bool
@@ -783,25 +779,6 @@ func (g *Game) toggleCameraFocus() { g.cameraFocused = !g.cameraFocused }
 // row-owned model arrows, Enter, and -/+ already use there.
 func (g *Game) toggleDetails() { g.detailsOpen = !g.detailsOpen }
 
-func (g *Game) syncAssignmentDraft(force bool) {
-	band := g.selected()
-	g.syncInterbreedFocus(band)
-	if band == nil || band.Species != gameapi.HomoSapiens {
-		g.hasAssignmentDraft = false
-		return
-	}
-	if !force && g.hasAssignmentDraft && g.assignmentDraftBand == band.ID && g.assignmentDraftDirty() {
-		return
-	}
-	g.assignmentDraftBand = band.ID
-	g.assignmentDraft = band.AllocationBP
-	g.assignmentBaseline = band.AllocationBP
-	g.hasAssignmentDraft = true
-	if g.assignmentRole >= gameapi.AssignmentCount {
-		g.assignmentRole = gameapi.Foraging
-	}
-}
-
 // focusInterbreedPartner moves the partner comparison onto another candidate
 // without spending anything. The picker chips used to emit IntentInterbreed,
 // so the only way to see a second candidate's genetics was to breed with it —
@@ -838,56 +815,6 @@ func (g *Game) syncInterbreedFocus(band *gameapi.Band) {
 	g.interbreedFocus = band.InterbreedCandidateIDs[0]
 }
 
-func (g *Game) assignmentDraftDirty() bool {
-	return g.hasAssignmentDraft && g.assignmentDraft != g.assignmentBaseline
-}
-
-func (g *Game) assignmentDraftValid() bool {
-	if !g.hasAssignmentDraft {
-		return false
-	}
-	var total uint32
-	for _, points := range g.assignmentDraft {
-		total += uint32(points)
-	}
-	return total == 10_000
-}
-
-func (g *Game) editAssignmentDraft(delta int) {
-	if !g.hasAssignmentDraft || g.assignmentRole >= gameapi.AssignmentCount {
-		return
-	}
-	value := int(g.assignmentDraft[g.assignmentRole]) + delta
-	value = min(max(value, 0), 10_000)
-	g.assignmentDraft[g.assignmentRole] = uint16(value)
-	if g.assignmentDraftDirty() {
-		g.showNotice("Workforce draft changed — total must equal 100%; A applies, D discards")
-	}
-}
-
-func (g *Game) applyAssignmentDraft() {
-	if !g.assignmentDraftDirty() {
-		return
-	}
-	if !g.assignmentDraftValid() {
-		g.showNotice("Workforce allocation must total exactly 100%")
-		return
-	}
-	command := gameapi.SetAssignment{BandID: g.assignmentDraftBand, AllocationBP: g.assignmentDraft}
-	if g.apply(command) {
-		g.syncAssignmentDraft(true)
-		g.showNotice("Workforce allocation applied")
-	}
-}
-
-func (g *Game) discardAssignmentDraft() {
-	if !g.assignmentDraftDirty() {
-		return
-	}
-	g.assignmentDraft = g.assignmentBaseline
-	g.showNotice("Workforce changes discarded")
-}
-
 func (g *Game) ensureSelection() {
 	if selected := g.selected(); selected != nil && selected.Species == gameapi.HomoSapiens && selected.Population > 0 {
 		return
@@ -914,7 +841,7 @@ func (g *Game) selectSapiens(offset int) {
 	if g.frame == nil {
 		return
 	}
-	if g.assignmentDraftDirty() {
+	if g.workforce.Dirty() {
 		g.showNotice("Apply or discard workforce changes")
 		return
 	}
@@ -1057,7 +984,7 @@ func (g *Game) selectBandAtTile(tileID gameapi.TileID) bool {
 	if bandIDs[next] == g.selectedBand {
 		return true
 	}
-	if g.assignmentDraftDirty() {
+	if g.workforce.Dirty() {
 		g.showNotice("Apply or discard workforce changes")
 		return true
 	}
@@ -1255,7 +1182,7 @@ func (g *Game) startNewCampaign() {
 	g.publishFrame()
 	g.selectedBand = 0
 	g.ensureSelection()
-	g.hasAssignmentDraft = false
+	g.workforce.Clear()
 	g.syncAssignmentDraft(true)
 	g.resetDisclosure()
 	if !g.settings.GuideDismissed {
@@ -1289,7 +1216,7 @@ func (g *Game) beginManualSave(slot int) {
 }
 
 func (g *Game) beginManualLoad(slot int) {
-	if g.assignmentDraftDirty() {
+	if g.workforce.Dirty() {
 		g.showNotice("Apply or discard workforce changes before loading")
 		return
 	}
@@ -1346,7 +1273,7 @@ func (g *Game) handleSceneInput() bool {
 			return true
 		}
 		if inpututil.IsKeyJustPressed(ebiten.KeyT) {
-			if g.assignmentDraftDirty() {
+			if g.workforce.Dirty() {
 				g.showNotice("Apply or discard workforce changes before returning to title")
 				return true
 			}
@@ -1555,7 +1482,7 @@ func (g *Game) activateStorageSelection() {
 		g.showNotice("That slot is empty")
 		return
 	}
-	if g.assignmentDraftDirty() {
+	if g.workforce.Dirty() {
 		g.showNotice("Apply or discard workforce changes before loading")
 		return
 	}
@@ -1669,7 +1596,7 @@ func (g *Game) pollStorage() {
 			g.clearMigrationPreview()
 			g.selectedBand = 0
 			g.ensureSelection()
-			g.hasAssignmentDraft = false
+			g.workforce.Clear()
 			g.syncAssignmentDraft(true)
 			g.resetDisclosure()
 			g.scenes.Reset()

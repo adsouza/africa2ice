@@ -34,7 +34,7 @@ func (g *Game) handleGameplayKeys() {
 	}
 	switch {
 	case inpututil.IsKeyJustPressed(ebiten.KeyTab):
-		if g.assignmentDraftDirty() {
+		if g.workforce.Dirty() {
 			g.showNotice("Apply or discard workforce changes")
 		} else {
 			g.clearMigrationPreview()
@@ -123,9 +123,9 @@ func (g *Game) handleRowKey(key ebiten.Key, shift bool) {
 	case ui.RowWorkforce:
 		switch key {
 		case ebiten.KeyArrowUp:
-			g.assignmentRole = (g.assignmentRole + gameapi.AssignmentCount - 1) % gameapi.AssignmentCount
+			g.workforce.Role = (g.workforce.Role + gameapi.AssignmentCount - 1) % gameapi.AssignmentCount
 		case ebiten.KeyArrowDown:
-			g.assignmentRole = (g.assignmentRole + 1) % gameapi.AssignmentCount
+			g.workforce.Role = (g.workforce.Role + 1) % gameapi.AssignmentCount
 		case ebiten.KeyArrowLeft, ebiten.KeyMinus:
 			g.adjustSelectedRole(-100, shift)
 		case ebiten.KeyArrowRight, ebiten.KeyEqual:

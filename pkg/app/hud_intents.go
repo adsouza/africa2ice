@@ -111,7 +111,7 @@ func (g *Game) handleIntent(intent hud.Intent) {
 	case hud.IntentChooseResearch:
 		g.chooseResearchTechnology(intent.Tech)
 	case hud.IntentAdjustRole:
-		g.assignmentRole = intent.Role
+		g.workforce.Role = intent.Role
 		g.editAssignmentDraft(intent.Delta)
 	case hud.IntentApplyWorkforce:
 		g.applyAssignmentDraft()
@@ -194,7 +194,7 @@ func (g *Game) handleOverlayIntent(intent hud.Intent) {
 	case hud.IntentOpenSettings:
 		g.dispatchBatch([]ui.Action{ui.PushSceneAction(ui.SceneSettings)})
 	case hud.IntentReturnToTitle:
-		if g.assignmentDraftDirty() {
+		if g.workforce.Dirty() {
 			g.showNotice("Apply or discard workforce changes before returning to title")
 			return
 		}
@@ -246,7 +246,7 @@ func (g *Game) selectBandByID(id gameapi.BandID) {
 	if id == g.selectedBand {
 		return
 	}
-	if g.assignmentDraftDirty() {
+	if g.workforce.Dirty() {
 		g.showNotice("Apply or discard workforce changes")
 		return
 	}
@@ -268,7 +268,7 @@ func (g *Game) endTurn(force bool) {
 	if g.frame == nil || g.frame.CampaignResult != gameapi.Ongoing {
 		return
 	}
-	if g.assignmentDraftDirty() {
+	if g.workforce.Dirty() {
 		g.showNotice("Apply or discard workforce changes before ending the turn")
 		return
 	}

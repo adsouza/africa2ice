@@ -55,8 +55,8 @@ func TestIntentsReuseHotkeyPaths(t *testing.T) {
 		t.Fatalf("ChooseResearch applied %#v", stub.appliedCommand)
 	}
 	game.handleIntents([]hud.Intent{{Kind: hud.IntentAdjustRole, Role: gameapi.Toolcraft, Delta: 100}})
-	if game.assignmentRole != gameapi.Toolcraft || !game.assignmentDraftDirty() {
-		t.Fatalf("AdjustRole: role %v dirty %t", game.assignmentRole, game.assignmentDraftDirty())
+	if game.workforce.Role != gameapi.Toolcraft || !game.workforce.Dirty() {
+		t.Fatalf("AdjustRole: role %v dirty %t", game.workforce.Role, game.workforce.Dirty())
 	}
 	game.handleIntents([]hud.Intent{{Kind: hud.IntentDiscardWorkforce}})
 	game.handleIntents([]hud.Intent{{Kind: hud.IntentOpenRow, Row: ui.RowWorkforce}, {Kind: hud.IntentToggleDetails}})

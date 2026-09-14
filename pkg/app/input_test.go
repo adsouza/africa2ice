@@ -97,14 +97,14 @@ func TestArrowsBelongToTheOpenRow(t *testing.T) {
 	game.clearMigrationPreview()
 
 	game.openRow, game.rowChosen = ui.RowWorkforce, true
-	game.assignmentRole = gameapi.Foraging
+	game.workforce.Role = gameapi.Foraging
 	game.handleRowKey(ebiten.KeyArrowDown, false)
-	if game.assignmentRole != gameapi.HuntingAndFishing {
-		t.Fatalf("Down in Workforce selected %v", game.assignmentRole)
+	if game.workforce.Role != gameapi.HuntingAndFishing {
+		t.Fatalf("Down in Workforce selected %v", game.workforce.Role)
 	}
 	game.handleRowKey(ebiten.KeyArrowRight, false)
 	game.handleRowKey(ebiten.KeyArrowRight, true)
-	if got := game.assignmentDraft[gameapi.HuntingAndFishing]; got != 600 {
+	if got := game.workforce.Allocation()[gameapi.HuntingAndFishing]; got != 600 {
 		t.Fatalf("Right then Shift+Right = %d BP, want 600", got)
 	}
 	if game.hasMigrationPreview {
@@ -124,16 +124,16 @@ func TestArrowsBelongToTheOpenRow(t *testing.T) {
 	// − and + belong to the Workforce row exactly like Left/Right, so they
 	// step the selected role there and do nothing while another row is open.
 	game.openRow, game.rowChosen = ui.RowWorkforce, true
-	game.assignmentRole = gameapi.Foraging
+	game.workforce.Role = gameapi.Foraging
 	game.handleRowKey(ebiten.KeyEqual, true)
 	game.handleRowKey(ebiten.KeyMinus, false)
-	if got := game.assignmentDraft[gameapi.Foraging]; got != 400 {
+	if got := game.workforce.Allocation()[gameapi.Foraging]; got != 400 {
 		t.Fatalf("Shift++ then − in the Workforce row = %d BP, want 400", got)
 	}
 	game.openRow = ui.RowMove
 	game.handleRowKey(ebiten.KeyMinus, false)
 	game.handleRowKey(ebiten.KeyEqual, true)
-	if got := game.assignmentDraft[gameapi.Foraging]; got != 400 {
+	if got := game.workforce.Allocation()[gameapi.Foraging]; got != 400 {
 		t.Fatalf("−/+ with the Move row open changed the draft to %d BP, want 400", got)
 	}
 
@@ -223,9 +223,9 @@ func TestDetailsHotkeyIsRowOwnedAgainstWorkforce(t *testing.T) {
 	// With Move open, handleRowKey does not own D at all (RowMove's switch
 	// has no KeyD case) — it is the global toggleDetails path that owns it,
 	// and that path must leave the workforce draft alone.
-	draftBefore := game.assignmentDraft
+	draftBefore := game.workforce.Allocation()
 	game.handleRowKey(ebiten.KeyD, false)
-	if game.assignmentDraft != draftBefore {
+	if game.workforce.Allocation() != draftBefore {
 		t.Fatal("handleRowKey's D case touched the workforce draft with the Move row open")
 	}
 	detailsBefore := game.detailsOpen
@@ -241,14 +241,14 @@ func TestDetailsHotkeyIsRowOwnedAgainstWorkforce(t *testing.T) {
 	// With Workforce open and a dirty draft, D is row-owned: it discards the
 	// draft and must not touch detailsOpen.
 	game.openRow, game.rowChosen = ui.RowWorkforce, true
-	game.assignmentRole = gameapi.Foraging
+	game.workforce.Role = gameapi.Foraging
 	game.handleRowKey(ebiten.KeyArrowRight, false)
-	if !game.assignmentDraftDirty() {
+	if !game.workforce.Dirty() {
 		t.Fatal("setup: Right should have dirtied the workforce draft")
 	}
 	detailsBefore = game.detailsOpen
 	game.handleRowKey(ebiten.KeyD, false)
-	if game.assignmentDraftDirty() {
+	if game.workforce.Dirty() {
 		t.Fatal("D did not discard the dirty workforce draft with the Workforce row open")
 	}
 	if game.detailsOpen != detailsBefore {
