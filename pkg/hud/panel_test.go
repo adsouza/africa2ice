@@ -1763,9 +1763,10 @@ func TestShortcutSheetLinesFitTheWindow(t *testing.T) {
 func campaignControlTestFrame() *gameapi.Frame {
 	frame := testFrame(1)
 	frame.Bands[0].InterbreedCandidateIDs = []gameapi.BandID{2}
-	// Crowded enough to split, so that CampaignOver is the only thing this
-	// fixture leaves disabling the Split button (see ui.DiagnoseSplit).
-	frame.Bands[0].Stress = gameapi.SplitStressThreshold + 0.01
+	// Nothing blocks the split, so that CampaignOver is the only thing this
+	// fixture leaves disabling the Split button. Eligibility is the projected
+	// Band.SplitBlock alone; Stress and Population no longer decide it.
+	frame.Bands[0].SplitBlock = ""
 	return frame
 }
 
@@ -1995,8 +1996,7 @@ func TestTargetValueAndMarkAreSeparateLabels(t *testing.T) {
 // The Split button used to be disabled only by a spent action, so a band that
 // the domain would refuse — not crowded enough, too small, nowhere adjacent to
 // settle — still offered the action and answered a click with a notice
-// (user-reported). ui.DiagnoseSplit now decides, from the same projected
-// Stress value the verification driver uses.
+// (user-reported). The button now follows the projected domain rejection.
 func TestSplitButtonFollowsSplitEligibility(t *testing.T) {
 	build := func(t *testing.T, mutate func(*gameapi.Frame)) *Panel {
 		t.Helper()
@@ -2006,25 +2006,25 @@ func TestSplitButtonFollowsSplitEligibility(t *testing.T) {
 		panel.Update(testState(frame, 1))
 		return panel
 	}
-	eligible := func(f *gameapi.Frame) {
-		f.Bands[0].Stress = gameapi.SplitStressThreshold + 0.01
-		f.Bands[0].Population = gameapi.MinSplitSourcePopulation
-	}
+	// Stated rather than left to the zero value, so a future non-empty default
+	// for SplitBlock cannot silently keep enabling Split here.
+	eligible := func(f *gameapi.Frame) { f.Bands[0].SplitBlock = "" }
 	if panel := build(t, eligible); panel.handles.split.GetWidget().Disabled {
 		t.Fatal("Split is disabled for a band the domain would allow to split")
 	}
 	for name, mutate := range map[string]func(*gameapi.Frame){
 		"not crowded enough": func(f *gameapi.Frame) {
 			eligible(f)
-			f.Bands[0].Stress = gameapi.SplitStressThreshold
+			f.Bands[0].SplitBlock = gameapi.ErrSplitStressTooLow
 		},
 		"too few people": func(f *gameapi.Frame) {
 			eligible(f)
-			f.Bands[0].Population = gameapi.MinSplitSourcePopulation - 1
+			f.Bands[0].SplitBlock = gameapi.ErrSplitPopulationTooLow
 		},
 		"nowhere adjacent to settle": func(f *gameapi.Frame) {
 			eligible(f)
 			f.Bands[0].MigrationCandidates = []gameapi.MigrationCandidate{{TileID: 1, RequiresPassage: true}}
+			f.Bands[0].SplitBlock = gameapi.ErrSplitDestinationNotAdjacent
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -2118,7 +2118,8 @@ func showSplitTooltip(t *testing.T) (*Panel, *ebiten.Image, State, PresentationK
 	t.Helper()
 	t.Cleanup(func() { input.SetCursorUpdater(nil) })
 	panel := New()
-	state := testState(testFrame(1), 1) // Stress 0: Split is disabled, so it has a tooltip
+	state := testState(testFrame(1), 1)
+	state.Frame.Bands[0].SplitBlock = gameapi.ErrSplitStressTooLow
 	screen := ebiten.NewImage(1280, 720)
 	t.Cleanup(screen.Deallocate)
 	panel.Update(state)

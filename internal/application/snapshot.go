@@ -216,6 +216,19 @@ func (service *GameService) projectFrame() (*gameapi.Frame, error) {
 				}
 			}
 		}
+		// The split action chooses the first ordinary migration candidate. Use
+		// the origin when none exists so the domain supplies the rejection in
+		// its normal guard order, without duplicating eligibility rules here.
+		splitDestination := band.TileID
+		for _, candidate := range publicBand.MigrationCandidates {
+			if !candidate.RequiresPassage {
+				splitDestination = domain.TileID(candidate.TileID)
+				break
+			}
+		}
+		if err := service.world.ValidateSplit(band.ID, splitDestination, true); err != nil {
+			publicBand.SplitBlock = domainErrorCode(err)
+		}
 		frame.Bands = append(frame.Bands, publicBand)
 	}
 	return frame, nil

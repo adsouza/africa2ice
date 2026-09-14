@@ -155,66 +155,19 @@ func splitEligibleFrame() *gameapi.Frame {
 	}}}
 }
 
-// DiagnoseSplit exists so the Split button can be disabled when the command
-// would refuse it: it used to look available whatever the band's state, and
-// clicking it only produced a notice (user-reported). Every reason returned
-// here is a guard domain.World.Split or splitBand actually applies, and each
-// already has player copy in errors.go.
-func TestDiagnoseSplitNamesTheGuardThatWouldRefuse(t *testing.T) {
-	if got := DiagnoseSplit(splitEligibleFrame(), &splitEligibleFrame().Bands[0]); got != "" {
-		t.Fatalf("eligible band = %q, want no blocking reason", got)
+// Eligibility comes from the projection, even if display values suggest otherwise.
+func TestDiagnoseSplitUsesProjectedEligibility(t *testing.T) {
+	frame := splitEligibleFrame()
+	frame.Bands[0].Population = 0
+	if got := DiagnoseSplit(frame, &frame.Bands[0]); got != "" {
+		t.Fatalf("UI reconstructed eligibility: %q", got)
 	}
-	for name, test := range map[string]struct {
-		mutate func(*gameapi.Frame)
-		want   gameapi.ErrorCode
-	}{
-		"campaign already over": {
-			func(f *gameapi.Frame) { f.CampaignResult = gameapi.DispersalFailed },
-			gameapi.ErrCampaignComplete,
-		},
-		"computer-controlled band": {
-			func(f *gameapi.Frame) { f.Bands[0].Species = gameapi.ArchaicHominin },
-			gameapi.ErrComputerControlledBand,
-		},
-		"spatial action already spent": {
-			func(f *gameapi.Frame) { f.Bands[0].SpatialActionUsed = true },
-			gameapi.ErrSpatialActionUsed,
-		},
-		"a queued migration also spends the action": {
-			func(f *gameapi.Frame) { f.Bands[0].HasQueuedMigration = true },
-			gameapi.ErrSpatialActionUsed,
-		},
-		"stress exactly at the threshold is not over it": {
-			func(f *gameapi.Frame) { f.Bands[0].Stress = gameapi.SplitStressThreshold },
-			gameapi.ErrSplitStressTooLow,
-		},
-		"one person short of two viable bands": {
-			func(f *gameapi.Frame) { f.Bands[0].Population = gameapi.MinSplitSourcePopulation - 1 },
-			gameapi.ErrSplitPopulationTooLow,
-		},
-		"no ordinary-land neighbour": {
-			func(f *gameapi.Frame) {
-				f.Bands[0].MigrationCandidates = []gameapi.MigrationCandidate{{TileID: 1, RequiresPassage: true}}
-			},
-			gameapi.ErrSplitDestinationNotAdjacent,
-		},
-		"campaign is at the band limit": {
-			func(f *gameapi.Frame) { f.Bands = append(f.Bands, make([]gameapi.Band, gameapi.MaxBands)...) },
-			gameapi.ErrBandLimitReached,
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			frame := splitEligibleFrame()
-			test.mutate(frame)
-			// The band pointer is taken after the mutation: appending to
-			// frame.Bands can reallocate its backing array.
-			if got := DiagnoseSplit(frame, &frame.Bands[0]); got != test.want {
-				t.Fatalf("DiagnoseSplit = %q, want %q", got, test.want)
-			}
-		})
+	frame.Bands[0].SplitBlock = gameapi.ErrBandIDExhausted
+	if got := DiagnoseSplit(frame, &frame.Bands[0]); got != gameapi.ErrBandIDExhausted {
+		t.Fatalf("projected rejection lost: %q", got)
 	}
-	if got := DiagnoseSplit(splitEligibleFrame(), nil); got != gameapi.ErrBandNotFound {
-		t.Fatalf("nil band = %q, want %q", got, gameapi.ErrBandNotFound)
+	if got := DiagnoseSplit(frame, nil); got != gameapi.ErrBandNotFound {
+		t.Fatalf("nil band: %q", got)
 	}
 }
 
@@ -272,11 +225,11 @@ func TestDiagnoseMoveActionsExplainsEachUnavailableAction(t *testing.T) {
 			ErrorCodeMessage(gameapi.ErrSpatialActionUsed), ErrorCodeMessage(gameapi.ErrSpatialActionUsed),
 		},
 		"too little pressure stops only the split": {
-			func(f *gameapi.Frame) { f.Bands[0].Stress = gameapi.SplitStressThreshold },
+			func(f *gameapi.Frame) { f.Bands[0].SplitBlock = gameapi.ErrSplitStressTooLow },
 			"", "", ErrorCodeMessage(gameapi.ErrSplitStressTooLow), "",
 		},
 		"too few people stops only the split": {
-			func(f *gameapi.Frame) { f.Bands[0].Population = gameapi.MinSplitSourcePopulation - 1 },
+			func(f *gameapi.Frame) { f.Bands[0].SplitBlock = gameapi.ErrSplitPopulationTooLow },
 			"", "", ErrorCodeMessage(gameapi.ErrSplitPopulationTooLow), "",
 		},
 		"no archaic neighbour stops only interbreeding": {
@@ -286,6 +239,7 @@ func TestDiagnoseMoveActionsExplainsEachUnavailableAction(t *testing.T) {
 		"only passage routes stop Best tile and the split": {
 			func(f *gameapi.Frame) {
 				f.Bands[0].MigrationCandidates = []gameapi.MigrationCandidate{{TileID: 1, RequiresPassage: true}}
+				f.Bands[0].SplitBlock = gameapi.ErrSplitDestinationNotAdjacent
 			},
 			"", noOrdinaryLandMessage, ErrorCodeMessage(gameapi.ErrSplitDestinationNotAdjacent), "",
 		},
@@ -361,11 +315,13 @@ func TestEasyModeSplitDiagnostics(t *testing.T) {
 		t.Fatalf("easy split blocked: %v", code)
 	}
 	frame.EasyMode = false
+	band.SplitBlock = gameapi.ErrSplitStressTooLow
 	if code := DiagnoseSplit(frame, &band); code != gameapi.ErrSplitStressTooLow {
 		t.Fatalf("normal split: %v", code)
 	}
 	frame.EasyMode = true
 	band.Population = 19
+	band.SplitBlock = gameapi.ErrSplitPopulationTooLow
 	if code := DiagnoseSplit(frame, &band); code != gameapi.ErrSplitPopulationTooLow {
 		t.Fatalf("small split: %v", code)
 	}

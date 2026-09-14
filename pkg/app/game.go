@@ -1458,6 +1458,10 @@ func (g *Game) splitSelectedBand() {
 	if band == nil {
 		return
 	}
+	// First ordinary candidate -- the destination Band.SplitBlock is projected
+	// for (internal/application/snapshot.go). Changing the rule here without
+	// changing it there makes the Split button's enabled state describe a tile
+	// this never sends, which is the defect SplitBlock exists to close.
 	for _, candidate := range band.MigrationCandidates {
 		if candidate.RequiresPassage {
 			continue

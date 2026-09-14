@@ -73,29 +73,35 @@ func (world *World) QueueMigration(id BandID, destination TileID, player bool) e
 	return nil
 }
 
-func (world *World) Split(id BandID, destination TileID, player bool) error {
+// ValidateSplit checks the same transition as Split without publishing changes.
+func (world *World) ValidateSplit(id BandID, destination TileID, player bool) error {
+	_, _, _, err := world.prepareSplit(id, destination, player)
+	return err
+}
+
+func (world *World) prepareSplit(id BandID, destination TileID, player bool) (int, Band, Band, error) {
 	if world.result != CampaignOngoing {
-		return ErrCampaignComplete
+		return 0, Band{}, Band{}, ErrCampaignComplete
 	}
 	index := world.bandIndex(id)
 	if index < 0 {
-		return ErrBandNotFound
+		return 0, Band{}, Band{}, ErrBandNotFound
 	}
 	band := world.bands[index]
 	if player && band.Species != HomoSapiens {
-		return ErrComputerControlledBand
+		return 0, Band{}, Band{}, ErrComputerControlledBand
 	}
 	if band.SpatialActionUsed {
-		return ErrSpatialActionUsed
+		return 0, Band{}, Band{}, ErrSpatialActionUsed
 	}
 	if len(world.bands) >= MaxBands {
-		return ErrBandLimitReached
+		return 0, Band{}, Band{}, ErrBandLimitReached
 	}
 	if world.nextBandID == 0 || world.nextBandID == ^BandID(0) {
-		return ErrBandIDExhausted
+		return 0, Band{}, Band{}, ErrBandIDExhausted
 	}
 	if !world.easyMode && world.BandStress(id) <= SplitStressThreshold {
-		return ErrSplitStressTooLow
+		return 0, Band{}, Band{}, ErrSplitStressTooLow
 	}
 	adjacent := false
 	for _, edge := range world.grid.OrdinaryEdges(band.TileID) {
@@ -105,22 +111,30 @@ func (world *World) Split(id BandID, destination TileID, player bool) error {
 		}
 	}
 	if !adjacent {
-		return ErrSplitDestinationNotAdjacent
+		return 0, Band{}, Band{}, ErrSplitDestinationNotAdjacent
 	}
 	// Checked before the terrain is inspected, and enforced here rather than
 	// left to the caller: Split reveals its destination, so without this the
 	// aggregate would hand a player the fog-of-war gate QueueMigration applies.
 	if player && !world.IsExplored(destination) {
-		return ErrSplitDestinationUnexplored
+		return 0, Band{}, Band{}, ErrSplitDestinationUnexplored
 	}
 	if destination >= TileCount || world.habitat[destination].BaselineK <= 0 {
-		return ErrSplitDestinationUninhabitable
+		return 0, Band{}, Band{}, ErrSplitDestinationUninhabitable
 	}
 	minimum := MinSplitSourcePopulation
 	if world.easyMode {
 		minimum = EasyMinSplitSourcePopulation
 	}
 	left, right, err := splitBandWithMinimum(band, world.nextBandID, minimum)
+	if err != nil {
+		return 0, Band{}, Band{}, err
+	}
+	return index, left, right, nil
+}
+
+func (world *World) Split(id BandID, destination TileID, player bool) error {
+	index, left, right, err := world.prepareSplit(id, destination, player)
 	if err != nil {
 		return err
 	}

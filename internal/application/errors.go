@@ -7,7 +7,10 @@ import (
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 )
 
-func mapDomainError(err error) error {
+// domainErrorCode classifies a domain error without building a GameError.
+// Frame projection asks this question once per band per frame and keeps
+// only the code, so the error value and its message must not be allocated.
+func domainErrorCode(err error) gameapi.ErrorCode {
 	code := gameapi.ErrInvalidCommand
 	switch {
 	case errors.Is(err, domain.ErrBandNotFound):
@@ -43,5 +46,9 @@ func mapDomainError(err error) error {
 	case errors.Is(err, domain.ErrCampaignComplete):
 		code = gameapi.ErrCampaignComplete
 	}
-	return &gameapi.GameError{Code: code, Message: err.Error()}
+	return code
+}
+
+func mapDomainError(err error) *gameapi.GameError {
+	return &gameapi.GameError{Code: domainErrorCode(err), Message: err.Error()}
 }

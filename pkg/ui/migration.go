@@ -220,57 +220,12 @@ func HasOrdinaryLandCandidate(band gameapi.Band) bool {
 	return false
 }
 
-// DiagnoseSplit reports the code domain.World.Split would refuse this band
-// with, or "" when a split would be accepted. The Split button used to look
-// available whatever the band's state, so clicking it produced a notice
-// instead of an action (user-reported).
-//
-// Like DiagnoseMigration this reads only projected data — Band.Stress carries
-// the authoritative domain.World.BandStress value — and never recomputes a
-// domain rule. Recomputing stress here is not possible anyway: BandStress
-// divides by BaselineK times the band's technology capacity multiplier, and
-// that multiplier is deliberately not part of the public frame. A tile's
-// displayed occupancy (see liveability.go) divides by EcologicalK instead, so
-// it is close to stress but not equal to it, and must not stand in for it:
-// the two disagree on a degraded tile, which would disable the button for a
-// split the command would have allowed.
-//
-// The guards run in the order World.Split applies them, so the reason matches
-// the error a click would produce. Population comes last because splitBand
-// checks it only after Split has cleared the destination guards.
+// DiagnoseSplit returns the domain-projected reason the Split action is blocked.
 func DiagnoseSplit(frame *gameapi.Frame, band *gameapi.Band) gameapi.ErrorCode {
 	if frame == nil || band == nil {
 		return gameapi.ErrBandNotFound
 	}
-	if frame.CampaignResult != gameapi.Ongoing {
-		return gameapi.ErrCampaignComplete
-	}
-	if band.Species != gameapi.HomoSapiens {
-		return gameapi.ErrComputerControlledBand
-	}
-	// MoveDone rather than SpatialActionUsed alone: a queued migration or a
-	// chosen interbreeding partner has already committed the same action,
-	// and the domain rejects the split on the flag they set.
-	if MoveDone(*band) {
-		return gameapi.ErrSpatialActionUsed
-	}
-	if len(frame.Bands) >= gameapi.MaxBands {
-		return gameapi.ErrBandLimitReached
-	}
-	if !frame.EasyMode && band.Stress <= gameapi.SplitStressThreshold {
-		return gameapi.ErrSplitStressTooLow
-	}
-	if !HasOrdinaryLandCandidate(*band) {
-		return gameapi.ErrSplitDestinationNotAdjacent
-	}
-	minimum := gameapi.MinSplitSourcePopulation
-	if frame.EasyMode {
-		minimum = gameapi.EasyMinSplitSourcePopulation
-	}
-	if band.Population < uint32(minimum) {
-		return gameapi.ErrSplitPopulationTooLow
-	}
-	return ""
+	return band.SplitBlock
 }
 
 // Copy for the Move row blocks that have no matching gameapi.ErrorCode,

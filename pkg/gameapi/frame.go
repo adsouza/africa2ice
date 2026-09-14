@@ -134,6 +134,14 @@ type MacroImpactSummary struct {
 }
 
 type Band struct {
+	// SplitBlock is the domain's rejection for one destination: the first
+	// ordinary (non-passage) migration candidate, or the band's own tile when
+	// it has none. Empty means a split there would be accepted. The answer is
+	// destination-specific, so a caller that picks a different tile -- as
+	// internal/verification/policy.go does -- must not read it. The projector
+	// in internal/application/snapshot.go and pkg/app.splitSelectedBand must
+	// keep choosing the same candidate or this describes a split nobody sends.
+	SplitBlock                  ErrorCode
 	ID                          BandID
 	Species                     Species
 	TileID                      TileID
