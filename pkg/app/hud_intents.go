@@ -210,8 +210,8 @@ func (g *Game) handleOverlayIntent(intent hud.Intent) {
 		g.storageSelection = storageIndexForSlot(intent.Slot)
 		g.deleteStorageSelection()
 	case hud.IntentSetVolume:
-		if !g.settingsLoading && intent.Volume != g.settings.MasterVolume {
-			settings := g.settings
+		if !g.preferences.loading && intent.Volume != g.preferences.value.MasterVolume {
+			settings := g.preferences.value
 			settings.MasterVolume = intent.Volume
 			g.updateUISettings(settings)
 		}
@@ -223,8 +223,8 @@ func (g *Game) handleOverlayIntent(intent hud.Intent) {
 		g.toggleReducedMotion()
 	case hud.IntentShowGuide:
 		g.guide = ui.NewGuideState(false)
-		if !g.settingsLoading {
-			settings := g.settings
+		if !g.preferences.loading {
+			settings := g.preferences.value
 			settings.GuideDismissed = false
 			g.updateUISettings(settings)
 		}
@@ -287,10 +287,10 @@ func (g *Game) endTurn(force bool) {
 
 func (g *Game) dismissGuide() {
 	g.guide = g.guide.Dismiss()
-	if g.settingsLoading {
+	if g.preferences.loading {
 		return
 	}
-	settings := g.settings
+	settings := g.preferences.value
 	settings.GuideDismissed = true
 	g.updateUISettings(settings)
 }

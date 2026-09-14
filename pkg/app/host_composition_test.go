@@ -4,6 +4,7 @@ package app
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,8 +42,8 @@ func TestHostCompositionResumesThroughIsolatedRepository(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if repositoryCalls != 1 || settingsCalls != 1 || len(settings.reads) != 1 || !game.settingsLoading || game.frame == nil || len(game.frame.Bands) == 0 || game.scenes.Current() != ui.SceneTitle {
-				t.Fatalf("incomplete startup: repository=%d settings=%d loading=%t scene=%v", repositoryCalls, settingsCalls, game.settingsLoading, game.scenes.Current())
+			if repositoryCalls != 1 || settingsCalls != 1 || len(settings.reads) != 1 || !game.preferences.loading || game.frame == nil || len(game.frame.Bands) == 0 || game.scenes.Current() != ui.SceneTitle {
+				t.Fatalf("incomplete startup: repository=%d settings=%d loading=%t scene=%v", repositoryCalls, settingsCalls, game.preferences.loading, game.scenes.Current())
 			}
 			if _, ok := game.sound.(gameaudio.NoopManager); !ok {
 				t.Fatalf("silent startup constructed %T", game.sound)
@@ -60,7 +61,7 @@ func TestHostCompositionResumesThroughIsolatedRepository(t *testing.T) {
 			}
 			settings.completions = []ui.UISettingsCompletion{{Operation: ui.UISettingsRead, Revision: 1, Settings: ui.DefaultUISettings()}}
 			game.pollUISettings()
-			if game.settingsLoading {
+			if game.preferences.loading {
 				t.Fatal("host did not consume preference completion")
 			}
 			if _, err := game.port.StateHash(); err != nil {
@@ -93,7 +94,7 @@ func TestHostPreferenceFailuresUseDefaults(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if game.settingsLoading || game.settings != ui.DefaultUISettings() || game.frame.EasyMode != game.settings.EasyMode {
+			if game.preferences.loading || game.preferences.value != ui.DefaultUISettings() || game.frame.EasyMode != game.preferences.value.EasyMode {
 				t.Fatal("preference failure blocked startup or skipped defaults")
 			}
 			if _, ok := game.sound.(*gameaudio.LazyManager); !ok {
@@ -107,5 +108,31 @@ func TestHostPreferenceFailuresUseDefaults(t *testing.T) {
 				t.Fatalf("notice=%q", game.notice)
 			}
 		})
+	}
+}
+
+// TestHostCompositionLogsPreferenceOperations asserts the decorator at the seam
+// that uses it, not at its own constructor. logging's own test builds
+// DecorateUISettingsStore directly, so it stays green whether or not
+// composeHostedGame ever calls it -- which is exactly how the wiring got dropped.
+func TestHostCompositionLogsPreferenceOperations(t *testing.T) {
+	repository, err := storage.NewFileRepository(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	session, readLog := openLoggedSession(t)
+	settings := &settingsStoreStub{}
+	game, err := composeHostedGame(17, session, false,
+		func() (application.CampaignRepository, error) { return repository, nil },
+		func() (ui.UISettingsStore, error) { return settings, nil }, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.completions = []ui.UISettingsCompletion{{Operation: ui.UISettingsRead, Revision: 1, Settings: ui.DefaultUISettings()}}
+	game.pollUISettings()
+	logged := readLog()
+	if !strings.Contains(logged, "settings.completion") {
+		t.Fatal("composed host logged no preference operations: the UISettingsStore decorator is not wired into composeHostedGame")
 	}
 }

@@ -56,12 +56,7 @@ type Game struct {
 	pendingSaveSoundIDs    map[gameapi.StorageOpID]struct{}
 	windowClosingRequested bool
 	pendingManualLoadID    gameapi.StorageOpID
-	settingsStore          ui.UISettingsStore
-	settings               ui.UISettings
-	settingsLoading        bool
-	settingsRevision       uint64
-	settingsWriteActive    bool
-	pendingSettings        *ui.UISettings
+	preferences            preferenceController
 	workforce              ui.AssignmentDraft
 	profileDisplayFrame    *gameapi.Frame
 	viewport               render.Viewport
@@ -124,7 +119,8 @@ func newGameWithPresentation(port gameapi.Game, sound gameaudio.SoundManager, se
 	if sound == nil {
 		sound = gameaudio.NoopManager{}
 	}
-	settings := ui.DefaultUISettings()
+	preferences, preferencesErr := newPreferenceController(settingsStore)
+	settings := preferences.value
 	game := &Game{
 		port: port, sound: sound, frame: frame, scene: render.NewMapScene(),
 		panel: hud.New(), notesMode: notesModeFor(settings), guide: ui.NewGuideState(false),
@@ -133,22 +129,17 @@ func newGameWithPresentation(port gameapi.Game, sound gameaudio.SoundManager, se
 		notice:          "Outlined tiles are reachable — arrows choose, Enter confirms", noticeFrames: 300,
 		pendingQuickSaveIDs: make(map[gameapi.StorageOpID]struct{}),
 		pendingSaveSoundIDs: make(map[gameapi.StorageOpID]struct{}),
-		settingsStore:       settingsStore, settings: settings,
-		deviceScaleFactor: func() float64 { return ebiten.Monitor().DeviceScaleFactor() },
-		scenes:            ui.NewSceneStack(),
+		preferences:         preferences,
+		deviceScaleFactor:   func() float64 { return ebiten.Monitor().DeviceScaleFactor() },
+		scenes:              ui.NewSceneStack(),
 	}
-	if settingsStore == nil {
-		sound.SetMaster(settings.MasterVolume, settings.Muted)
-		game.scene.SetReducedMotion(settings.ReducedMotion)
-	} else if err := settingsStore.BeginRead(1); err != nil {
-		sound.SetMaster(settings.MasterVolume, settings.Muted)
-		game.scene.SetReducedMotion(settings.ReducedMotion)
+	if !game.preferences.loading {
+		game.applyPresentationSettings()
+	}
+	if preferencesErr != nil {
 		game.notice = "Preferences could not be loaded; using defaults"
-	} else {
-		game.settingsLoading = true
-		game.settingsRevision = 1
 	}
-	if !game.settingsLoading {
+	if !game.preferences.loading {
 		game.syncEasyMode()
 	}
 	game.ensureSelection()
@@ -232,7 +223,7 @@ func (g *Game) Update() error {
 		return nil
 	}
 	// Wait for preferences before allowing the first gameplay action.
-	if g.frame == nil || g.settingsLoading {
+	if g.frame == nil || g.preferences.loading {
 		return nil
 	}
 	if g.pendingManualLoadID == 0 {
@@ -303,73 +294,6 @@ func (g *Game) Update() error {
 	}
 	g.handleGameplayKeys()
 	return nil
-}
-
-func (g *Game) pollUISettings() {
-	if g.settingsStore == nil {
-		return
-	}
-	for _, completion := range g.settingsStore.Poll() {
-		switch completion.Operation {
-		case ui.UISettingsRead:
-			if !g.settingsLoading || completion.Revision != g.settingsRevision {
-				continue
-			}
-			g.settingsLoading = false
-			g.settings = ui.NormalizeUISettings(completion.Settings)
-			// A completed read is the one install that may seed UI-local state
-			// from preferences; later writes must not rewind the live guide.
-			g.notesMode = notesModeFor(g.settings)
-			g.guide = ui.NewGuideState(g.settings.GuideDismissed)
-			g.sound.SetMaster(g.settings.MasterVolume, g.settings.Muted)
-			g.scene.SetReducedMotion(g.settings.ReducedMotion)
-			g.syncEasyMode()
-			if completion.Err != nil {
-				g.showNotice("Preferences could not be loaded; using defaults")
-			}
-		case ui.UISettingsWrite:
-			if !g.settingsWriteActive || completion.Revision != g.settingsRevision {
-				continue
-			}
-			g.settingsWriteActive = false
-			if completion.Err != nil {
-				g.showNotice("Preferences could not be saved")
-			}
-			if g.pendingSettings != nil {
-				pending := *g.pendingSettings
-				g.pendingSettings = nil
-				if pending != completion.Settings {
-					g.startUISettingsWrite(pending)
-				}
-			}
-		}
-	}
-}
-
-func (g *Game) updateUISettings(settings ui.UISettings) {
-	settings = ui.NormalizeUISettings(settings)
-	g.settings = settings
-	g.notesMode = notesModeFor(settings)
-	g.sound.SetMaster(settings.MasterVolume, settings.Muted)
-	g.scene.SetReducedMotion(settings.ReducedMotion)
-	if g.settingsStore == nil {
-		return
-	}
-	if g.settingsWriteActive {
-		pending := settings
-		g.pendingSettings = &pending
-		return
-	}
-	g.startUISettingsWrite(settings)
-}
-
-func (g *Game) startUISettingsWrite(settings ui.UISettings) {
-	g.settingsRevision++
-	if err := g.settingsStore.BeginWrite(g.settingsRevision, settings); err != nil {
-		g.showNotice("Preferences could not be saved")
-		return
-	}
-	g.settingsWriteActive = true
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
@@ -1172,7 +1096,7 @@ func (g *Game) dispatchBatch(actions []ui.Action) (actionBatchResult, bool) {
 			}
 		}
 		if err != nil {
-			g.showNotice(ui.ErrorMessageForMode(err, g.settings.EasyMode))
+			g.showNotice(ui.ErrorMessageForMode(err, g.preferences.value.EasyMode))
 			return result, false
 		}
 	}
@@ -1192,7 +1116,7 @@ func (g *Game) startNewCampaign() {
 	g.workforce.Clear()
 	g.syncAssignmentDraft(true)
 	g.resetDisclosure()
-	if !g.settings.GuideDismissed {
+	if !g.preferences.value.GuideDismissed {
 		g.guide = ui.NewGuideState(false)
 	}
 	g.pendingLakeNotes = nil
@@ -1347,48 +1271,6 @@ func (g *Game) handleSceneKeyState(pressed, justPressed func(ebiten.Key) bool) b
 	}
 }
 
-// notesModeFor derives the drawer height state from the persisted preference
-// pair, which remains the single source of truth across sessions.
-func notesModeFor(settings ui.UISettings) hud.NotesMode {
-	switch {
-	case !settings.FieldNotesVisible:
-		return hud.NotesHidden
-	case settings.FieldNotesExpanded:
-		return hud.NotesExpanded
-	default:
-		return hud.NotesCompact
-	}
-}
-
-// setNotesMode is the one path that changes the drawer, so the F key and the
-// drawer's own tab cannot disagree about what gets persisted.
-func (g *Game) setNotesMode(mode hud.NotesMode) {
-	if g.settingsLoading {
-		g.showNotice("Loading preferences…")
-		return
-	}
-	settings := g.settings
-	settings.FieldNotesVisible = mode != hud.NotesHidden
-	if mode != hud.NotesHidden {
-		settings.FieldNotesExpanded = mode == hud.NotesExpanded
-	}
-	g.updateUISettings(settings)
-}
-
-// toggleFieldNotes hides a visible drawer and restores the height the player
-// last chose when showing it again.
-func (g *Game) toggleFieldNotes() {
-	if g.notesMode != hud.NotesHidden {
-		g.setNotesMode(hud.NotesHidden)
-		return
-	}
-	mode := hud.NotesCompact
-	if g.settings.FieldNotesExpanded {
-		mode = hud.NotesExpanded
-	}
-	g.setNotesMode(mode)
-}
-
 func (g *Game) setFieldNote(note render.FieldNote) { g.fieldNote = note }
 
 func (g *Game) splitSelectedBand() {
@@ -1411,47 +1293,6 @@ func (g *Game) splitSelectedBand() {
 		return
 	}
 	g.showNotice("This band has no eligible adjacent land tile for splitting.")
-}
-
-func (g *Game) toggleMute() {
-	if g.settingsLoading {
-		g.showNotice("Loading preferences…")
-		return
-	}
-	settings := g.settings
-	settings.Muted = !settings.Muted
-	g.updateUISettings(settings)
-	if settings.Muted {
-		g.showNotice("Sound muted")
-	} else {
-		g.showNotice(fmt.Sprintf("Sound unmuted at %.0f%%", settings.MasterVolume*100))
-	}
-}
-
-func (g *Game) toggleReducedMotion() {
-	if g.settingsLoading {
-		g.showNotice("Loading preferences…")
-		return
-	}
-	settings := g.settings
-	settings.ReducedMotion = !settings.ReducedMotion
-	g.updateUISettings(settings)
-	if settings.ReducedMotion {
-		g.showNotice("Fog shimmer disabled")
-	} else {
-		g.showNotice("Fog shimmer enabled")
-	}
-}
-
-func (g *Game) adjustVolume(delta float64) {
-	if g.settingsLoading {
-		g.showNotice("Loading preferences…")
-		return
-	}
-	settings := g.settings
-	settings.MasterVolume += delta
-	g.updateUISettings(settings)
-	g.showNotice(fmt.Sprintf("Master volume %.0f%%", g.settings.MasterVolume*100))
 }
 
 func (g *Game) openStorageBrowser(mode storageBrowserMode) {
@@ -1770,33 +1611,4 @@ func (g *Game) logicalCursorPosition() (int, int, bool) {
 	}
 	logicalX, logicalY, inside := render.FitPresentation(g.viewport.RenderWidthPx, g.viewport.RenderHeightPx).RenderToLogical(float64(x), float64(y))
 	return int(logicalX), int(logicalY), inside
-}
-
-func (g *Game) syncEasyMode() {
-	if g.settingsLoading || g.frame == nil || g.frame.EasyMode == g.settings.EasyMode {
-		return
-	}
-	frame, err := g.port.Apply(gameapi.SetEasyMode{Enabled: g.settings.EasyMode})
-	if err != nil {
-		g.showNotice(ui.ErrorMessageForMode(err, g.settings.EasyMode))
-		return
-	}
-	g.frame = frame
-	g.publishFrame()
-}
-
-func (g *Game) toggleEasyMode() {
-	if g.settingsLoading {
-		return
-	}
-	settings := g.settings
-	settings.EasyMode = !settings.EasyMode
-	frame, err := g.port.Apply(gameapi.SetEasyMode{Enabled: settings.EasyMode})
-	if err != nil {
-		g.showNotice(ui.ErrorMessageForMode(err, g.settings.EasyMode))
-		return
-	}
-	g.frame = frame
-	g.publishFrame()
-	g.updateUISettings(settings)
 }

@@ -90,12 +90,12 @@ func TestSceneKeyboardEscapeAndModalConsumption(t *testing.T) {
 	if game.scenes.Current() != ui.SceneSettings {
 		t.Fatal("O did not open settings")
 	}
-	before := game.settings.Muted
-	if !game.handleSceneKeyState(keysDown(), keysDown(ebiten.KeyM)) || game.settings.Muted == before {
+	before := game.preferences.value.Muted
+	if !game.handleSceneKeyState(keysDown(), keysDown(ebiten.KeyM)) || game.preferences.value.Muted == before {
 		t.Fatal("settings did not own M")
 	}
 	game.handleSceneKeyState(keysDown(), keysDown(ebiten.KeyEscape, ebiten.KeyM))
-	if game.scenes.Current() != ui.SceneMenu || game.settings.Muted == before {
+	if game.scenes.Current() != ui.SceneMenu || game.preferences.value.Muted == before {
 		t.Fatal("Escape did not take priority over settings action")
 	}
 	game.handleSceneKeyState(keysDown(), keysDown(ebiten.KeyEscape))

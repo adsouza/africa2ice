@@ -265,14 +265,14 @@ func TestPresentationSettingsInstallAtomicallyAndCoalesceWrites(t *testing.T) {
 	store := &settingsStoreStub{}
 	sounds := &soundRecorder{}
 	game := newGameWithPresentation(&gameStub{frame: migrationPreviewFrame()}, sounds, store)
-	if !game.settingsLoading || len(store.reads) != 1 || len(sounds.masters) != 0 {
-		t.Fatalf("initial settings state = loading %t reads %v masters %v", game.settingsLoading, store.reads, sounds.masters)
+	if !game.preferences.loading || len(store.reads) != 1 || len(sounds.masters) != 0 {
+		t.Fatalf("initial settings state = loading %t reads %v masters %v", game.preferences.loading, store.reads, sounds.masters)
 	}
 	loaded := ui.UISettings{SchemaVersion: ui.UISettingsSchemaVersion, FieldNotesVisible: false, MasterVolume: 0.8, Muted: true}
 	store.completions = []ui.UISettingsCompletion{{Operation: ui.UISettingsRead, Revision: 1, Settings: loaded}}
 	game.pollUISettings()
-	if game.settingsLoading || game.settings != loaded || game.notesMode != hud.NotesHidden || len(sounds.masters) != 1 || sounds.masters[0].volume != 0.8 || !sounds.masters[0].muted {
-		t.Fatalf("installed settings = loading %t record %#v notes %v masters %v", game.settingsLoading, game.settings, game.notesMode, sounds.masters)
+	if game.preferences.loading || game.preferences.value != loaded || game.notesMode != hud.NotesHidden || len(sounds.masters) != 1 || sounds.masters[0].volume != 0.8 || !sounds.masters[0].muted {
+		t.Fatalf("installed settings = loading %t record %#v notes %v masters %v", game.preferences.loading, game.preferences.value, game.notesMode, sounds.masters)
 	}
 
 	first := loaded
@@ -282,16 +282,16 @@ func TestPresentationSettingsInstallAtomicallyAndCoalesceWrites(t *testing.T) {
 	latest.MasterVolume = 0.2
 	latest.Muted = false
 	game.updateUISettings(latest)
-	if len(store.writes) != 1 || game.pendingSettings == nil || *game.pendingSettings != latest {
-		t.Fatalf("coalesced writes = starts %v pending %#v", store.writes, game.pendingSettings)
+	if len(store.writes) != 1 || game.preferences.pending == nil || *game.preferences.pending != latest {
+		t.Fatalf("coalesced writes = starts %v pending %#v", store.writes, game.preferences.pending)
 	}
 	store.completions = []ui.UISettingsCompletion{store.writes[0]}
 	game.pollUISettings()
-	if len(store.writes) != 2 || store.writes[1].Settings != latest || !game.settingsWriteActive {
+	if len(store.writes) != 2 || store.writes[1].Settings != latest || !game.preferences.writeActive {
 		t.Fatalf("latest write was not started after completion: %v", store.writes)
 	}
-	if game.settings != latest || sounds.masters[len(sounds.masters)-1].volume != 0.2 || sounds.masters[len(sounds.masters)-1].muted {
-		t.Fatalf("live settings rolled back = %#v masters %v", game.settings, sounds.masters)
+	if game.preferences.value != latest || sounds.masters[len(sounds.masters)-1].volume != 0.2 || sounds.masters[len(sounds.masters)-1].muted {
+		t.Fatalf("live settings rolled back = %#v masters %v", game.preferences.value, sounds.masters)
 	}
 }
 
@@ -982,8 +982,8 @@ func TestStorageBrowserRestrictsWritesButCanDeleteAnyOccupiedGroup(t *testing.T)
 
 func TestSettingsSceneReportsLivePreferences(t *testing.T) {
 	game := New(&gameStub{frame: migrationPreviewFrame()})
-	game.settings.MasterVolume = 0.7
-	game.settings.Muted = true
+	game.preferences.value.MasterVolume = 0.7
+	game.preferences.value.Muted = true
 	game.notesMode = hud.NotesHidden
 
 	overlay := game.overlayState()
@@ -1064,11 +1064,11 @@ func TestStartingNewCampaignReplacesTerminalPresentationState(t *testing.T) {
 	fresh := migrationPreviewFrame()
 	stub.frame = fresh
 	game.startNewCampaign()
-	if game.notesMode != hud.NotesExpanded || !game.settings.FieldNotesVisible || !game.settings.FieldNotesExpanded {
-		t.Fatalf("new campaign did not expand welcome notes: mode %v, settings %+v", game.notesMode, game.settings)
+	if game.notesMode != hud.NotesExpanded || !game.preferences.value.FieldNotesVisible || !game.preferences.value.FieldNotesExpanded {
+		t.Fatalf("new campaign did not expand welcome notes: mode %v, settings %+v", game.notesMode, game.preferences.value)
 	}
 	game.toggleNotesExpanded()
-	if game.notesMode != hud.NotesCompact || game.settings.FieldNotesExpanded {
+	if game.notesMode != hud.NotesCompact || game.preferences.value.FieldNotesExpanded {
 		t.Fatal("welcome collapse shortcut did not persist compact notes")
 	}
 
@@ -1184,11 +1184,11 @@ func TestShowNoticeScalesDurationWithLength(t *testing.T) {
 func TestEasyModeDefaultsAndPersistedOptOutReachSimulation(t *testing.T) {
 	service, _ := application.NewGameService(42)
 	game := New(service)
-	if !game.frame.EasyMode || !game.settings.EasyMode {
+	if !game.frame.EasyMode || !game.preferences.value.EasyMode {
 		t.Fatal("new player did not get easy mode")
 	}
 	game.toggleEasyMode()
-	if game.frame.EasyMode || game.settings.EasyMode {
+	if game.frame.EasyMode || game.preferences.value.EasyMode {
 		t.Fatal("checkbox did not disable easy mode")
 	}
 	frame, err := service.NewCampaign()
@@ -1203,7 +1203,7 @@ func TestEasyModeDefaultsAndPersistedOptOutReachSimulation(t *testing.T) {
 	settings.EasyMode = false
 	store.completions = []ui.UISettingsCompletion{{Operation: ui.UISettingsRead, Revision: 1, Settings: settings}}
 	game.pollUISettings()
-	if game.frame.EasyMode || game.settings.EasyMode {
+	if game.frame.EasyMode || game.preferences.value.EasyMode {
 		t.Fatal("persisted opt-out ignored")
 	}
 	if game.frame.WorldRevision != initial.WorldRevision {

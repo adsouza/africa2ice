@@ -64,8 +64,8 @@ func TestIntentsReuseHotkeyPaths(t *testing.T) {
 		t.Fatal("OpenRow/ToggleDetails not applied")
 	}
 	game.handleIntents([]hud.Intent{{Kind: hud.IntentSetNotesMode, Notes: hud.NotesExpanded}})
-	if game.notesMode != hud.NotesExpanded || !game.settings.FieldNotesExpanded || !game.settings.FieldNotesVisible {
-		t.Fatalf("SetNotesMode persisted %+v", game.settings)
+	if game.notesMode != hud.NotesExpanded || !game.preferences.value.FieldNotesExpanded || !game.preferences.value.FieldNotesVisible {
+		t.Fatalf("SetNotesMode persisted %+v", game.preferences.value)
 	}
 }
 
@@ -93,8 +93,8 @@ func TestHidingNotesPreservesTheLastChosenHeight(t *testing.T) {
 	game.setNotesMode(hud.NotesExpanded)
 	game.setNotesMode(hud.NotesHidden)
 	game.toggleFieldNotes()
-	if game.notesMode != hud.NotesExpanded || !game.settings.FieldNotesExpanded {
-		t.Fatalf("after hide+toggle: notesMode %v expanded %t, want NotesExpanded preserved", game.notesMode, game.settings.FieldNotesExpanded)
+	if game.notesMode != hud.NotesExpanded || !game.preferences.value.FieldNotesExpanded {
+		t.Fatalf("after hide+toggle: notesMode %v expanded %t, want NotesExpanded preserved", game.notesMode, game.preferences.value.FieldNotesExpanded)
 	}
 }
 
@@ -169,11 +169,11 @@ func TestGuideFollowsTheTurnAndPersistsDismissal(t *testing.T) {
 		t.Fatalf("guide after a queued move = %+v", game.guide)
 	}
 	game.handleIntents([]hud.Intent{{Kind: hud.IntentGuideDismiss}})
-	if game.guide.Visible() || !game.settings.GuideDismissed {
-		t.Fatalf("dismissal not persisted: guide %+v settings %+v", game.guide, game.settings)
+	if game.guide.Visible() || !game.preferences.value.GuideDismissed {
+		t.Fatalf("dismissal not persisted: guide %+v settings %+v", game.guide, game.preferences.value)
 	}
 	game.handleIntents([]hud.Intent{{Kind: hud.IntentShowGuide}})
-	if game.guide.Step != ui.GuideMove || game.settings.GuideDismissed {
+	if game.guide.Step != ui.GuideMove || game.preferences.value.GuideDismissed {
 		t.Fatal("Show first-turn guide did not restore the card")
 	}
 }
