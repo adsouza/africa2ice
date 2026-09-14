@@ -48,15 +48,15 @@ func TestHostCompositionResumesThroughIsolatedRepository(t *testing.T) {
 			if _, ok := game.sound.(gameaudio.NoopManager); !ok {
 				t.Fatalf("silent startup constructed %T", game.sound)
 			}
-			if game.startupRestorePending != resume {
-				t.Fatalf("resume pending=%t want %t", game.startupRestorePending, resume)
+			if game.storage.startupRestorePending != resume {
+				t.Fatalf("resume pending=%t want %t", game.storage.startupRestorePending, resume)
 			}
 			deadline := time.Now().Add(3 * time.Second)
-			for game.startupRestorePending && time.Now().Before(deadline) {
+			for game.storage.startupRestorePending && time.Now().Before(deadline) {
 				game.pollStorage()
 				time.Sleep(time.Millisecond)
 			}
-			if game.startupRestorePending || game.scenes.Current() != ui.SceneTitle {
+			if game.storage.startupRestorePending || game.scenes.Current() != ui.SceneTitle {
 				t.Fatal("empty repository did not settle on title")
 			}
 			settings.completions = []ui.UISettingsCompletion{{Operation: ui.UISettingsRead, Revision: 1, Settings: ui.DefaultUISettings()}}

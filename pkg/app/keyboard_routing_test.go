@@ -167,19 +167,19 @@ func TestStorageKeyboardSerializesOperations(t *testing.T) {
 	if stub.savedSlot != 0 || stub.deletedSlot != 0 {
 		t.Fatal("storage action ran before list completion")
 	}
-	stub.results = []gameapi.StorageResult{{OperationID: game.storageListID, Operation: gameapi.StorageList, Slots: []gameapi.SlotMetadata{{SlotID: 2}}}}
+	stub.results = []gameapi.StorageResult{{OperationID: game.storage.storageListID, Operation: gameapi.StorageList, Slots: []gameapi.SlotMetadata{{SlotID: 2}}}}
 	game.pollStorage()
 	game.handleSceneKeyState(keysDown(), keysDown(ebiten.KeyArrowUp))
-	if game.storageSelection != len(storageBrowserSlots)-1 {
+	if game.storage.storageSelection != len(storageBrowserSlots)-1 {
 		t.Fatal("Up did not wrap selection")
 	}
 	game.handleSceneKeyState(keysDown(), keysDown(ebiten.KeyArrowDown))
 	game.handleSceneKeyState(keysDown(), keysDown(ebiten.KeyArrowDown))
 	game.handleSceneKeyState(keysDown(), keysDown(ebiten.KeyEnter, ebiten.KeyDelete))
-	if stub.savedSlot != 2 || stub.deletedSlot != 0 || game.storageOperationID == 0 {
+	if stub.savedSlot != 2 || stub.deletedSlot != 0 || game.storage.storageOperationID == 0 {
 		t.Fatal("Enter+Delete did not serialize behind save")
 	}
-	stub.results = []gameapi.StorageResult{{OperationID: game.storageOperationID, Operation: gameapi.StorageSave, Slot: 2}}
+	stub.results = []gameapi.StorageResult{{OperationID: game.storage.storageOperationID, Operation: gameapi.StorageSave, Slot: 2}}
 	game.pollStorage()
 	game.handleSceneKeyState(keysDown(), keysDown(ebiten.KeyBackspace))
 	if stub.deletedSlot != 2 {

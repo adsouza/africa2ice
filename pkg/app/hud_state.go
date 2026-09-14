@@ -57,23 +57,23 @@ func (g *Game) overlayState() hud.OverlayState {
 	if overlay.Scene != ui.SceneStorage {
 		return overlay
 	}
-	overlay.StorageSaving = g.storageMode == storageBrowserSave
+	overlay.StorageSaving = g.storage.storageMode == storageBrowserSave
 	overlay.StorageHeading = "Load / Delete"
 	if overlay.StorageSaving {
 		overlay.StorageHeading = "Save / Delete"
 	}
 	for index, slot := range storageBrowserSlots {
 		row := hud.StorageRow{Label: storageSlotLabel(slot), Slot: slot, Detail: "Empty", Writable: slot >= 1 && slot <= 3}
-		if metadata, exists := g.storageMetadata(slot); exists {
+		if metadata, exists := g.storage.storageMetadata(slot); exists {
 			row.Occupied = true
 			row.Detail = fmt.Sprintf("Turn %d · %d BP · sapiens %d", metadata.Turn, metadata.YearBP, metadata.SapiensPopulation)
 		}
 		overlay.StorageRows[index] = row
 	}
 	switch {
-	case g.storageListID != 0:
+	case g.storage.storageListID != 0:
 		overlay.StorageBusy = "Reading save metadata…"
-	case g.storageOperationID != 0:
+	case g.storage.storageOperationID != 0:
 		overlay.StorageBusy = "Storage operation pending…"
 	}
 	return overlay

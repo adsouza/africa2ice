@@ -201,13 +201,13 @@ func (g *Game) handleOverlayIntent(intent hud.Intent) {
 		g.scenes.Reset()
 		g.scenes.Push(ui.SceneTitle)
 	case hud.IntentSaveSlot:
-		g.storageSelection = storageIndexForSlot(intent.Slot)
+		g.storage.storageSelection = storageIndexForSlot(intent.Slot)
 		g.activateStorageSelection()
 	case hud.IntentLoadSlot:
-		g.storageSelection = storageIndexForSlot(intent.Slot)
+		g.storage.storageSelection = storageIndexForSlot(intent.Slot)
 		g.activateStorageSelection()
 	case hud.IntentDeleteSlot:
-		g.storageSelection = storageIndexForSlot(intent.Slot)
+		g.storage.storageSelection = storageIndexForSlot(intent.Slot)
 		g.deleteStorageSelection()
 	case hud.IntentSetVolume:
 		if !g.preferences.loading && intent.Volume != g.preferences.value.MasterVolume {

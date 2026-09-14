@@ -684,7 +684,7 @@ func TestStartupResumeLoadsNewestQuickOrAutosave(t *testing.T) {
 	game.regionalPulseFocused = true
 
 	game.beginStartupResume()
-	listID := game.startupRestoreListID
+	listID := game.storage.startupRestoreListID
 	stub.results = []gameapi.StorageResult{{
 		OperationID: listID,
 		Operation:   gameapi.StorageList,
@@ -696,19 +696,19 @@ func TestStartupResumeLoadsNewestQuickOrAutosave(t *testing.T) {
 		},
 	}}
 	game.pollStorage()
-	if stub.loadedSlot != 101 || game.startupRestoreLoadID == 0 || !game.startupRestorePending {
-		t.Fatalf("startup list did not load newest resume slot: slot=%d loadID=%d pending=%t", stub.loadedSlot, game.startupRestoreLoadID, game.startupRestorePending)
+	if stub.loadedSlot != 101 || game.storage.startupRestoreLoadID == 0 || !game.storage.startupRestorePending {
+		t.Fatalf("startup list did not load newest resume slot: slot=%d loadID=%d pending=%t", stub.loadedSlot, game.storage.startupRestoreLoadID, game.storage.startupRestorePending)
 	}
 
 	stub.results = []gameapi.StorageResult{{
-		OperationID:      game.startupRestoreLoadID,
+		OperationID:      game.storage.startupRestoreLoadID,
 		Operation:        gameapi.StorageLoad,
 		Slot:             101,
 		ReplacementFrame: restored,
 	}}
 	game.pollStorage()
-	if game.startupRestorePending || game.frame.Turn != 3 || game.frame.Bands[0].TileID != 2 {
-		t.Fatalf("restored state = pending %t, turn %d, tile %d", game.startupRestorePending, game.frame.Turn, game.frame.Bands[0].TileID)
+	if game.storage.startupRestorePending || game.frame.Turn != 3 || game.frame.Bands[0].TileID != 2 {
+		t.Fatalf("restored state = pending %t, turn %d, tile %d", game.storage.startupRestorePending, game.frame.Turn, game.frame.Bands[0].TileID)
 	}
 	if game.notice != "Autosave restored — Auto 1" {
 		t.Fatalf("restore notice = %q", game.notice)
@@ -740,14 +740,14 @@ func TestManualSlotShortcutsUseExplicitSlotsAndFreezeARequestedLoad(t *testing.T
 		t.Fatalf("duplicate completion replayed manual-save sound: %v", sounds.played)
 	}
 	game.beginManualLoad(3)
-	if stub.loadedSlot != 3 || game.pendingManualLoadID == 0 || game.notice != "Loading Manual 3…" {
-		t.Fatalf("manual load = slot %d pending %d notice %q", stub.loadedSlot, game.pendingManualLoadID, game.notice)
+	if stub.loadedSlot != 3 || game.storage.pendingManualLoadID == 0 || game.notice != "Loading Manual 3…" {
+		t.Fatalf("manual load = slot %d pending %d notice %q", stub.loadedSlot, game.storage.pendingManualLoadID, game.notice)
 	}
-	operationID := game.pendingManualLoadID
+	operationID := game.storage.pendingManualLoadID
 	stub.results = []gameapi.StorageResult{{Operation: gameapi.StorageLoad, OperationID: operationID, Slot: 3, ReplacementFrame: migrationPreviewFrame()}}
 	game.pollStorage()
-	if game.pendingManualLoadID != 0 || game.notice != "Loaded Manual 3" {
-		t.Fatalf("manual load completion = pending %d notice %q", game.pendingManualLoadID, game.notice)
+	if game.storage.pendingManualLoadID != 0 || game.notice != "Loaded Manual 3" {
+		t.Fatalf("manual load completion = pending %d notice %q", game.storage.pendingManualLoadID, game.notice)
 	}
 
 	game.editAssignmentDraft(100)
@@ -926,11 +926,11 @@ func TestStorageBrowserListsAllGroupsAndActivatesExplicitOperations(t *testing.T
 	game := New(stub)
 	game.scenes.Push(ui.SceneMenu)
 	game.openStorageBrowser(storageBrowserLoad)
-	if game.scenes.Current() != ui.SceneStorage || game.storageListID == 0 {
-		t.Fatalf("opened browser = scene %d list %d", game.scenes.Current(), game.storageListID)
+	if game.scenes.Current() != ui.SceneStorage || game.storage.storageListID == 0 {
+		t.Fatalf("opened browser = scene %d list %d", game.scenes.Current(), game.storage.storageListID)
 	}
 	stub.results = []gameapi.StorageResult{{
-		OperationID: game.storageListID, Operation: gameapi.StorageList,
+		OperationID: game.storage.storageListID, Operation: gameapi.StorageList,
 		Slots: []gameapi.SlotMetadata{
 			{SlotID: 1, SlotKind: gameapi.ManualSlot, Turn: 4, YearBP: 78_800, SapiensPopulation: 490},
 			{SlotID: 102, SlotKind: gameapi.AutoSlot, Turn: 8, YearBP: 77_600, SapiensPopulation: 510},
@@ -950,10 +950,10 @@ func TestStorageBrowserListsAllGroupsAndActivatesExplicitOperations(t *testing.T
 	}
 
 	game.handleIntents([]hud.Intent{{Kind: hud.IntentLoadSlot, Slot: 102}})
-	if stub.loadedSlot != 102 || game.pendingManualLoadID == 0 {
-		t.Fatalf("autosave load = slot %d pending %d", stub.loadedSlot, game.pendingManualLoadID)
+	if stub.loadedSlot != 102 || game.storage.pendingManualLoadID == 0 {
+		t.Fatalf("autosave load = slot %d pending %d", stub.loadedSlot, game.storage.pendingManualLoadID)
 	}
-	loadID := game.pendingManualLoadID
+	loadID := game.storage.pendingManualLoadID
 	stub.results = []gameapi.StorageResult{{OperationID: loadID, Operation: gameapi.StorageLoad, Slot: 102, ReplacementFrame: migrationPreviewFrame()}}
 	game.pollStorage()
 	if game.scenes.Current() != ui.SceneGameplay || game.notice != "Loaded Auto 2" {
@@ -966,17 +966,17 @@ func TestStorageBrowserRestrictsWritesButCanDeleteAnyOccupiedGroup(t *testing.T)
 	game := New(stub)
 	game.scenes.Push(ui.SceneMenu)
 	game.openStorageBrowser(storageBrowserSave)
-	game.storageListID = 0
-	game.storageSlots = []gameapi.SlotMetadata{{SlotID: 99, SlotKind: gameapi.QuickSlot}}
+	game.storage.storageListID = 0
+	game.storage.storageSlots = []gameapi.SlotMetadata{{SlotID: 99, SlotKind: gameapi.QuickSlot}}
 
-	game.storageSelection = 3
+	game.storage.storageSelection = 3
 	game.activateStorageSelection()
 	if stub.savedSlot != 0 || !strings.Contains(game.notice, "Only Manual 1–3") {
 		t.Fatalf("quick-slot overwrite = saved %d notice %q", stub.savedSlot, game.notice)
 	}
 	game.deleteStorageSelection()
-	if stub.deletedSlot != 99 || game.storageOperationID == 0 {
-		t.Fatalf("quick-slot delete = slot %d operation %d", stub.deletedSlot, game.storageOperationID)
+	if stub.deletedSlot != 99 || game.storage.storageOperationID == 0 {
+		t.Fatalf("quick-slot delete = slot %d operation %d", stub.deletedSlot, game.storage.storageOperationID)
 	}
 }
 
@@ -1025,11 +1025,11 @@ func TestStartupResumeQuietlyKeepsNewGameWithoutResumeSave(t *testing.T) {
 	stub := &gameStub{frame: migrationPreviewFrame()}
 	game := New(stub)
 	game.beginStartupResume()
-	stub.results = []gameapi.StorageResult{{OperationID: game.startupRestoreListID, Operation: gameapi.StorageList}}
+	stub.results = []gameapi.StorageResult{{OperationID: game.storage.startupRestoreListID, Operation: gameapi.StorageList}}
 
 	game.pollStorage()
-	if game.startupRestorePending || stub.loadedSlot != 0 {
-		t.Fatalf("empty slot list = pending %t, loaded slot %d", game.startupRestorePending, stub.loadedSlot)
+	if game.storage.startupRestorePending || stub.loadedSlot != 0 {
+		t.Fatalf("empty slot list = pending %t, loaded slot %d", game.storage.startupRestorePending, stub.loadedSlot)
 	}
 }
 
@@ -1037,14 +1037,14 @@ func TestQuickSaveRemainsPendingUntilItsCompletion(t *testing.T) {
 	stub := &gameStub{frame: migrationPreviewFrame()}
 	game := New(stub)
 	game.beginQuickSave()
-	if stub.savedSlot != 99 || len(game.pendingQuickSaveIDs) != 1 {
-		t.Fatalf("quick-save start = slot %d, pending %d", stub.savedSlot, len(game.pendingQuickSaveIDs))
+	if stub.savedSlot != 99 || len(game.storage.pendingQuickSaveIDs) != 1 {
+		t.Fatalf("quick-save start = slot %d, pending %d", stub.savedSlot, len(game.storage.pendingQuickSaveIDs))
 	}
 	operationID := stub.nextStorageID
 	stub.results = []gameapi.StorageResult{{OperationID: operationID, Operation: gameapi.StorageSave, Slot: 99}}
 
 	game.pollStorage()
-	if len(game.pendingQuickSaveIDs) != 0 {
+	if len(game.storage.pendingQuickSaveIDs) != 0 {
 		t.Fatal("completed quick-save still blocks shutdown")
 	}
 }

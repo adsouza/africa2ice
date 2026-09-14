@@ -48,14 +48,8 @@ type Game struct {
 	hasMigrationPreview    bool
 	hoveredTile            gameapi.TileID
 	hasHoveredTile         bool
-	startupRestorePending  bool
-	startupRestoreListID   gameapi.StorageOpID
-	startupRestoreLoadID   gameapi.StorageOpID
-	startupRestoreSlot     int
-	pendingQuickSaveIDs    map[gameapi.StorageOpID]struct{}
-	pendingSaveSoundIDs    map[gameapi.StorageOpID]struct{}
 	windowClosingRequested bool
-	pendingManualLoadID    gameapi.StorageOpID
+	storage                storageController
 	preferences            preferenceController
 	workforce              ui.AssignmentDraft
 	profileDisplayFrame    *gameapi.Frame
@@ -63,11 +57,6 @@ type Game struct {
 	viewportInitialized    bool
 	deviceScaleFactor      func() float64
 	scenes                 ui.SceneStack
-	storageMode            storageBrowserMode
-	storageSlots           []gameapi.SlotMetadata
-	storageSelection       int
-	storageListID          gameapi.StorageOpID
-	storageOperationID     gameapi.StorageOpID
 	toasts                 ui.ToastManager
 	traitFocus             gameapi.HeritableTrait
 	interbreedFocus        gameapi.BandID
@@ -91,15 +80,6 @@ const (
 	fieldNotesHotkey = ebiten.KeyF
 	splitBandHotkey  = ebiten.KeyN
 )
-
-type storageBrowserMode uint8
-
-const (
-	storageBrowserSave storageBrowserMode = iota
-	storageBrowserLoad
-)
-
-var storageBrowserSlots = [...]int{1, 2, 3, 99, 101, 102, 103}
 
 func NewWalkingSkeleton() *Game {
 	port := newSkeletonPort()
@@ -127,11 +107,10 @@ func newGameWithPresentation(port gameapi.Game, sound gameaudio.SoundManager, se
 		fieldNote:       ui.CampaignOverviewFieldNote(),
 		openExternalURL: openExternalURL,
 		notice:          "Outlined tiles are reachable — arrows choose, Enter confirms", noticeFrames: 300,
-		pendingQuickSaveIDs: make(map[gameapi.StorageOpID]struct{}),
-		pendingSaveSoundIDs: make(map[gameapi.StorageOpID]struct{}),
-		preferences:         preferences,
-		deviceScaleFactor:   func() float64 { return ebiten.Monitor().DeviceScaleFactor() },
-		scenes:              ui.NewSceneStack(),
+		storage:           newStorageController(),
+		preferences:       preferences,
+		deviceScaleFactor: func() float64 { return ebiten.Monitor().DeviceScaleFactor() },
+		scenes:            ui.NewSceneStack(),
 	}
 	if !game.preferences.loading {
 		game.applyPresentationSettings()
@@ -213,20 +192,20 @@ func (g *Game) Update() error {
 		g.windowClosingRequested = true
 	}
 	if g.windowClosingRequested {
-		if len(g.pendingQuickSaveIDs) == 0 {
+		if len(g.storage.pendingQuickSaveIDs) == 0 {
 			return ebiten.Termination
 		}
 		g.showNotice("Finishing quick-save before exit…")
 		return nil
 	}
-	if g.startupRestorePending {
+	if g.storage.startupRestorePending {
 		return nil
 	}
 	// Wait for preferences before allowing the first gameplay action.
 	if g.frame == nil || g.preferences.loading {
 		return nil
 	}
-	if g.pendingManualLoadID == 0 {
+	if g.storage.pendingManualLoadID == 0 {
 		// Retry after a startup load failed while preferences were arriving.
 		g.syncEasyMode()
 	}
@@ -269,7 +248,7 @@ func (g *Game) Update() error {
 		}
 		break
 	}
-	if g.pendingManualLoadID != 0 {
+	if g.storage.pendingManualLoadID != 0 {
 		return nil
 	}
 	if g.scenes.Current() != ui.SceneGameplay {
@@ -327,7 +306,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// readiness there lets the first gesture disappear into the startup guard.
 	// This must still run on a skipped frame: readiness is about whether a
 	// frame has ever been shown, not whether this particular tick painted.
-	if !g.firstDrawDone && !g.startupRestorePending {
+	if !g.firstDrawDone && !g.storage.startupRestorePending {
 		g.firstDrawDone = true
 		if g.onFirstDraw != nil {
 			g.onFirstDraw()
@@ -1064,12 +1043,7 @@ func (g *Game) dispatchBatch(actions []ui.Action) (actionBatchResult, bool) {
 		case ui.ActionSave:
 			result.operationID, err = g.port.BeginSave(action.Slot())
 			if err == nil {
-				if action.Slot() == 99 {
-					g.pendingQuickSaveIDs[result.operationID] = struct{}{}
-				}
-				if action.Slot() == 99 || action.Slot() >= 1 && action.Slot() <= 3 {
-					g.pendingSaveSoundIDs[result.operationID] = struct{}{}
-				}
+				g.storage.trackSave(result.operationID, action.Slot())
 			}
 		case ui.ActionLoad:
 			result.operationID, err = g.port.BeginLoad(action.Slot())
@@ -1133,30 +1107,6 @@ func (g *Game) clearMigrationPreview() {
 	g.hasMigrationPreview = false
 	g.migrationPreviewBand = 0
 	g.migrationPreviewTile = 0
-}
-
-func (g *Game) beginQuickSave() {
-	g.dispatchBatch([]ui.Action{ui.SaveAction(99)})
-}
-
-func (g *Game) beginManualSave(slot int) {
-	if _, accepted := g.dispatchBatch([]ui.Action{ui.SaveAction(slot)}); !accepted {
-		return
-	}
-	g.showNotice(fmt.Sprintf("Saving Manual %d…", slot))
-}
-
-func (g *Game) beginManualLoad(slot int) {
-	if g.workforce.Dirty() {
-		g.showNotice("Apply or discard workforce changes before loading")
-		return
-	}
-	result, accepted := g.dispatchBatch([]ui.Action{ui.LoadAction(slot)})
-	if !accepted {
-		return
-	}
-	g.pendingManualLoadID = result.operationID
-	g.showNotice(fmt.Sprintf("Loading Manual %d…", slot))
 }
 
 func (g *Game) handleSceneInput() bool {
@@ -1293,254 +1243,6 @@ func (g *Game) splitSelectedBand() {
 		return
 	}
 	g.showNotice("This band has no eligible adjacent land tile for splitting.")
-}
-
-func (g *Game) openStorageBrowser(mode storageBrowserMode) {
-	result, accepted := g.dispatchBatch([]ui.Action{ui.ListSlotsAction()})
-	if !accepted {
-		return
-	}
-	g.storageMode = mode
-	g.storageSelection = 0
-	g.storageSlots = nil
-	g.storageListID = result.operationID
-	g.dispatchBatch([]ui.Action{ui.PushSceneAction(ui.SceneStorage)})
-}
-
-func (g *Game) moveStorageSelection(delta int) {
-	count := len(storageBrowserSlots)
-	g.storageSelection = (g.storageSelection + delta + count) % count
-}
-
-func (g *Game) activateStorageSelection() {
-	if g.storageListID != 0 || g.storageOperationID != 0 {
-		return
-	}
-	slot := storageBrowserSlots[g.storageSelection]
-	if g.storageMode == storageBrowserSave {
-		if slot < 1 || slot > 3 {
-			g.showNotice("Only Manual 1–3 can be overwritten from the Save list")
-			return
-		}
-		result, accepted := g.dispatchBatch([]ui.Action{ui.SaveAction(slot)})
-		if !accepted {
-			return
-		}
-		g.storageOperationID = result.operationID
-		g.showNotice(fmt.Sprintf("Saving Manual %d…", slot))
-		return
-	}
-	if _, ok := g.storageMetadata(slot); !ok {
-		g.showNotice("That slot is empty")
-		return
-	}
-	if g.workforce.Dirty() {
-		g.showNotice("Apply or discard workforce changes before loading")
-		return
-	}
-	result, accepted := g.dispatchBatch([]ui.Action{ui.LoadAction(slot)})
-	if !accepted {
-		return
-	}
-	g.pendingManualLoadID = result.operationID
-	g.storageOperationID = result.operationID
-	g.showNotice("Loading " + storageSlotLabel(slot) + "…")
-}
-
-func (g *Game) deleteStorageSelection() {
-	if g.storageListID != 0 || g.storageOperationID != 0 {
-		return
-	}
-	slot := storageBrowserSlots[g.storageSelection]
-	if _, ok := g.storageMetadata(slot); !ok {
-		g.showNotice("That slot is already empty")
-		return
-	}
-	result, accepted := g.dispatchBatch([]ui.Action{ui.DeleteAction(slot)})
-	if !accepted {
-		return
-	}
-	g.storageOperationID = result.operationID
-	g.showNotice("Deleting " + storageSlotLabel(slot) + "…")
-}
-
-func (g *Game) storageMetadata(slot int) (gameapi.SlotMetadata, bool) {
-	for _, metadata := range g.storageSlots {
-		if metadata.SlotID == slot {
-			return metadata, true
-		}
-	}
-	return gameapi.SlotMetadata{}, false
-}
-
-func storageSlotLabel(slot int) string {
-	switch slot {
-	case 1, 2, 3:
-		return fmt.Sprintf("Manual %d", slot)
-	case 99:
-		return "Quick Save"
-	case 101, 102, 103:
-		return fmt.Sprintf("Auto %d", slot-100)
-	default:
-		return fmt.Sprintf("Slot %d", slot)
-	}
-}
-
-func (g *Game) beginStartupResume() {
-	result, accepted := g.dispatchBatch([]ui.Action{ui.ListSlotsAction()})
-	if !accepted {
-		return
-	}
-	g.startupRestorePending = true
-	g.startupRestoreListID = result.operationID
-}
-
-func (g *Game) pollStorage() {
-	for _, result := range g.port.PollStorage() {
-		_, saveSoundPending := g.pendingSaveSoundIDs[result.OperationID]
-		delete(g.pendingSaveSoundIDs, result.OperationID)
-		if result.Operation == gameapi.StorageSave && result.Slot == 99 {
-			delete(g.pendingQuickSaveIDs, result.OperationID)
-		}
-
-		isStartupList := g.startupRestorePending && result.Operation == gameapi.StorageList && result.OperationID == g.startupRestoreListID
-		isStartupLoad := g.startupRestorePending && result.Operation == gameapi.StorageLoad && result.OperationID == g.startupRestoreLoadID
-		isManualLoad := result.Operation == gameapi.StorageLoad && result.OperationID == g.pendingManualLoadID
-		isBrowserList := result.Operation == gameapi.StorageList && result.OperationID == g.storageListID
-		isBrowserOperation := result.OperationID != 0 && result.OperationID == g.storageOperationID
-		if isBrowserList {
-			g.storageListID = 0
-			if result.Err == nil {
-				g.storageSlots = append(g.storageSlots[:0], result.Slots...)
-			}
-		}
-		if isBrowserOperation {
-			g.storageOperationID = 0
-		}
-		if isStartupList {
-			g.startupRestoreListID = 0
-			if result.Err == nil {
-				if slot, ok := newestResumeSlot(result.Slots); ok {
-					loadResult, accepted := g.dispatchBatch([]ui.Action{ui.LoadAction(slot)})
-					if !accepted {
-						g.startupRestorePending = false
-					} else {
-						g.startupRestoreLoadID = loadResult.operationID
-						g.startupRestoreSlot = slot
-					}
-				}
-				if g.startupRestoreLoadID == 0 {
-					g.startupRestorePending = false
-				}
-			} else {
-				g.startupRestorePending = false
-			}
-		}
-
-		if result.ReplacementFrame != nil {
-			g.frame = result.ReplacementFrame
-			g.syncEasyMode()
-			g.publishFrame()
-			g.pendingLakeNotes = nil
-			g.setFieldNote(ui.CampaignOverviewFieldNote())
-			g.breakthroughFrames = 0
-			g.regionalPulseFocused = false
-			g.clearMigrationPreview()
-			g.selectedBand = 0
-			g.ensureSelection()
-			g.workforce.Clear()
-			g.syncAssignmentDraft(true)
-			g.resetDisclosure()
-			g.scenes.Reset()
-			if isStartupLoad {
-				g.scenes.Push(ui.SceneTitle)
-			}
-		}
-		if isStartupLoad {
-			g.startupRestorePending = false
-			g.startupRestoreLoadID = 0
-		}
-		if isManualLoad {
-			g.pendingManualLoadID = 0
-		}
-		if result.Err != nil {
-			if isStartupLoad {
-				g.startupRestoreSlot = 0
-			}
-			g.queueToast("Storage failed: "+ui.ErrorMessage(result.Err), true)
-			continue
-		}
-		if result.Metadata != nil {
-			if result.Operation == gameapi.StorageDelete {
-				g.removeStorageMetadata(result.Slot)
-			} else {
-				g.installStorageMetadata(*result.Metadata)
-			}
-		}
-		switch {
-		case isStartupLoad:
-			if g.startupRestoreSlot == 99 {
-				g.queueToast("Quick save restored", false)
-			} else {
-				g.queueToast(fmt.Sprintf("Autosave restored — Auto %d", g.startupRestoreSlot-100), false)
-			}
-			g.startupRestoreSlot = 0
-		case isManualLoad:
-			g.queueToast("Loaded "+storageSlotLabel(result.Slot), false)
-		case result.Operation == gameapi.StorageLoad:
-			g.queueToast("Game loaded", false)
-		case result.Operation == gameapi.StorageSave && result.Slot >= 1 && result.Slot <= 3:
-			if saveSoundPending {
-				g.sound.Play(gameaudio.SFXSaveComplete)
-			}
-			g.queueToast(fmt.Sprintf("Saved Manual %d", result.Slot), false)
-		case result.Operation == gameapi.StorageSave && result.Slot == 99:
-			if saveSoundPending {
-				g.sound.Play(gameaudio.SFXSaveComplete)
-			}
-			g.queueToast("Quick-saved", false)
-		case result.Operation == gameapi.StorageSave && result.Slot >= 101 && result.Slot <= 103:
-			g.queueToast("Autosaved — "+storageSlotLabel(result.Slot), false)
-		case result.Operation == gameapi.StorageDelete:
-			g.queueToast("Deleted "+storageSlotLabel(result.Slot), false)
-		}
-	}
-}
-
-func (g *Game) installStorageMetadata(metadata gameapi.SlotMetadata) {
-	for index := range g.storageSlots {
-		if g.storageSlots[index].SlotID != metadata.SlotID {
-			continue
-		}
-		g.storageSlots[index] = metadata
-		return
-	}
-	g.storageSlots = append(g.storageSlots, metadata)
-}
-
-func (g *Game) removeStorageMetadata(slot int) {
-	for index := range g.storageSlots {
-		if g.storageSlots[index].SlotID != slot {
-			continue
-		}
-		g.storageSlots = append(g.storageSlots[:index], g.storageSlots[index+1:]...)
-		return
-	}
-}
-
-func newestResumeSlot(slots []gameapi.SlotMetadata) (int, bool) {
-	var newest gameapi.SlotMetadata
-	found := false
-	for _, slot := range slots {
-		if slot.SlotKind != gameapi.QuickSlot && slot.SlotKind != gameapi.AutoSlot {
-			continue
-		}
-		if !found || slot.CommitSequence > newest.CommitSequence || slot.CommitSequence == newest.CommitSequence && slot.SlotID < newest.SlotID {
-			newest = slot
-			found = true
-		}
-	}
-	return newest.SlotID, found
 }
 
 func (g *Game) showNotice(message string) {
