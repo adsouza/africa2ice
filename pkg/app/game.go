@@ -1239,21 +1239,14 @@ func (g *Game) splitSelectedBand() {
 	if band == nil {
 		return
 	}
-	// First ordinary candidate -- the destination Band.SplitBlock is projected
-	// for (internal/application/snapshot.go). Changing the rule here without
-	// changing it there makes the Split button's enabled state describe a tile
-	// this never sends, which is the defect SplitBlock exists to close.
-	for _, candidate := range band.MigrationCandidates {
-		if candidate.RequiresPassage {
-			continue
-		}
-		if g.apply(gameapi.SplitBand{BandID: g.selectedBand, Destination: candidate.TileID}) {
-			g.clearMigrationPreview()
-			g.advanceOpenRow()
-		}
+	if !band.HasSplitDestination {
+		g.showNotice("This band has no eligible adjacent land tile for splitting.")
 		return
 	}
-	g.showNotice("This band has no eligible adjacent land tile for splitting.")
+	if g.apply(gameapi.SplitBand{BandID: band.ID, Destination: band.SplitDestination}) {
+		g.clearMigrationPreview()
+		g.advanceOpenRow()
+	}
 }
 
 func (g *Game) showNotice(message string) {

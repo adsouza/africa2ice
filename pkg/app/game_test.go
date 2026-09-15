@@ -218,7 +218,7 @@ func TestFieldNotesAndSplitHotkeysRemainDistinct(t *testing.T) {
 
 func TestSplitHotkeyExplainsWhenNoOrdinaryDestinationExists(t *testing.T) {
 	frame := migrationPreviewFrame()
-	frame.Bands[0].MigrationCandidates[0].RequiresPassage = true
+	frame.Bands[0].HasSplitDestination = false
 	stub := &gameStub{frame: frame}
 	game := New(stub)
 
@@ -1112,6 +1112,7 @@ func migrationPreviewFrame() *gameapi.Frame {
 			{ID: 2, X: -1, Y: -1, Land: true, Explored: true, BaselineK: 100},
 		},
 		Bands: []gameapi.Band{{
+			HasSplitDestination: true, SplitDestination: 2,
 			ID: 7, Species: gameapi.HomoSapiens, TileID: 0,
 			Population:          120,
 			MigrationCandidates: []gameapi.MigrationCandidate{{TileID: 2}},
@@ -1212,5 +1213,32 @@ func TestEasyModeDefaultsAndPersistedOptOutReachSimulation(t *testing.T) {
 	game.toggleEasyMode()
 	if !game.frame.EasyMode || len(store.writes) != 1 || !store.writes[0].Settings.EasyMode {
 		t.Fatal("enabling easy mode did not update simulation and preference store")
+	}
+}
+
+func TestSplitUsesProjectedDestinationInsteadOfCandidateOrder(t *testing.T) {
+	for _, destination := range []gameapi.TileID{0, 1} {
+		frame := migrationPreviewFrame()
+		frame.Bands[0].SplitDestination = destination
+		// Candidate ordering belongs to migration presentation. It cannot change
+		// the command whose eligibility the projection already calculated.
+		stub := &gameStub{frame: frame}
+		game := New(stub)
+		game.splitSelectedBand()
+		command, ok := stub.appliedCommand.(gameapi.SplitBand)
+		if !ok || command.Destination != destination || command.BandID != 7 || len(stub.appliedCommands) != 1 {
+			t.Fatalf("projected destination %d dispatched %#v", destination, stub.appliedCommand)
+		}
+	}
+}
+
+func TestMissingProjectedSplitDestinationDoesNotFallBackToMigration(t *testing.T) {
+	frame := migrationPreviewFrame()
+	frame.Bands[0].HasSplitDestination = false
+	stub := &gameStub{frame: frame}
+	game := New(stub)
+	game.splitSelectedBand()
+	if len(stub.appliedCommands) != 0 {
+		t.Fatal("host invented a split action from migration candidates")
 	}
 }

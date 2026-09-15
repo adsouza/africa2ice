@@ -7,18 +7,6 @@ import (
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 )
 
-// splitDestinationForTest mirrors the choice both the projection and
-// pkg/app.splitSelectedBand make: the first ordinary migration candidate, or
-// the band's own tile when it has none.
-func splitDestinationForTest(band gameapi.Band) gameapi.TileID {
-	for _, candidate := range band.MigrationCandidates {
-		if !candidate.RequiresPassage {
-			return candidate.TileID
-		}
-	}
-	return band.TileID
-}
-
 func firstBandOfSpecies(frame *gameapi.Frame, species gameapi.Species) (gameapi.Band, bool) {
 	for _, band := range frame.Bands {
 		if band.Species == species {
@@ -47,7 +35,7 @@ func TestProjectedSplitEligibilityMatchesAppliedCommand(t *testing.T) {
 			species: gameapi.HomoSapiens,
 			prepare: func(t *testing.T, service *GameService, band gameapi.Band) {
 				t.Helper()
-				if _, err := service.Apply(gameapi.QueueMigration{BandID: band.ID, TileID: splitDestinationForTest(band)}); err != nil {
+				if _, err := service.Apply(gameapi.QueueMigration{BandID: band.ID, TileID: band.SplitDestination}); err != nil {
 					t.Fatal(err)
 				}
 			},
@@ -92,7 +80,7 @@ func TestProjectedSplitEligibilityMatchesAppliedCommand(t *testing.T) {
 					t.Fatal("projection changed campaign")
 				}
 
-				_, err = service.Apply(gameapi.SplitBand{BandID: band.ID, Destination: splitDestinationForTest(band)})
+				_, err = service.Apply(gameapi.SplitBand{BandID: band.ID, Destination: band.SplitDestination})
 				got := gameapi.ErrorCode("")
 				if err != nil {
 					got = err.(*gameapi.GameError).Code
@@ -102,5 +90,40 @@ func TestProjectedSplitEligibilityMatchesAppliedCommand(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestSplitProjectionIncludesDestinationAndExplicitAbsence(t *testing.T) {
+	service, err := NewGameService(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame, err := service.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	available, absent := 0, 0
+	for _, band := range frame.Bands {
+		expected, found := band.TileID, false
+		for _, candidate := range band.MigrationCandidates {
+			if !candidate.RequiresPassage {
+				expected, found = candidate.TileID, true
+				break
+			}
+		}
+		if band.HasSplitDestination != found || band.SplitDestination != expected {
+			t.Fatalf("band %d projected destination=(%d,%t), want (%d,%t)", band.ID, band.SplitDestination, band.HasSplitDestination, expected, found)
+		}
+		if found {
+			available++
+		} else {
+			absent++
+			if band.SplitBlock == "" {
+				t.Fatalf("band %d has no destination but advertises an allowed split", band.ID)
+			}
+		}
+	}
+	if available == 0 || absent == 0 {
+		t.Fatalf("fixture must exercise available and absent destinations: %d/%d", available, absent)
 	}
 }

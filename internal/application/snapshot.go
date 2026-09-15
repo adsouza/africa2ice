@@ -211,16 +211,18 @@ func projectFrame(world *domain.World, worldRevision, terrainRevision uint64) (*
 				}
 			}
 		}
-		// The split action chooses the first ordinary migration candidate. Use
+		// Project the split action using the first ordinary migration candidate. Use
 		// the origin when none exists so the domain supplies the rejection in
 		// its normal guard order, without duplicating eligibility rules here.
 		splitDestination := band.TileID
 		for _, candidate := range publicBand.MigrationCandidates {
 			if !candidate.RequiresPassage {
 				splitDestination = domain.TileID(candidate.TileID)
+				publicBand.HasSplitDestination = true
 				break
 			}
 		}
+		publicBand.SplitDestination = gameapi.TileID(splitDestination)
 		if err := world.ValidateSplit(band.ID, splitDestination, true); err != nil {
 			publicBand.SplitBlock = domainErrorCode(err)
 		}
