@@ -3,7 +3,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"image"
@@ -37,6 +36,13 @@ type desktopOptions struct {
 	noSound          bool
 }
 
+// Injection points for the entry-point lifetime test; production values only.
+var (
+	newGameWithSound    = app.NewGame
+	newGameWithoutSound = app.NewGameWithoutSound
+	runGame             = ebiten.RunGame
+)
+
 func run(args []string, stdout, stderr io.Writer) int {
 	options, err := parseDesktopOptions(args, stderr)
 	if err != nil {
@@ -68,14 +74,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 	ebiten.SetWindowClosingHandled(true)
 	ebiten.SetScreenClearedEveryFrame(false)
 	ebiten.SetWindowTitle("Africa 2 Ice: Paleolithic Dispersal")
-	newGame := app.NewGame
+	newGame := newGameWithSound
 	if options.noSound {
-		newGame = app.NewGameWithoutSound
+		newGame = newGameWithoutSound
 	}
 	game, err := newGame(0x9e3779b97f4a7c15, session)
 	if err == nil {
-		defer func() { _ = game.Close() }()
-		err = errors.Join(ebiten.RunGame(game), game.Close())
+		err = runGameLoop(game, func() error { return runGame(game) })
 	}
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)

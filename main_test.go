@@ -4,12 +4,16 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/adsouza/africa2ice/internal/adapters/logging"
 	"github.com/adsouza/africa2ice/pkg/app"
+	"github.com/hajimehoshi/ebiten/v2"
 )
 
 func TestInitialDesktopWindowSize(t *testing.T) {
@@ -135,5 +139,72 @@ func TestParseDesktopOptionsAcceptsNoSound(t *testing.T) {
 	}
 	if defaults.noSound {
 		t.Fatalf("noSound defaulted to true: %#v", defaults)
+	}
+}
+
+type closeRecorder struct {
+	closes int
+	err    error
+}
+
+func (c *closeRecorder) Close() error { c.closes++; return c.err }
+
+// TestRunRoutesTheGameThroughTheLifetimeSeam asserts the wiring, not the helper.
+// app.Game.Close has unit tests that construct a game and close it directly; those
+// stay green if run() stops closing at all, which is how a log decorator went
+// unwired two commits ago. Stubbing the seam proves run() reaches the one path
+// that closes.
+func TestRunRoutesTheGameThroughTheLifetimeSeam(t *testing.T) {
+	previousNew, previousLoop, previousRun := newGameWithSound, runGameLoop, runGame
+	t.Cleanup(func() { newGameWithSound, runGameLoop, runGame = previousNew, previousLoop, previousRun })
+
+	// The entry-point wiring test needs identity, not persisted campaign state.
+	built := app.NewWalkingSkeleton()
+	newGameWithSound = func(uint64, *logging.Session) (*app.Game, error) { return built, nil }
+	runGame = func(ebiten.Game) error { t.Error("run() reached the real loop instead of the seam"); return nil }
+	routed, looped := 0, 0
+	runGameLoop = func(game closable, loop func() error) error {
+		routed++
+		if game != closable(built) {
+			t.Error("seam received a different game than run() constructed")
+		}
+		looped++
+		return nil
+	}
+	if code := run(nil, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("run exited %d", code)
+	}
+	if routed != 1 || looped != 1 {
+		t.Fatalf("run() invoked the lifetime seam %d times", routed)
+	}
+}
+
+// TestDefaultRunGameLoopAlwaysCloses covers the seam's own contract: the host is
+// released on the ordinary path and while a panicking loop unwinds, and neither
+// the loop's error nor the close's error is dropped.
+func TestDefaultRunGameLoopAlwaysCloses(t *testing.T) {
+	loopErr, closeErr := errors.New("loop failed"), errors.New("close failed")
+
+	recorder := &closeRecorder{err: closeErr}
+	err := defaultRunGameLoop(recorder, func() error { return loopErr })
+	if !errors.Is(err, loopErr) || !errors.Is(err, closeErr) {
+		t.Fatalf("joined error = %v, want both loop and close failures", err)
+	}
+	if recorder.closes == 0 {
+		t.Fatal("ordinary return did not close the host")
+	}
+
+	panicking := &closeRecorder{}
+	boom := errors.New("loop panicked")
+	recovered := func() (value any) {
+		defer func() { value = recover() }()
+		_ = defaultRunGameLoop(panicking, func() error { panic(boom) })
+		return nil
+	}()
+	if recovered != any(boom) {
+		t.Fatalf("panic = %v, want it to propagate", recovered)
+	}
+	if panicking.closes == 0 {
+		t.Fatal("panicking loop leaked the host")
 	}
 }

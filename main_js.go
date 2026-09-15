@@ -34,17 +34,23 @@ func main() {
 	defer logging.GuardPanic(session)
 	game, err := app.NewGame(0x9e3779b97f4a7c15, session)
 	if err == nil {
-		defer func() { _ = game.Close() }()
-		installPresentationOptions(game)
-		game.SetFirstDrawCallback(func() {
-			document := js.Global().Get("document")
-			document.Get("documentElement").Get("dataset").Set("africa2iceReady", "true")
-			if loader := document.Call("getElementById", "loader"); !loader.IsNull() {
-				loader.Get("style").Set("display", "none")
-			}
+		// Same ownership contract as the desktop entry point, including the
+		// joined close error. The browser normally ends the session before the
+		// loop returns -- RunGame yields only on ebiten.Termination, which the
+		// web build never requests -- so page unload, not this close, is what
+		// usually reclaims the IndexedDB connection and its Web Lock.
+		err = runGameLoop(game, func() error {
+			installPresentationOptions(game)
+			game.SetFirstDrawCallback(func() {
+				document := js.Global().Get("document")
+				document.Get("documentElement").Get("dataset").Set("africa2iceReady", "true")
+				if loader := document.Call("getElementById", "loader"); !loader.IsNull() {
+					loader.Get("style").Set("display", "none")
+				}
+			})
+			ebiten.SetScreenClearedEveryFrame(false)
+			return ebiten.RunGameWithOptions(game, &ebiten.RunGameOptions{DisableHiDPI: false})
 		})
-		ebiten.SetScreenClearedEveryFrame(false)
-		err = ebiten.RunGameWithOptions(game, &ebiten.RunGameOptions{DisableHiDPI: false})
 	}
 	if err != nil {
 		reportBootError(err)
