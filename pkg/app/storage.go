@@ -34,10 +34,10 @@ func (g *Game) beginManualLoad(slot int) {
 		return
 	}
 	result, accepted := g.dispatchBatch([]ui.Action{ui.LoadAction(slot)})
-	if !accepted {
+	if !accepted || result.operationID == 0 {
 		return
 	}
-	g.storage.pendingManualLoadID = result.operationID
+	g.storage.beginManualLoad(result.operationID)
 	g.showNotice(fmt.Sprintf("Loading Manual %d…", slot))
 }
 
@@ -68,7 +68,7 @@ func (g *Game) activateStorageSelection() {
 		if !accepted {
 			return
 		}
-		g.storage.storageOperationID = result.operationID
+		g.storage.beginBrowserOperation(result.operationID, false)
 		g.showNotice(fmt.Sprintf("Saving Manual %d…", slot))
 		return
 	}
@@ -81,11 +81,10 @@ func (g *Game) activateStorageSelection() {
 		return
 	}
 	result, accepted := g.dispatchBatch([]ui.Action{ui.LoadAction(slot)})
-	if !accepted {
+	if !accepted || result.operationID == 0 {
 		return
 	}
-	g.storage.pendingManualLoadID = result.operationID
-	g.storage.storageOperationID = result.operationID
+	g.storage.beginBrowserOperation(result.operationID, true)
 	g.showNotice("Loading " + storageSlotLabel(slot) + "…")
 }
 
@@ -102,7 +101,7 @@ func (g *Game) deleteStorageSelection() {
 	if !accepted {
 		return
 	}
-	g.storage.storageOperationID = result.operationID
+	g.storage.beginBrowserOperation(result.operationID, false)
 	g.showNotice("Deleting " + storageSlotLabel(slot) + "…")
 }
 
@@ -120,8 +119,13 @@ func storageSlotLabel(slot int) string {
 }
 
 func (g *Game) beginStartupResume() {
+	// Ask before spending the operation: beginResume declines a second
+	// resume, and a listing it declines would run untracked.
+	if g.storage.resumePending() {
+		return
+	}
 	result, accepted := g.dispatchBatch([]ui.Action{ui.ListSlotsAction()})
-	if !accepted {
+	if !accepted || result.operationID == 0 {
 		return
 	}
 	g.storage.beginResume(result.operationID)

@@ -684,7 +684,7 @@ func TestStartupResumeLoadsNewestQuickOrAutosave(t *testing.T) {
 	game.regionalPulseFocused = true
 
 	game.beginStartupResume()
-	listID := game.storage.startupRestoreListID
+	listID := game.storage.resume.id
 	stub.results = []gameapi.StorageResult{{
 		OperationID: listID,
 		Operation:   gameapi.StorageList,
@@ -696,19 +696,19 @@ func TestStartupResumeLoadsNewestQuickOrAutosave(t *testing.T) {
 		},
 	}}
 	game.pollStorage()
-	if stub.loadedSlot != 101 || game.storage.startupRestoreLoadID == 0 || !game.storage.startupRestorePending {
-		t.Fatalf("startup list did not load newest resume slot: slot=%d loadID=%d pending=%t", stub.loadedSlot, game.storage.startupRestoreLoadID, game.storage.startupRestorePending)
+	if stub.loadedSlot != 101 || game.storage.resume.id == 0 || !game.storage.resumePending() {
+		t.Fatalf("startup list did not load newest resume slot: slot=%d loadID=%d pending=%t", stub.loadedSlot, game.storage.resume.id, game.storage.resumePending())
 	}
 
 	stub.results = []gameapi.StorageResult{{
-		OperationID:      game.storage.startupRestoreLoadID,
+		OperationID:      game.storage.resume.id,
 		Operation:        gameapi.StorageLoad,
 		Slot:             101,
 		ReplacementFrame: restored,
 	}}
 	game.pollStorage()
-	if game.storage.startupRestorePending || game.frame.Turn != 3 || game.frame.Bands[0].TileID != 2 {
-		t.Fatalf("restored state = pending %t, turn %d, tile %d", game.storage.startupRestorePending, game.frame.Turn, game.frame.Bands[0].TileID)
+	if game.storage.resumePending() || game.frame.Turn != 3 || game.frame.Bands[0].TileID != 2 {
+		t.Fatalf("restored state = pending %t, turn %d, tile %d", game.storage.resumePending(), game.frame.Turn, game.frame.Bands[0].TileID)
 	}
 	if game.notice != "Autosave restored — Auto 1" {
 		t.Fatalf("restore notice = %q", game.notice)
@@ -1025,11 +1025,11 @@ func TestStartupResumeQuietlyKeepsNewGameWithoutResumeSave(t *testing.T) {
 	stub := &gameStub{frame: migrationPreviewFrame()}
 	game := New(stub)
 	game.beginStartupResume()
-	stub.results = []gameapi.StorageResult{{OperationID: game.storage.startupRestoreListID, Operation: gameapi.StorageList}}
+	stub.results = []gameapi.StorageResult{{OperationID: game.storage.resume.id, Operation: gameapi.StorageList}}
 
 	game.pollStorage()
-	if game.storage.startupRestorePending || stub.loadedSlot != 0 {
-		t.Fatalf("empty slot list = pending %t, loaded slot %d", game.storage.startupRestorePending, stub.loadedSlot)
+	if game.storage.resumePending() || stub.loadedSlot != 0 {
+		t.Fatalf("empty slot list = pending %t, loaded slot %d", game.storage.resumePending(), stub.loadedSlot)
 	}
 }
 

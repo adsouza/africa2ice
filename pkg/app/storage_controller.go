@@ -11,19 +11,33 @@ import (
 // installs frames, navigates scenes, or plays sounds; completions describe those
 // effects for the host to apply.
 type storageController struct {
-	startupRestorePending bool
-	startupRestoreListID  gameapi.StorageOpID
-	startupRestoreLoadID  gameapi.StorageOpID
-	startupRestoreSlot    int
-	pendingQuickSaveIDs   map[gameapi.StorageOpID]struct{}
-	pendingSaveSoundIDs   map[gameapi.StorageOpID]struct{}
-	pendingManualLoadID   gameapi.StorageOpID
-	storageMode           storageBrowserMode
-	storageSlots          []gameapi.SlotMetadata
-	storageSelection      int
-	storageListID         gameapi.StorageOpID
-	storageOperationID    gameapi.StorageOpID
+	resume              resumeState
+	pendingQuickSaveIDs map[gameapi.StorageOpID]struct{}
+	pendingSaveSoundIDs map[gameapi.StorageOpID]struct{}
+	pendingManualLoadID gameapi.StorageOpID
+	storageMode         storageBrowserMode
+	storageSlots        []gameapi.SlotMetadata
+	storageSelection    int
+	storageListID       gameapi.StorageOpID
+	storageOperationID  gameapi.StorageOpID
 }
+
+type resumePhase uint8
+
+const (
+	resumeIdle resumePhase = iota
+	resumeListing
+	resumeDispatching
+	resumeLoading
+)
+
+type resumeState struct {
+	phase resumePhase
+	id    gameapi.StorageOpID
+	slot  int
+}
+
+func (c *storageController) resumePending() bool { return c.resume.phase != resumeIdle }
 
 func newStorageController() storageController {
 	return storageController{pendingQuickSaveIDs: make(map[gameapi.StorageOpID]struct{}), pendingSaveSoundIDs: make(map[gameapi.StorageOpID]struct{})}
@@ -81,8 +95,8 @@ func (c *storageController) accept(result gameapi.StorageResult) storageEffect {
 		delete(c.pendingQuickSaveIDs, result.OperationID)
 	}
 
-	isStartupList := c.startupRestorePending && result.Operation == gameapi.StorageList && result.OperationID == c.startupRestoreListID
-	isStartupLoad := c.startupRestorePending && result.Operation == gameapi.StorageLoad && result.OperationID == c.startupRestoreLoadID
+	isStartupList := c.resume.phase == resumeListing && result.Operation == gameapi.StorageList && result.OperationID == c.resume.id
+	isStartupLoad := c.resume.phase == resumeLoading && result.Operation == gameapi.StorageLoad && result.OperationID == c.resume.id
 	// Both IDs use 0 for "nothing pending", so an unidentified completion must
 	// not correlate with an idle slot the way isBrowserOperation already guards.
 	isManualLoad := c.pendingManualLoadID != 0 && result.Operation == gameapi.StorageLoad && result.OperationID == c.pendingManualLoadID
@@ -98,29 +112,28 @@ func (c *storageController) accept(result gameapi.StorageResult) storageEffect {
 		c.storageOperationID = 0
 	}
 	if isStartupList {
-		c.startupRestoreListID = 0
-		c.startupRestorePending = false
+		c.resume = resumeState{}
 		if result.Err == nil {
-			if slot, ok := newestResumeSlot(result.Slots); ok {
+			// slot != 0 mirrors the host's own dispatch guard: entering the
+			// dispatch phase for a slot nobody will dispatch strands resume,
+			// and resumePending() then blocks input and first-draw forever.
+			if slot, ok := newestResumeSlot(result.Slots); ok && slot != 0 {
 				effect.resumeSlot = slot
-				c.startupRestorePending = true
+				c.resume = resumeState{phase: resumeDispatching, slot: slot}
 			}
 		}
 	}
 
 	effect.startupLoad = isStartupLoad
+	restoredSlot := c.resume.slot
 
 	if isStartupLoad {
-		c.startupRestorePending = false
-		c.startupRestoreLoadID = 0
+		c.resume = resumeState{}
 	}
 	if isManualLoad {
 		c.pendingManualLoadID = 0
 	}
 	if result.Err != nil {
-		if isStartupLoad {
-			c.startupRestoreSlot = 0
-		}
 		effect.toast("Storage failed: "+ui.ErrorMessage(result.Err), true)
 		return effect
 	}
@@ -133,12 +146,11 @@ func (c *storageController) accept(result gameapi.StorageResult) storageEffect {
 	}
 	switch {
 	case isStartupLoad:
-		if c.startupRestoreSlot == 99 {
+		if restoredSlot == 99 {
 			effect.toast("Quick save restored", false)
 		} else {
-			effect.toast(fmt.Sprintf("Autosave restored — Auto %d", c.startupRestoreSlot-100), false)
+			effect.toast(fmt.Sprintf("Autosave restored — Auto %d", restoredSlot-100), false)
 		}
-		c.startupRestoreSlot = 0
 	case isManualLoad:
 		effect.toast("Loaded "+storageSlotLabel(result.Slot), false)
 	case result.Operation == gameapi.StorageLoad:
@@ -162,10 +174,12 @@ func (c *storageController) accept(result gameapi.StorageResult) storageEffect {
 }
 
 func (c *storageController) resumeDispatched(slot int, id gameapi.StorageOpID, accepted bool) {
-	c.startupRestorePending = accepted
-	if accepted {
-		c.startupRestoreLoadID = id
-		c.startupRestoreSlot = slot
+	if c.resume.phase != resumeDispatching || c.resume.slot != slot {
+		return
+	}
+	c.resume = resumeState{}
+	if accepted && id != 0 {
+		c.resume = resumeState{phase: resumeLoading, id: id, slot: slot}
 	}
 }
 
@@ -194,8 +208,9 @@ func newestResumeSlot(slots []gameapi.SlotMetadata) (int, bool) {
 }
 
 func (c *storageController) beginResume(id gameapi.StorageOpID) {
-	c.startupRestorePending = true
-	c.startupRestoreListID = id
+	if id != 0 && !c.resumePending() {
+		c.resume = resumeState{phase: resumeListing, id: id}
+	}
 }
 
 func (c *storageController) openBrowser(mode storageBrowserMode, id gameapi.StorageOpID) {
@@ -211,3 +226,12 @@ func (c *storageController) moveSelection(delta int) {
 }
 
 func (c *storageController) busy() bool { return c.storageListID != 0 || c.storageOperationID != 0 }
+
+func (c *storageController) beginManualLoad(id gameapi.StorageOpID) { c.pendingManualLoadID = id }
+func (c *storageController) beginBrowserOperation(id gameapi.StorageOpID, load bool) {
+	c.storageOperationID = id
+	if load {
+		c.beginManualLoad(id)
+	}
+}
+func (c *storageController) selectSlot(slot int) { c.storageSelection = storageIndexForSlot(slot) }

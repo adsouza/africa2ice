@@ -34,6 +34,7 @@ func main() {
 	defer logging.GuardPanic(session)
 	game, err := app.NewGame(0x9e3779b97f4a7c15, session)
 	if err == nil {
+		defer func() { _ = game.Close() }()
 		installPresentationOptions(game)
 		game.SetFirstDrawCallback(func() {
 			document := js.Global().Get("document")

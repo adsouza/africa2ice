@@ -48,15 +48,15 @@ func TestHostCompositionResumesThroughIsolatedRepository(t *testing.T) {
 			if _, ok := game.sound.(gameaudio.NoopManager); !ok {
 				t.Fatalf("silent startup constructed %T", game.sound)
 			}
-			if game.storage.startupRestorePending != resume {
-				t.Fatalf("resume pending=%t want %t", game.storage.startupRestorePending, resume)
+			if game.storage.resumePending() != resume {
+				t.Fatalf("resume pending=%t want %t", game.storage.resumePending(), resume)
 			}
 			deadline := time.Now().Add(3 * time.Second)
-			for game.storage.startupRestorePending && time.Now().Before(deadline) {
+			for game.storage.resumePending() && time.Now().Before(deadline) {
 				game.pollStorage()
 				time.Sleep(time.Millisecond)
 			}
-			if game.storage.startupRestorePending || game.scenes.Current() != ui.SceneTitle {
+			if game.storage.resumePending() || game.scenes.Current() != ui.SceneTitle {
 				t.Fatal("empty repository did not settle on title")
 			}
 			settings.completions = []ui.UISettingsCompletion{{Operation: ui.UISettingsRead, Revision: 1, Settings: ui.DefaultUISettings()}}
@@ -134,5 +134,88 @@ func TestHostCompositionLogsPreferenceOperations(t *testing.T) {
 	logged := readLog()
 	if !strings.Contains(logged, "settings.completion") {
 		t.Fatal("composed host logged no preference operations: the UISettingsStore decorator is not wired into composeHostedGame")
+	}
+}
+
+type ownedRepository struct {
+	application.CampaignRepository
+	closes int
+}
+
+func (r *ownedRepository) Close() error { r.closes++; return r.CampaignRepository.Close() }
+
+func TestComposedHostOwnsRepositoryUntilClosed(t *testing.T) {
+	directory := t.TempDir()
+	repository, err := storage.NewFileRepository(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owned := &ownedRepository{CampaignRepository: repository}
+	game, err := composeHostedGame(17, nil, false,
+		func() (application.CampaignRepository, error) { return owned, nil },
+		func() (ui.UISettingsStore, error) { return nil, nil }, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer game.Close()
+	if owned.closes != 0 {
+		t.Fatal("construction closed a live repository")
+	}
+	if err := game.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := game.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if owned.closes != 1 {
+		t.Fatalf("repository closed %d times", owned.closes)
+	}
+	reopened, err := storage.NewFileRepository(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if !reopened.Writable() {
+		t.Fatal("host close did not release repository lease")
+	}
+}
+
+func TestHostConstructionUnwindReleasesRepository(t *testing.T) {
+	repository, err := storage.NewFileRepository(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	owned := &ownedRepository{CampaignRepository: repository}
+	sentinel := errors.New("settings factory panicked")
+	func() {
+		defer func() {
+			if got := recover(); got != sentinel {
+				t.Fatalf("panic=%v", got)
+			}
+		}()
+		_, _ = composeHostedGame(17, nil, false,
+			func() (application.CampaignRepository, error) { return owned, nil },
+			func() (ui.UISettingsStore, error) { panic(sentinel) }, false)
+	}()
+	if owned.closes != 1 {
+		t.Fatalf("partial construction leaked repository: closes=%d", owned.closes)
+	}
+}
+
+type borrowedGame struct {
+	gameStub
+	closes int
+}
+
+func (p *borrowedGame) Close() error { p.closes++; return nil }
+
+func TestHostDoesNotCloseBorrowedPorts(t *testing.T) {
+	port := &borrowedGame{gameStub: gameStub{frame: migrationPreviewFrame()}}
+	game := New(port)
+	if err := game.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if port.closes != 0 {
+		t.Fatal("host closed borrowed port")
 	}
 }

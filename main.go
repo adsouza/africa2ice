@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"image"
@@ -73,7 +74,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	game, err := newGame(0x9e3779b97f4a7c15, session)
 	if err == nil {
-		err = ebiten.RunGame(game)
+		defer func() { _ = game.Close() }()
+		err = errors.Join(ebiten.RunGame(game), game.Close())
 	}
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)

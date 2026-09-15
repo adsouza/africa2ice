@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/maphash"
 	"os"
+	"sync"
 
 	"github.com/adsouza/africa2ice/internal/adapters/logging"
 	"github.com/adsouza/africa2ice/internal/application"
@@ -29,6 +30,7 @@ const (
 )
 
 type Game struct {
+	closeResources         func() error
 	port                   gameapi.Game
 	sound                  gameaudio.SoundManager
 	frame                  *gameapi.Frame
@@ -151,6 +153,13 @@ func composeHostedGame(seed uint64, session *logging.Session, enableSound bool,
 	if err != nil {
 		return nil, err
 	}
+	// Keep ownership here until construction succeeds, including panic unwinding.
+	transferred := false
+	defer func() {
+		if !transferred {
+			_ = repository.Close()
+		}
+	}()
 	repository = logging.DecorateCampaignRepository(session, repository)
 	service, err := application.NewGameServiceWithRepository(seed, repository)
 	if err != nil {
@@ -176,6 +185,8 @@ func composeHostedGame(seed uint64, session *logging.Session, enableSound bool,
 	if resume {
 		game.beginStartupResume()
 	}
+	game.closeResources = sync.OnceValue(repository.Close)
+	transferred = true
 	return game, nil
 }
 
@@ -198,7 +209,7 @@ func (g *Game) Update() error {
 		g.showNotice("Finishing quick-save before exit…")
 		return nil
 	}
-	if g.storage.startupRestorePending {
+	if g.storage.resumePending() {
 		return nil
 	}
 	// Wait for preferences before allowing the first gameplay action.
@@ -306,7 +317,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// readiness there lets the first gesture disappear into the startup guard.
 	// This must still run on a skipped frame: readiness is about whether a
 	// frame has ever been shown, not whether this particular tick painted.
-	if !g.firstDrawDone && !g.storage.startupRestorePending {
+	if !g.firstDrawDone && !g.storage.resumePending() {
 		g.firstDrawDone = true
 		if g.onFirstDraw != nil {
 			g.onFirstDraw()
