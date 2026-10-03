@@ -117,3 +117,22 @@ func TestCitationPatternMatchesFieldNoteForms(t *testing.T) {
 		t.Fatalf("citations = %v, want exactly three", got)
 	}
 }
+
+// Windows checkouts convert non-Go text files to CRLF, and Go's multiline $
+// matches only before \n. A marker pattern anchored at $ then found no
+// citations at all on Windows, reporting every one as missing.
+func TestCitationMarkersParseWithEitherLineEnding(t *testing.T) {
+	for name, audit := range map[string]string{
+		"LF":   "<!-- field-note-citation: Reich et al. (2010) -->\n<!-- field-note-citation: Chen & Smith (2019) -->\n",
+		"CRLF": "<!-- field-note-citation: Reich et al. (2010) -->\r\n<!-- field-note-citation: Chen & Smith (2019) -->\r\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := uniqueMatches([]byte(audit), citationMarker, 1)
+			_, reich := got["Reich et al. (2010)"]
+			_, chen := got["Chen & Smith (2019)"]
+			if len(got) != 2 || !reich || !chen {
+				t.Fatalf("markers = %q, want exactly the two citations", got)
+			}
+		})
+	}
+}

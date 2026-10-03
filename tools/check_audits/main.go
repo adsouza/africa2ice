@@ -20,7 +20,7 @@ const (
 	goNoticePattern   = `(?m)^\| Go \| \x60([^\x60]+)\x60 \| \x60([^\x60]+)\x60 \|`
 	npmNoticePattern  = `(?m)^\| npm \| \x60([^\x60]+)\x60 \| \x60([^\x60]+)\x60 \|`
 	citationPattern   = `([A-Z][A-Za-z'’.-]+( et al\.| & [A-Z][A-Za-z'’.-]+)?) \([12][0-9]{3}\)`
-	citationMarker    = `(?m)^<!-- field-note-citation: (.+) -->$`
+	citationMarker    = `(?m)^<!-- field-note-citation: (.+) -->\r?$` // \r?: Windows checkouts end text lines in CRLF
 	binaryenNoticeRow = "| Tool | `Binaryen` | `132` |"
 )
 
