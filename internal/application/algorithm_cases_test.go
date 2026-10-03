@@ -73,7 +73,7 @@ func bandContext(world *domain.World, band domain.Band) (domain.TileGeography, d
 }
 
 var algorithmCases = []algorithmCase{{
-	field: "GeographyAlgorithm", current: "dispersal-map-v5", unsupported: "dispersal-map-v4",
+	field: "GeographyAlgorithm", current: "dispersal-map-v6", unsupported: "dispersal-map-v5",
 	probe: func(world *domain.World) string {
 		return eachLandTile(world, func(id domain.TileID, geography domain.TileGeography, _ domain.HabitatTile, _ domain.TileState) []any {
 			return []any{geography.Land, geography.Region, geography.X, geography.Y, geography.ElevationKm, geography.BaseMoisture}
@@ -321,7 +321,7 @@ var algorithmCases = []algorithmCase{{
 		})
 	},
 }, {
-	field: "ResourceAlgorithm", current: "toward-cap-v1", unsupported: "instant-refill-v2",
+	field: "ResourceAlgorithm", current: "toward-cap-v2", unsupported: "toward-cap-v1",
 	probe: func(world *domain.World) string {
 		season, _ := domain.SeasonForTurn(world.Turn())
 		return eachLandTile(world, func(_ domain.TileID, _ domain.TileGeography, habitat domain.HabitatTile, state domain.TileState) []any {

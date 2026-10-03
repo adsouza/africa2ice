@@ -19,15 +19,15 @@ import (
 // AlgorithmVersions, per §5's admission discipline.
 
 const (
-	landMaskChecksum        = 0xf4230e476f34db22
-	waterMaskChecksum       = 0x57bbc7f746aa285a
-	regionMaskChecksum      = 0x712571568ed1f4d8
-	highlandMaskChecksum    = 0x11b133a60c21291e
+	landMaskChecksum        = 0x2d7a8e6aecf37efa
+	waterMaskChecksum       = 0x099f4e75e927e532
+	regionMaskChecksum      = 0xb8088af266e4d5dd
+	highlandMaskChecksum    = 0xc4adca5d030e3b0a
 	riverMaskChecksum       = 0xaed4591799a1b706
-	coastalMaskChecksum     = 0x6137d750f8564325
-	elevationChecksum       = 0xb777d83cc3aedb8d
-	naturalShelterChecksum  = 0x3d9a7aac56ee8ad9
-	baseMoistureChecksum    = 0x068b547d034112de
+	coastalMaskChecksum     = 0xb2afdc96b2c214d2
+	elevationChecksum       = 0x8e7da400109bb7d9
+	naturalShelterChecksum  = 0x1ddf721fdbb31b82
+	baseMoistureChecksum    = 0xea7fbb628a88beea
 	escarpmentChecksum      = 0x1c4adbba2758b419
 	latitudeTableChecksum   = 0xf15ec7fbe87b9a7b
 	orbitalTableChecksum    = 0x31dccd8a94047833

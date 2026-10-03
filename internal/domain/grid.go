@@ -95,6 +95,33 @@ func (g *Grid) OrdinaryNeighbors(from, to TileID) bool {
 	return false
 }
 
+// ordinaryRouteExists reports whether a chain of ordinary land moves joins the
+// two tiles, ignoring habitability and climate. It answers a geography
+// question, so it is evaluated once, when the canonical grid is validated.
+func (g *Grid) ordinaryRouteExists(from, to TileID) bool {
+	if g == nil || from >= TileCount || to >= TileCount {
+		return false
+	}
+	seen := [TileCount]bool{}
+	seen[from] = true
+	queue := []TileID{from}
+	edges := make([]GridEdge, 0, MaxGridNeighbors)
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		if id == to {
+			return true
+		}
+		for _, edge := range g.AppendOrdinaryEdges(edges[:0], id) {
+			if !seen[edge.To] {
+				seen[edge.To] = true
+				queue = append(queue, edge.To)
+			}
+		}
+	}
+	return false
+}
+
 // ordinaryEdge is the single authority on whether one step is legal, so the
 // list, append, and predicate forms cannot drift apart. (x, y) are from's
 // coordinates, already resolved by the caller.

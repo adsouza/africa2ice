@@ -58,7 +58,7 @@ type AlgorithmVersions struct {
 }
 
 var supportedAlgorithms = AlgorithmVersions{
-	GeographyAlgorithm: "dispersal-map-v5", NaturalShelterMaskAlgorithm: "authored-ellipse-v1",
+	GeographyAlgorithm: "dispersal-map-v6", NaturalShelterMaskAlgorithm: "authored-ellipse-v1",
 	CampaignClockAlgorithm: "four-era-v1", ClimateAlgorithm: "hybrid-abrupt-moisture-v1",
 	TemperatureAlgorithm: "lat-elev-offset-v1", MacroEventAlgorithm: "bounded-regional-v1",
 	ExplorationAlgorithm: "sapiens-frontier-v1", BandAlgorithm: "capacity-safe-half-global-cap-v2",
@@ -72,7 +72,7 @@ var supportedAlgorithms = AlgorithmVersions{
 	HeritableStateAlgorithm: "band-six-trait-v1", GeneticSelectionAlgorithm: "trait-functions-v1",
 	GeneFlowAlgorithm: "local-reciprocal-v1", MutationAlgorithm: "rare-emergence-v1",
 	MovementAlgorithm: "eight-way-escarpment-corners-v2", MovementCostAlgorithm: "destination-vegetation-v1",
-	PassageAlgorithm: "named-asymmetric-v1", ResourceAlgorithm: "toward-cap-v1",
+	PassageAlgorithm: "named-asymmetric-v1", ResourceAlgorithm: "toward-cap-v2",
 	HazardAlgorithm: "split-v1", KinSupportAlgorithm: "saturating-kin-acute-v1", PopulationRoundingAlgorithm: "stochastic-v1",
 	RNGAlgorithm: "pcg-splitmix-v1",
 }

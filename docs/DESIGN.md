@@ -1188,7 +1188,7 @@ conversion, so a violation reads as a specific edit rather than a category of si
 - **Natural-shelter regions:** a closed, authored geographic layer representing the relative
   availability of caves and rock overhangs at this map's scale, not individual archaeological sites.
 
-`dispersal-map-v5` connects the Red Sea water cutout through Bab-el-Mandeb and the Gulf of Aden
+`dispersal-map-v5` connected the Red Sea water cutout through Bab-el-Mandeb and the Gulf of Aden
 to the open ocean. The gulf polygon is deliberately wide enough to preserve a continuous water
 barrier on the coarse grid: no ordinary land route connects Africa to Arabia south of Sinai,
 while the northern land route remains connected. This follows the geographic relationship shown
@@ -1196,7 +1196,20 @@ by [NASA's Bab-el-Mandeb imagery](https://asterweb.jpl.nasa.gov/gallery-detail.a
 the polygon vertices are a game-scale abstraction, not a reconstructed ancient shoreline.
 The correction changes land, region, coast, and derived habitat masks. Saves using earlier
 geography versions are rejected by the algorithm-version gate; they are not silently reinterpreted
-on the corrected map. The frozen geography checksums and supported-save fixtures use v5.
+on the corrected map.
+
+`dispersal-map-v6` closes three defects of v5's coarse rings. First, Sahul's north-west vertex at
+`(112,-10)` lay west of the Wallacea gaps, so a strip of Sahul land sat directly beneath Java: the
+south Wallacea crossing started on Sahul itself, and Sahul could be reached on foot in 21 moves.
+`SouthWallaceaGap` now reaches west to `114°E`. Second, the Siberian and Alaskan rings overlap south of
+`61°N`, so a land row crossed the Bering Sea and the strait could be walked around in 11 moves.
+`BeringStrait` gains a southern arm, one continuous water column at `185–189°E` down to `50°N`.
+Third, the Mediterranean ring covered all of Italy, so the Campanian eruption's direct and
+proximal tiers fell entirely on sea; the ring now traces a game-scale Italian peninsula, and the
+Campi Flegrei epicenter is Frangistan land reachable on foot. Grid validation now rejects any
+ordinary-move route between a passage's two endpoints, not merely adjacency, and a test requires
+Sahul and Beringia each to be a single sealed land component. The frozen geography checksums and
+supported-save fixtures use v6; v5 saves are rejected by the algorithm-version gate.
 
 **Projection** (`geo.go`): the map is **96×64**, widened from the earlier 64×64 crop so adding the
 far-northeastern route does not erase Africa's internal geography. `x=0 → 20°W` and `x=95 → 200°E`
@@ -1229,14 +1242,15 @@ Rasterization tests evaluate each tile center and freeze the resulting 6,144-val
 
 | Stable ID | Water/negative ring vertices, in order |
 | --------- | -------------------------------------- |
-| `Mediterranean` | `(-6,36), (0,42), (10,45), (20,44), (30,41), (37,36), (32,31), (20,31), (10,35), (0,35)` |
+| `Mediterranean` | `(-6,36), (0,42), (10,45), (11,44), (11.8,41.2), (15.6,40.4), (16.2,41.2), (15.6,42.3), (13.6,43.8), (20,44), (30,41), (37,36), (32,31), (20,31), (10,35), (0,35)` |
 | `RedSea` | `(32,29), (37,30), (44,13), (39,12), (34,22)` |
+| `GulfOfAden` | `(42,13), (44,13), (48,15), (52,16), (58,14), (58,10), (52,10), (49,11), (45,10), (42,10)` |
 | `PersianGulf` | `(47,31), (57,30), (57,24), (49,24)` |
 | `Caspian` | `(46,47), (55,47), (55,36), (47,36)` |
 | `BlackSea` | `(27,47), (42,47), (42,40), (28,40)` |
 | `NorthWallaceaGap` | `(119,4), (137,4), (137,-7), (119,-7)` |
-| `SouthWallaceaGap` | `(121,-7), (139,-7), (139,-16), (121,-16)` |
-| `BeringStrait` | `(178,68), (193,68), (193,61), (178,61)` |
+| `SouthWallaceaGap` | `(114,-7), (139,-7), (139,-16), (114,-16)` |
+| `BeringStrait` | `(178,68), (193,68), (193,61), (189,61), (189,50), (185,50), (185,61), (178,61)` |
 
 Highland rings use the same polygon rule and the heights in the next table:
 
@@ -1275,7 +1289,8 @@ corner crossing include both side-adjacent cells in increasing tile-ID order. Un
 
 Region resolution is an ordered total function over land tile centers. The first matching rule wins:
 
-1. `Beringia`: longitude `>= 165` and latitude `>= 50`;
+1. `Beringia`: longitude `>= 185` and latitude `>= 50` — the Alaska side of the strait only;
+   Chukotka resolves to `Siberia` under rule 11;
 2. `YellowRiverBasin`: longitude in `[96, 122]` and latitude in `[30, 42]`;
 3. `EastAfrica`: inside `Africa`, longitude `>= 28`, and latitude in `[-15, 18]`;
 4. `RestOfAfrica`: any other tile inside `Africa`;
@@ -1299,9 +1314,14 @@ used by `ClassifyBiome`, rendering, exploration coastline reveal, and every coas
 
 The three passage endpoint pairs resolve from exact geographic anchors after rasterization. For each
 anchor, select the nearest land tile on its named side of the corresponding water ring, breaking a
-distance tie by tile ID: north Wallacea `(118,-3) → (138,-3)`, south Wallacea
-`(120,-11) → (140,-14)`, and Bering Strait `(176,65) → (194,65)`. Step 4 freezes the six resulting
-tile IDs; runtime never searches for a different crossing.
+distance tie by tile ID. A side is the region the crossing leaves or enters: `SoutheastAsia` to
+`Sahul` for both Wallacea routes, `Siberia` to `Beringia` for the land bridge. The anchors are north
+Wallacea `(118,-3) → (138,-3)`, south Wallacea `(120,-11) → (140,-14)`, and the Beringian land
+bridge `(182,55) → (191,55)`. The bridge crosses at its southern margin rather than at the strait's
+`65°N` narrows because the narrows' shores fall below the vegetation cold cutoff on every turn the
+bridge is open; even inside the Beringian refugium (§7) a crossing must land where a band can
+establish. Step 4 freezes the six resulting tile IDs (`3804 → 4197`, `3996 → 4389`, `951 → 955`) and
+a test re-resolves them from these anchors; runtime never searches for a different crossing.
 
 ### Authored elevation
 
@@ -1360,7 +1380,7 @@ destination region before turn 400, solved as a time-expanded graph with technol
 that the result is an upper bound on what any player could achieve.
 
 The catalog, strict threshold, land clipping, and maximum-overlap rule belong to
-`GeographyAlgorithm: "dispersal-map-v5"`. The resulting fixed tile elevations drive temperature,
+`GeographyAlgorithm: "dispersal-map-v6"`. The resulting fixed tile elevations drive temperature,
 biome classification, orographic moisture, altitude UV, hypoxia pressure, and the top-down highland
 classification and inspector, but are
 derived geography rather than mutable or serialized campaign state. The Initial values may be tuned
@@ -1394,7 +1414,7 @@ boundaries are deliberate passes, not data gaps.
 generation resolves the 17 entries after land and elevation rasterization and rejects an empty name,
 out-of-bounds endpoint, non-cardinal pair, water endpoint, duplicate boundary, or pair without an
 elevation change. The resulting stable catalog and a checked-in checksum belong to
-`GeographyAlgorithm: "dispersal-map-v5"`; they are reconstructed geography and add no save field.
+`GeographyAlgorithm: "dispersal-map-v6"`; they are reconstructed geography and add no save field.
 The barrier and diagonal-corner interpretation belong to `MovementAlgorithm` below. Changing either
 catalog or interpretation after release requires the corresponding algorithm-version migration.
 
@@ -1499,8 +1519,10 @@ the same profile. No second overlapping set of fauna-region boundaries is introd
 
 The rasterized map deliberately preserves water in Wallacea and at the Bering Strait. Neither gap is
 ordinary tile adjacency; the named, bounded passage edges in §7 provide their only crossings. The
-Sahul destination lies beyond Wallacea, and the Beringia destination mask lies on the Alaska side of
-the strait, so each achievement proves that its passage was actually crossed.
+Sahul destination lies beyond Wallacea, and the Beringia destination region lies on the Alaska side of
+the strait, so each achievement proves that its passage was actually crossed. `ValidatePassages`
+enforces this as reachability, not adjacency: it rejects the grid if any chain of ordinary moves
+joins a passage's endpoints, however long the detour.
 
 ### Persistent exploration fog
 
@@ -1589,7 +1611,7 @@ change visible without storing per-tile cave state in the save.
 The rating is immutable geography, independent of world seed, current biome, climate, degradation,
 and resident population. It is not inferred merely from elevation or a biome label: a biome change
 must not create or remove caves. World generation and load reconstruction use projection/land data
-under `GeographyAlgorithm: "dispersal-map-v5"` and shelter catalog/raster rules under
+under `GeographyAlgorithm: "dispersal-map-v6"` and shelter catalog/raster rules under
 `NaturalShelterMaskAlgorithm`, consume no `WorldRNG`, and validate finite in-range ratings. After
 release, changing the table, mask equation, or rating changes the natural-shelter-mask identifier;
 changing projection or land changes both identifiers because it changes the rasterized mask. Either
@@ -1861,6 +1883,30 @@ These geographic grades are deliberately not global bounds. A coastal tile with 
 `CanopyClosureV` can exceed the Riverine Woodland capacity maximum after its `1.15` factor. Retaining
 that behavior lets geographic biomes respond to local climate; the document therefore uses their
 grades only at the stated reference condition and never asserts their ordering across all `V`.
+
+**Beringian refugium.** Historical Beringia, every land tile at longitude `>= 165` and latitude
+`>= 50` on both shores of the strait, has a capacity floor:
+
+```text
+BaselineK(tile, t) = max(BaselineK(V, biome), BeringianRefugiumK)   if tile is in the refugium
+                     BaselineK(V, biome)                            otherwise
+BeringianRefugiumK = 2 · MinEstablishedBand = 40
+```
+
+Without it the Alaska-side destination is unreachable, not merely hard. The land bridge opens only
+once `LongTermTempOffset` reaches `−BeringiaOpenFraction · LGM_cooling`, and at that depth every
+tile on both shores falls below `VegetationColdCutoffC`: Alaskan capacity peaks near `10` on open
+turns, while it exceeds `MinEstablishedBand` only at mild offsets near `−1°C`, when the bridge is
+shut. The floor models the Beringian standstill, the mammoth steppe that stayed habitable through
+the glacial maximum while the cold cutoff closed the rest of the far north. Its value is two
+established bands' worth of people, so the refugium can always carry one band at the establishing
+margin. The floor is a capacity zone, not a region and not a biome: classification, `V`, movement
+cost, and the fauna profile still follow the tile's own climate, and only the Alaska side counts as
+the `Beringia` destination. `ResourceAlgorithm: "toward-cap-v2"` versions the floor, because it
+changes `BaselineK` and therefore every capacity-scaled resource cap in the zone. Validation
+requires every refugium tile to hold at least the floor on all 401 turns, every other tile to equal
+the curve exactly, and the Beringian crossing to be open on two consecutive turns with both
+endpoints habitable.
 
 ### Reversible ecological degradation
 
@@ -2304,7 +2350,7 @@ rather than repairing them with the response curve's bounds; even a bounded mult
 an extreme product.
 Zero population requires zero WU; a living band with a positive baseline and multiplier has a positive
 requirement. `LocalTemperatureC`, the requirement, and the multiplier are derived, not saved band fields.
-`ResourceAlgorithm: "toward-cap-v1"` owns these water units and demand rules, including the initial
+`ResourceAlgorithm: "toward-cap-v2"` owns these water units and demand rules, including the initial
 20°C/35°C anchors, `0.02` slope, multiplier bounds, and current-climate input, alongside
 allocation/extraction; `HazardAlgorithm` owns shortage-related health damage. Use the existing
 unreleased contracts, with affected version updates and explicit save migration after release.
@@ -5064,8 +5110,8 @@ intermediate archaic queues.
 tile IDs: two Wallacea routes (a northern island-hopping route toward New Guinea and a southern route
 toward northern Australia) and one Bering Strait route between Siberia and western Alaska. Passage
 validation at new game and load requires distinct in-range land endpoints, no duplicate endpoint
-pair, endpoints that are not connected by `OrdinaryEdges` under the same diagonal-corner rule,
-finite positive movement cost, and no more than two passage edges incident on one tile. Bands move
+pair, endpoints that no chain of `OrdinaryEdges` joins under the same diagonal-corner rule (a
+reachability search, since a detour defeats an adjacency check), finite positive movement cost, and no more than two passage edges incident on one tile. Bands move
 directly between land endpoints in one turn and never occupy an ocean tile.
 
 The selected route costs are `4.00` for northern Wallacea, `4.50` for southern Wallacea, and
@@ -7693,7 +7739,7 @@ The domain validates typed event details but does not compose sentences. This re
 does not change simulation equations or RNG consumption; canonical save hashes change with the
 schema. Older executables reject schema-2 saves. The state includes `WorldSeed`,
 `CampaignClockAlgorithm: "four-era-v1"`,
-`GeographyAlgorithm: "dispersal-map-v5"`, `ClimateAlgorithm: "hybrid-abrupt-moisture-v1"`,
+`GeographyAlgorithm: "dispersal-map-v6"`, `ClimateAlgorithm: "hybrid-abrupt-moisture-v1"`,
 `NaturalShelterMaskAlgorithm: "authored-ellipse-v1"`,
 `TemperatureAlgorithm: "lat-elev-offset-v1"`,
 `MacroEventAlgorithm: "bounded-regional-v1"`,
@@ -7719,7 +7765,7 @@ schema. Older executables reject schema-2 saves. The state includes `WorldSeed`,
 `MutationAlgorithm: "rare-emergence-v1"`,
 `MovementAlgorithm: "eight-way-escarpment-corners-v2"`,
 `MovementCostAlgorithm: "destination-vegetation-v1"`,
-`PassageAlgorithm: "named-asymmetric-v1"`, `ResourceAlgorithm: "toward-cap-v1"`,
+`PassageAlgorithm: "named-asymmetric-v1"`, `ResourceAlgorithm: "toward-cap-v2"`,
 `HazardAlgorithm: "split-v1"`,
 `KinSupportAlgorithm: "saturating-kin-acute-v1"`,
 `PopulationRoundingAlgorithm: "stochastic-v1"`, the campaign turn and terminal result, the Easy mode
@@ -8448,7 +8494,9 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    epicenter resolves to Frangistan land, Frangistan sits north of
    the Mediterranean, South Asia has destination tiles, the central Yellow River coordinate resolves
    to its non-overlapping basin destination, Sahul and western Alaska are in bounds, Wallacea and the
-   Bering Strait remain explicit water gaps, region masks are stable, and generation is deterministic.
+   Bering Strait remain explicit water gaps that no chain of ordinary moves bypasses (Sahul and
+   Beringia are each one sealed land component), region masks are stable, and generation is
+   deterministic.
    Implement §6's authored elevation model and `BaseMoisture` here, since `worldgen.go` owns both and
    step 4's temperature and vegetation index read them. Elevation fixtures assert the exact
    eleven-entry stable catalog in §6's order (Atlas, Ethiopian Highlands, Zagros, Caucasus west
@@ -8496,7 +8544,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    The combined acceptance contract implements §§6–7's clock, climate, habitat, and macro-event
    contracts with their fixtures as specified there: `four-era-v1`'s exact
    80,000/50,000/35,000/25,000/20,000 BP endpoints and 300/150/100/50-year spans;
-   `dispersal-map-v5`'s authored elevation and escarpment catalogs, strict highland threshold,
+   `dispersal-map-v6`'s authored elevation and escarpment catalogs, strict highland threshold,
    stable escarpment checksum, and deliberate pass fixtures;
    `lat-elev-offset-v1` with its 64-row table and checksum; the orbital, seasonal, and precession
    tables under that same bit-pattern, tolerance, and checksum discipline; the abrupt-pulse catalog
@@ -10035,6 +10083,7 @@ Earlier fixtures use explicit values that are never release data.
 | Degradation `damage_rate`                                   | `0.06`                                                                     | Initial |
 | Degradation `recovery_rate`                                 | `0.03`                                                                     | Initial |
 | `BaselineKCurve(V)` knot table                              | §7 eight-knot, within-band piecewise-linear curve with one `0.45` step     | Initial |
+| `BeringianRefugiumK`                                        | `2 × MinEstablishedBand = 40` floor on land at longitude `>= 165`, latitude `>= 50` | Derived |
 | `CanopyClosureV`                                            | `0.90`; shared knot owned jointly by `ResourceAlgorithm` and `MovementCostAlgorithm`; changing it moves both identifiers | Initial |
 | `BiomeCapacityFactor[CoastalShrubland, MountainousHighlands]` | `1.15` / `0.65`                                                         | Initial |
 | `BiomeCapacityFactor[vegetation-classified biomes]`          | exactly `1.00` for all four entries; not tunable                         | Locked  |
@@ -10148,6 +10197,7 @@ Earlier fixtures use explicit values that are never release data.
 | `BiomeMovementFactor[vegetation-classified biomes]`          | exactly `1.00` for all four entries; not tunable                                            | Locked  | `MovementCostAlgorithm`    |
 | `MaxMovementCost`                                          | `2.75`, selected within `math.Sqrt2 * MaxMovementCost < 4.00`                                   | Initial | `MovementCostAlgorithm`    |
 | Named-passage route costs                                  | north Wallacea `4.00`; south Wallacea `4.50`; Beringia `3.00`                                   | Initial | `PassageAlgorithm`         |
+| Named-passage endpoint tiles                               | `3804 → 4197`, `3996 → 4389`, `951 → 955`, resolved from §6's anchors; no ordinary route joins either pair | Locked | `GeographyAlgorithm` |
 | Water survival-equivalent conversion for migration ranking | `min(EcologicalK, WaterStock / EffectiveWaterDemandPerPerson)` plus §7 validation               | Locked  | migration scoring contract |
 | `ArchaicAssignmentPreset[region, biome]`                   | §7 eight profile presets expanded through the resolved profile map                              | Initial | `ArchaicPolicyAlgorithm`   |
 | `ArchaicTechPriority`                                      | §7 selected nine-entry order                                                                    | Initial | `ArchaicPolicyAlgorithm`   |

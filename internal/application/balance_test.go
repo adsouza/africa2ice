@@ -32,8 +32,8 @@ func TestMoistureBalanceGate(t *testing.T) {
 			t.Fatalf("recovery comparison turns = %v, want %v", report.Recovery.ComparisonTurns, wantComparisonTurns)
 		}
 	}
-	if report.Recovery.BiomeChangingTiles != 945 || report.Recovery.ComparedBiomeChanging != 945 {
-		t.Fatalf("recovery coverage = %d/%d biome-changing tiles, want 945/945", report.Recovery.ComparedBiomeChanging, report.Recovery.BiomeChangingTiles)
+	if report.Recovery.BiomeChangingTiles != 937 || report.Recovery.ComparedBiomeChanging != 937 {
+		t.Fatalf("recovery coverage = %d/%d biome-changing tiles, want 937/937", report.Recovery.ComparedBiomeChanging, report.Recovery.BiomeChangingTiles)
 	}
 }
 
