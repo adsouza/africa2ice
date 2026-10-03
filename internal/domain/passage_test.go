@@ -43,7 +43,8 @@ func TestNamedPassageRequiresTechnologyAndQueuesWithoutRNG(t *testing.T) {
 		t.Fatal(err)
 	}
 	after, _ := world.rng.MarshalBinary()
-	if !band.QueueUsesPassage || band.QueuedPassage != NorthWallacea || !bytes.Equal(before, after) {
+	order, _ := band.QueuedMigration.Get()
+	if passage, crossing := order.Passage.Get(); !crossing || passage != NorthWallacea || !bytes.Equal(before, after) {
 		t.Fatalf("queued passage = %#v", band)
 	}
 }

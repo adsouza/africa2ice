@@ -241,9 +241,9 @@ func SaveStateFromWorld(world *domain.World, revision uint64) (SaveState, error)
 				WaterHealthLoss: band.LastOutcomeReport.WaterHealthLoss, DiseaseHealthLoss: band.LastOutcomeReport.DiseaseHealthLoss, GeneticBurdenHealthLoss: band.LastOutcomeReport.GeneticBurdenHealthLoss,
 				MacroHealthLoss: band.LastOutcomeReport.MacroHealthLoss, AcuteDiseaseHealthLoss: band.LastOutcomeReport.AcuteDiseaseHealthLoss,
 			},
-			SpatialActionUsed: band.SpatialActionUsed, QueuedMigration: uint16(band.QueuedMigration), QueuedOrigin: uint16(band.QueuedOrigin), QueuedPassage: uint8(band.QueuedPassage), QueueUsesPassage: band.QueueUsesPassage, HasQueuedMigration: band.HasQueuedMigration,
-			InterbreedTarget: uint64(band.InterbreedTarget), HasInterbreedTarget: band.HasInterbreedTarget,
+			SpatialActionUsed: band.SpatialActionUsed,
 		}
+		item.saveOrders(band)
 		for index, value := range band.Allocation {
 			item.Allocation[index] = uint16(value)
 		}
@@ -300,8 +300,8 @@ func (save SaveState) RestoreWorld() (*domain.World, error) {
 				WaterHealthLoss: item.LastOutcomeReport.WaterHealthLoss, DiseaseHealthLoss: item.LastOutcomeReport.DiseaseHealthLoss, GeneticBurdenHealthLoss: item.LastOutcomeReport.GeneticBurdenHealthLoss,
 				MacroHealthLoss: item.LastOutcomeReport.MacroHealthLoss, AcuteDiseaseHealthLoss: item.LastOutcomeReport.AcuteDiseaseHealthLoss,
 			},
-			SpatialActionUsed: item.SpatialActionUsed, QueuedMigration: domain.TileID(item.QueuedMigration), QueuedOrigin: domain.TileID(item.QueuedOrigin), QueuedPassage: domain.PassageID(item.QueuedPassage), QueueUsesPassage: item.QueueUsesPassage, HasQueuedMigration: item.HasQueuedMigration,
-			InterbreedTarget: domain.BandID(item.InterbreedTarget), HasInterbreedTarget: item.HasInterbreedTarget,
+			SpatialActionUsed: item.SpatialActionUsed,
+			QueuedMigration:   item.queuedMigration(), InterbreedTarget: item.interbreedTarget(),
 		}
 		for index, value := range item.Allocation {
 			band.Allocation[index] = domain.AssignmentBP(value)
@@ -377,4 +377,40 @@ func (service *GameService) StateHash() (string, error) {
 	}
 	sum := sha256.Sum256(payload)
 	return fmt.Sprintf("%x", sum), nil
+}
+
+// saveOrders writes a band's optional orders into the flat save fields. An
+// absent order writes zeros: a resolved order is gone, not stale state that
+// would otherwise reach every save and the canonical campaign-state hash.
+func (item *BandSave) saveOrders(band domain.Band) {
+	if order, queued := band.QueuedMigration.Get(); queued {
+		item.HasQueuedMigration = true
+		item.QueuedMigration, item.QueuedOrigin = uint16(order.Destination), uint16(order.Origin)
+		if passage, crossing := order.Passage.Get(); crossing {
+			item.QueuedPassage, item.QueueUsesPassage = uint8(passage), true
+		}
+	}
+	if target, intends := band.InterbreedTarget.Get(); intends {
+		item.InterbreedTarget, item.HasInterbreedTarget = uint64(target), true
+	}
+}
+
+// queuedMigration reads only fields its flags mark as set; saves written
+// before orders were normalized can carry stale values behind false flags.
+func (item BandSave) queuedMigration() domain.Option[domain.MigrationOrder] {
+	if !item.HasQueuedMigration {
+		return domain.Option[domain.MigrationOrder]{}
+	}
+	order := domain.MigrationOrder{Destination: domain.TileID(item.QueuedMigration), Origin: domain.TileID(item.QueuedOrigin)}
+	if item.QueueUsesPassage {
+		order.Passage = domain.Some(domain.PassageID(item.QueuedPassage))
+	}
+	return domain.Some(order)
+}
+
+func (item BandSave) interbreedTarget() domain.Option[domain.BandID] {
+	if !item.HasInterbreedTarget {
+		return domain.Option[domain.BandID]{}
+	}
+	return domain.Some(domain.BandID(item.InterbreedTarget))
 }

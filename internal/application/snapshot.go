@@ -130,11 +130,10 @@ func projectFrame(world *domain.World, worldRevision, terrainRevision uint64) (*
 			ID: gameapi.BandID(band.ID), Species: mapSpecies(band.Species), TileID: gameapi.TileID(band.TileID),
 			Population: uint32(band.Population), Health: float64(band.Health), StoredFood: float64(band.StoredFood),
 			AcquiredTech: band.Technology.Acquired, HasResearchTarget: band.Technology.HasTarget,
-			SpatialActionUsed: band.SpatialActionUsed, QueuedMigration: gameapi.TileID(band.QueuedMigration), HasQueuedMigration: band.HasQueuedMigration,
-			HasInterbreedTarget: band.HasInterbreedTarget, InterbreedTargetID: gameapi.BandID(band.InterbreedTarget),
-			Stress:         world.BandStress(band.ID),
-			LastFoodReport: gameapi.FoodTurnReport{Turn: band.LastFoodReport.Turn, RequiredFU: band.LastFoodReport.RequiredFU, DeficitFU: band.LastFoodReport.DeficitFU},
-			LastMortality:  gameapi.MortalityReport{Starvation: band.LastMortality.Starvation, Seasonal: band.LastMortality.Seasonal, Chronic: band.LastMortality.Chronic, Macro: band.LastMortality.Macro, Acute: band.LastMortality.Acute},
+			SpatialActionUsed: band.SpatialActionUsed,
+			Stress:            world.BandStress(band.ID),
+			LastFoodReport:    gameapi.FoodTurnReport{Turn: band.LastFoodReport.Turn, RequiredFU: band.LastFoodReport.RequiredFU, DeficitFU: band.LastFoodReport.DeficitFU},
+			LastMortality:     gameapi.MortalityReport{Starvation: band.LastMortality.Starvation, Seasonal: band.LastMortality.Seasonal, Chronic: band.LastMortality.Chronic, Macro: band.LastMortality.Macro, Acute: band.LastMortality.Acute},
 			LastOutcomeReport: gameapi.OutcomeReport{
 				Turn: band.LastOutcomeReport.Turn, StartingPopulation: uint32(band.LastOutcomeReport.StartingPopulation), EndingPopulation: uint32(band.LastOutcomeReport.EndingPopulation), Growth: band.LastOutcomeReport.Growth,
 				StartingHealth: float64(band.LastOutcomeReport.StartingHealth), EndingHealth: float64(band.LastOutcomeReport.EndingHealth), NutritionDelta: band.LastOutcomeReport.NutritionDelta,
@@ -143,6 +142,12 @@ func projectFrame(world *domain.World, worldRevision, terrainRevision uint64) (*
 			},
 		}
 		geography, _ := grid.Tile(band.TileID)
+		if order, queued := band.QueuedMigration.Get(); queued {
+			publicBand.QueuedMigration, publicBand.HasQueuedMigration = gameapi.TileID(order.Destination), true
+		}
+		if target, intends := band.InterbreedTarget.Get(); intends {
+			publicBand.InterbreedTargetID, publicBand.HasInterbreedTarget = gameapi.BandID(target), true
+		}
 		publicBand.SeasonalMortalityRate, publicBand.ChronicMortalityRate = domain.Phase3MortalityRates(band, geography, habitat[band.TileID], season)
 		for index := range publicBand.AllocationBP {
 			publicBand.AllocationBP[index] = uint16(band.Allocation[index])

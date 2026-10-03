@@ -306,22 +306,23 @@ func (world *World) validate() error {
 				}
 			}
 		}
-		if band.HasQueuedMigration {
-			valid := band.SpatialActionUsed && band.QueuedOrigin == band.TileID && band.QueuedMigration < TileCount && world.habitat[band.QueuedMigration].BaselineK > 0
+		if order, queued := band.QueuedMigration.Get(); queued {
+			valid := band.SpatialActionUsed && order.Origin == band.TileID && order.Destination < TileCount && world.habitat[order.Destination].BaselineK > 0
 			if valid {
+				passageID, usesPassage := order.Passage.Get()
 				switch {
-				case band.QueueUsesPassage:
-					if band.QueuedPassage >= PassageCount {
+				case usesPassage:
+					if passageID >= PassageCount {
 						valid = false
 					} else {
-						passage := passageCatalog[band.QueuedPassage]
-						destination, atEndpoint := passageDestination(passage, band.QueuedOrigin)
-						valid = atEndpoint && destination == band.QueuedMigration && passageAvailability(band, passage, world.habitat, world.climate.LongTermTempOffset, false) == PassageAvailable
+						passage := passageCatalog[passageID]
+						destination, atEndpoint := passageDestination(passage, order.Origin)
+						valid = atEndpoint && destination == order.Destination && passageAvailability(band, passage, world.habitat, world.climate.LongTermTempOffset, false) == PassageAvailable
 					}
 				default:
 					valid = false
 					for _, edge := range world.grid.OrdinaryEdges(band.TileID) {
-						if edge.To == band.QueuedMigration {
+						if edge.To == order.Destination {
 							valid = true
 							break
 						}
@@ -332,8 +333,8 @@ func (world *World) validate() error {
 				return fmt.Errorf("%w: queued migration", ErrInvalidValue)
 			}
 		}
-		if band.HasInterbreedTarget {
-			targetIndex := world.bandIndex(band.InterbreedTarget)
+		if target, intends := band.InterbreedTarget.Get(); intends {
+			targetIndex := world.bandIndex(target)
 			if !band.SpatialActionUsed || targetIndex < 0 || world.bands[targetIndex].Species == band.Species || world.bands[targetIndex].TileID != band.TileID {
 				return fmt.Errorf("%w: interbreed target", ErrInvalidValue)
 			}

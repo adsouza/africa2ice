@@ -42,11 +42,12 @@ func applyKnowledgeAndGenetics(bands []Band, grid *Grid, research map[BandID]flo
 		}
 	}
 	for actorIndex, actor := range snapshot {
-		if actor.Species != HomoSapiens || !actor.HasInterbreedTarget {
+		intended, intends := actor.InterbreedTarget.Get()
+		if actor.Species != HomoSapiens || !intends {
 			continue
 		}
 		for targetIndex, target := range snapshot {
-			if target.ID == actor.InterbreedTarget && target.Species == ArchaicHominin {
+			if target.ID == intended && target.Species == ArchaicHominin {
 				geneticPartners[actorIndex] = append(geneticPartners[actorIndex], geneticPartner{targetIndex, InterbreedGeneFlowRate})
 				geneticPartners[targetIndex] = append(geneticPartners[targetIndex], geneticPartner{actorIndex, InterbreedGeneFlowRate})
 				completedInterbreeding[actor.ID] = true

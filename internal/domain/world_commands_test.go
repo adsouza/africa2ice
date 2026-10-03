@@ -82,7 +82,7 @@ func TestInterbreedRequiresColocationAndOppositeSpecies(t *testing.T) {
 	if err := world.Interbreed(1, 5, true); err != nil {
 		t.Fatal(err)
 	}
-	if !world.bands[0].SpatialActionUsed || !world.bands[0].HasInterbreedTarget {
+	if !world.bands[0].SpatialActionUsed || !world.bands[0].InterbreedTarget.Present() {
 		t.Fatal("interbreed did not spend action")
 	}
 }

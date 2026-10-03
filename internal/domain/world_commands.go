@@ -56,18 +56,15 @@ func (world *World) QueueMigration(id BandID, destination TileID, player bool) e
 			break
 		}
 	}
-	usesPassage := false
-	passageID := PassageID(0)
+	order := MigrationOrder{Destination: destination, Origin: band.TileID}
 	if !valid {
 		passage, ok := passageForEdge(band.TileID, destination)
 		if !ok || passageAvailability(*band, passage, world.habitat, world.climate.LongTermTempOffset, false) != PassageAvailable {
 			return ErrInvalidMigration
 		}
-		usesPassage, passageID = true, passage.ID
+		order.Passage = Some(passage.ID)
 	}
-	band.QueuedOrigin, band.QueuedMigration = band.TileID, destination
-	band.QueuedPassage, band.QueueUsesPassage = passageID, usesPassage
-	band.HasQueuedMigration, band.SpatialActionUsed = true, true
+	band.QueuedMigration, band.SpatialActionUsed = Some(order), true
 	return nil
 }
 
@@ -164,7 +161,7 @@ func (world *World) Interbreed(id, target BandID, player bool) error {
 	if actor.Species != HomoSapiens || other.Species != ArchaicHominin || actor.TileID != other.TileID || actor.ID == other.ID {
 		return ErrInvalidInterbreedTarget
 	}
-	actor.InterbreedTarget, actor.HasInterbreedTarget, actor.SpatialActionUsed = target, true, true
+	actor.InterbreedTarget, actor.SpatialActionUsed = Some(target), true
 	return nil
 }
 

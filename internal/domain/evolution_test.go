@@ -28,7 +28,7 @@ func TestSameSpeciesGeneFlowIsReciprocalAndPopulationWeighted(t *testing.T) {
 func TestActiveInterbreedingCreatesCrossSpeciesGeneFlow(t *testing.T) {
 	grid, _ := (WorldGenerator{}).Generate()
 	bands := []Band{
-		{ID: 1, Species: HomoSapiens, TileID: StartingTileIDs[0], Population: 100, Heritable: uniformTraits(0.1), HasInterbreedTarget: true, InterbreedTarget: 2},
+		{ID: 1, Species: HomoSapiens, TileID: StartingTileIDs[0], Population: 100, Heritable: uniformTraits(0.1), InterbreedTarget: Some(BandID(2))},
 		{ID: 2, Species: ArchaicHominin, TileID: StartingTileIDs[0], Population: 100, Heritable: uniformTraits(0.9)},
 	}
 	applyKnowledgeAndGenetics(bands, grid, nil, nil, NewWorldRNG(2))
