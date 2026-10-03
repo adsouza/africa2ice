@@ -236,7 +236,7 @@ var algorithmCases = []algorithmCase{{
 	field: "TechnologyOwnershipAlgorithm", current: "band-local-v1", unsupported: "species-global-v2",
 	probe: func(world *domain.World) string {
 		return eachBand(world, func(band domain.Band) []any {
-			return []any{band.Technology.Acquired, band.Technology.Target, band.Technology.HasTarget}
+			return []any{band.Technology.Acquired, band.Technology.Target}
 		})
 	},
 }, {

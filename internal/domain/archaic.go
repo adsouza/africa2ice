@@ -59,7 +59,7 @@ func (world *World) planArchaicOwned() (archaicPlanningResult, error) {
 			return archaicPlanningResult{}, err
 		}
 		index = scratch.bandIndex(id)
-		if !scratch.bands[index].Technology.HasTarget {
+		if !scratch.bands[index].Technology.Target.Present() {
 			for _, technology := range archaicTechPriority {
 				state := scratch.bands[index].Technology
 				if state.Has(technology) || !state.PrerequisitesMet(technology) {

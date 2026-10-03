@@ -129,7 +129,7 @@ func projectFrame(world *domain.World, worldRevision, terrainRevision uint64) (*
 		publicBand := gameapi.Band{
 			ID: gameapi.BandID(band.ID), Species: mapSpecies(band.Species), TileID: gameapi.TileID(band.TileID),
 			Population: uint32(band.Population), Health: float64(band.Health), StoredFood: float64(band.StoredFood),
-			AcquiredTech: band.Technology.Acquired, HasResearchTarget: band.Technology.HasTarget,
+			AcquiredTech:      band.Technology.Acquired,
 			SpatialActionUsed: band.SpatialActionUsed,
 			Stress:            world.BandStress(band.ID),
 			LastFoodReport:    gameapi.FoodTurnReport{Turn: band.LastFoodReport.Turn, RequiredFU: band.LastFoodReport.RequiredFU, DeficitFU: band.LastFoodReport.DeficitFU},
@@ -159,13 +159,13 @@ func projectFrame(world *domain.World, worldRevision, terrainRevision uint64) (*
 			publicBand.ResearchOptions[publicTechnology] = gameapi.ResearchOption{
 				Available:        !acquired && band.Technology.PrerequisitesMet(technology),
 				Acquired:         acquired,
-				Current:          band.Technology.HasTarget && band.Technology.Target == technology,
+				Current:          band.Technology.Target == domain.Some(technology),
 				Cost:             domain.ResearchCost[technology],
 				PrerequisiteMask: domain.TechnologyPrerequisiteMask(technology),
 			}
 		}
-		if band.Technology.HasTarget {
-			publicBand.ResearchTarget = mapTech(band.Technology.Target)
+		if target, researching := band.Technology.Target.Get(); researching {
+			publicBand.ResearchTarget, publicBand.HasResearchTarget = mapTech(target), true
 			publicBand.OriginalResearchGainPreview = domain.ResearchGain(band.Workers(domain.Toolcraft))
 		}
 		for trait := domain.HeritableTrait(0); trait < domain.HeritableTraitCount; trait++ {

@@ -7734,9 +7734,9 @@ tile, each tile's resource stocks and `Degradation`, the bounded chronological e
 `RNGAlgorithm: "pcg-splitmix-v1"`, and the serialized `WorldRNG` bytes. That identifier versions the
 `SplitMix64` seed expansion, the `WorldRNG.Float64` mapping over raw PCG output, and the marshalled
 PCG state together, because all three sit between a world seed and a simulation draw. A band
-with no queued migration or interbreeding intent saves that order's fields as zeros behind a false
-presence flag; load reads them only when the flag is set, so older saves carrying stale values
-behind a false flag load unchanged.
+with no queued migration, interbreeding intent, or research target saves those fields as zeros
+behind a false presence flag; load reads them only when the flag is set, so older saves carrying
+stale values behind a false flag load unchanged.
 `CampaignClockAlgorithm` versions the 80,000/20,000 BP endpoints, four 100-turn era intervals and
 their three internal boundaries, their 300/150/100/50-year turn spans, and the piecewise
 `CampaignDate`/`CalendarProgress`

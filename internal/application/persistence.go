@@ -232,7 +232,7 @@ func SaveStateFromWorld(world *domain.World, revision uint64) (SaveState, error)
 	for _, band := range state.Bands {
 		item := BandSave{
 			ID: uint64(band.ID), Species: uint8(band.Species), TileID: uint16(band.TileID), Population: uint32(band.Population), Health: float64(band.Health), StoredFood: float64(band.StoredFood),
-			AcquiredTech: band.Technology.Acquired, ResearchTarget: uint8(band.Technology.Target), HasResearchTarget: band.Technology.HasTarget,
+			AcquiredTech:   band.Technology.Acquired,
 			LastFoodReport: FoodReportSave{band.LastFoodReport.Turn, band.LastFoodReport.RequiredFU, band.LastFoodReport.DeficitFU},
 			LastMortality:  MortalitySave{band.LastMortality.Starvation, band.LastMortality.Seasonal, band.LastMortality.Chronic, band.LastMortality.Macro, band.LastMortality.Acute},
 			LastOutcomeReport: OutcomeReportSave{
@@ -291,7 +291,7 @@ func (save SaveState) RestoreWorld() (*domain.World, error) {
 	for _, item := range save.Bands {
 		band := domain.Band{
 			ID: domain.BandID(item.ID), Species: domain.Species(item.Species), TileID: domain.TileID(item.TileID), Population: domain.Population(item.Population), Health: domain.Health(item.Health), StoredFood: domain.FU(item.StoredFood),
-			Technology:     domain.TechnologyState{Acquired: item.AcquiredTech, Target: domain.Technology(item.ResearchTarget), HasTarget: item.HasResearchTarget},
+			Technology:     domain.TechnologyState{Acquired: item.AcquiredTech, Target: item.researchTarget()},
 			LastFoodReport: domain.FoodTurnReport{Turn: item.LastFoodReport.Turn, RequiredFU: item.LastFoodReport.RequiredFU, DeficitFU: item.LastFoodReport.DeficitFU},
 			LastMortality:  domain.MortalityReport{Starvation: item.LastMortality.Starvation, Seasonal: item.LastMortality.Seasonal, Chronic: item.LastMortality.Chronic, Macro: item.LastMortality.Macro, Acute: item.LastMortality.Acute},
 			LastOutcomeReport: domain.OutcomeReport{
@@ -379,10 +379,14 @@ func (service *GameService) StateHash() (string, error) {
 	return fmt.Sprintf("%x", sum), nil
 }
 
-// saveOrders writes a band's optional orders into the flat save fields. An
-// absent order writes zeros: a resolved order is gone, not stale state that
-// would otherwise reach every save and the canonical campaign-state hash.
+// saveOrders writes a band's optional orders and research target into the
+// flat save fields. An absent one writes zeros: a resolved order or completed
+// target is gone, not stale state that would otherwise reach every save and
+// the canonical campaign-state hash.
 func (item *BandSave) saveOrders(band domain.Band) {
+	if target, researching := band.Technology.Target.Get(); researching {
+		item.ResearchTarget, item.HasResearchTarget = uint8(target), true
+	}
 	if order, queued := band.QueuedMigration.Get(); queued {
 		item.HasQueuedMigration = true
 		item.QueuedMigration, item.QueuedOrigin = uint16(order.Destination), uint16(order.Origin)
@@ -406,6 +410,16 @@ func (item BandSave) queuedMigration() domain.Option[domain.MigrationOrder] {
 		order.Passage = domain.Some(domain.PassageID(item.QueuedPassage))
 	}
 	return domain.Some(order)
+}
+
+// researchTarget reads the target only when its flag is set; saves written
+// before targets were normalized can carry a finished technology behind a
+// false flag.
+func (item BandSave) researchTarget() domain.Option[domain.Technology] {
+	if !item.HasResearchTarget {
+		return domain.Option[domain.Technology]{}
+	}
+	return domain.Some(domain.Technology(item.ResearchTarget))
 }
 
 func (item BandSave) interbreedTarget() domain.Option[domain.BandID] {

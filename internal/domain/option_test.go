@@ -78,3 +78,21 @@ func TestResolvedInterbreedingLeavesNoTarget(t *testing.T) {
 		}
 	}
 }
+
+// Completing the research target, or running out of anything to research,
+// leaves no target behind, not the finished technology beside a false flag.
+func TestCompletingResearchLeavesNoTarget(t *testing.T) {
+	var state TechnologyState
+	if err := state.Select(0); err != nil {
+		t.Fatal(err)
+	}
+	state.AdvanceResearch(0, ResearchCost[0])
+	if !state.Has(0) || state.Target != (Option[Technology]{}) {
+		t.Fatalf("after completing technology 0: acquired %t, target %+v", state.Has(0), state.Target)
+	}
+	finished := TechnologyState{Acquired: uint16(1)<<TechCount - 1}
+	finished.selectNextResearch(0)
+	if finished.Target != (Option[Technology]{}) {
+		t.Fatalf("a completed tree selected target %+v", finished.Target)
+	}
+}

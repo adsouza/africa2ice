@@ -26,8 +26,8 @@ func TestResearchProductionAndCompletion(t *testing.T) {
 	if got := state.PlannedResearchGain(ResearchHalfSaturation); got != 10 {
 		t.Fatalf("half-saturation gain = %v", got)
 	}
-	for state.HasTarget {
-		state.AdvanceResearch(state.Target, state.PlannedResearchGain(1_000))
+	for target, researching := state.Target.Get(); researching; target, researching = state.Target.Get() {
+		state.AdvanceResearch(target, state.PlannedResearchGain(1_000))
 	}
 	if !state.Has(Firecraft) || state.Progress[Firecraft] != ResearchCost[Firecraft] {
 		t.Fatalf("research did not normalize: %#v", state)
