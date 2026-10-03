@@ -85,6 +85,39 @@ jobs:
           path: reference-checkpoints.json
           if-no-files-found: error
 
+  race:
+    # Storage, preference, audio, and host code run goroutines that share state
+    # through mutexes and channels; a data race there passes ordinary tests on
+    # timing luck. One Linux runner repeats the whole suite under the race
+    # detector, alongside the longer web lane rather than after it. The whole
+    # suite, not a list of concurrent packages: a list would have to be kept in
+    # step with every new goroutine.
+    env:
+      DISPLAY: ":99.0"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: 1.26.4
+          cache: true
+      - name: Bound apt fetch time
+        shell: bash
+        # Same bound as the native job: a stalled mirror fails over after 30s.
+        run: |
+          sudo tee /etc/apt/apt.conf.d/99-ci-fetch-timeouts >/dev/null <<'EOF'
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          Acquire::Retries "3";
+          EOF
+          apt-config dump | grep -q 'Acquire::http::Timeout "30"'
+      - name: Install Linux graphics and audio headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libgl1-mesa-dev libgl1-mesa-dri libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev xvfb
+      - name: Start Linux virtual display
+        run: Xvfb :99 -screen 0 1280x720x24 > /tmp/xvfb.log 2>&1 &
+      - name: Test under the race detector
+        run: go test -race ./...
+
   web-release:
     runs-on: ubuntu-24.04
     steps:
@@ -267,7 +300,7 @@ jobs:
 
   deploy-pages:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [native, web-release, cross-target-determinism, release-readiness]
+    needs: [native, race, web-release, cross-target-determinism, release-readiness]
     runs-on: ubuntu-24.04
     permissions:
       pages: write
