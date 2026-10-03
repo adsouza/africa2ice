@@ -34,10 +34,28 @@ const maxPanicStackBytes = 16 * 1024
 // original value. Install it after the session Close defer so the panic record
 // is flushed before the sink closes during stack unwinding.
 func GuardPanic(session *Session) {
-	value := recover()
-	if value == nil {
-		return
+	if value := recover(); value != nil {
+		session.recordAndRepanic(value)
 	}
+}
+
+// PanicGuard is GuardPanic for a goroutine or JavaScript callback the
+// entrypoint's guard cannot see. Composition passes the method value to each
+// owner as a plain func(), and every owned goroutine and callback begins with
+// `defer panicGuard()`, so owners never import this package. It must call
+// recover itself: recover only stops a panic when called directly by the
+// deferred function, so delegating to GuardPanic would let the panic through
+// unrecorded.
+func (session *Session) PanicGuard() {
+	if value := recover(); value != nil {
+		session.recordAndRepanic(value)
+	}
+}
+
+// recordAndRepanic writes session.panic with this goroutine's bounded stack
+// and raises the original value again; a crash is never converted into a
+// normal return.
+func (session *Session) recordAndRepanic(value any) {
 	if session != nil {
 		stack := debug.Stack()
 		clipped := false

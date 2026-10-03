@@ -4,7 +4,7 @@ package app
 
 import "syscall/js"
 
-func openExternalURL(url string) error {
+func openExternalURL(url string, _ func()) error {
 	js.Global().Call("open", url, "_blank", "noopener,noreferrer")
 	return nil
 }

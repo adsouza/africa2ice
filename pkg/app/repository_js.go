@@ -8,14 +8,14 @@ import (
 	"github.com/adsouza/africa2ice/pkg/ui"
 )
 
-func newCampaignRepository() (application.CampaignRepository, error) {
-	return storage.NewIndexedDBRepository(), nil
+func newCampaignRepository(panicGuard func()) (application.CampaignRepository, error) {
+	return storage.NewIndexedDBRepository(panicGuard), nil
 }
 
 func shouldResumeSavedGameOnStartup() bool { return true }
 
-func newUISettingsStore() (ui.UISettingsStore, error) {
-	store, err := ui.NewIndexedDBUISettingsStore()
+func newUISettingsStore(panicGuard func()) (ui.UISettingsStore, error) {
+	store, err := ui.NewIndexedDBUISettingsStore(panicGuard)
 	if err != nil {
 		return nil, err
 	}

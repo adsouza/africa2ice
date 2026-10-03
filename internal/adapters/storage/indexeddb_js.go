@@ -37,10 +37,16 @@ type IndexedDBRepository struct {
 	completions chan application.RepositoryCompletion
 	done        chan struct{}
 	closeOnce   sync.Once
+	// panicGuard is deferred by both goroutines and, through funcOf, by every
+	// IndexedDB callback; never nil.
+	panicGuard func()
 }
 
-func NewIndexedDBRepository() *IndexedDBRepository {
-	repository := &IndexedDBRepository{ready: make(chan struct{}), requests: make(chan indexedRequest, 2), completions: make(chan application.RepositoryCompletion, 8), done: make(chan struct{})}
+// NewIndexedDBRepository opens the browser save store. panicGuard is the
+// session's panic hook for the repository's goroutines and JavaScript
+// callbacks, which run where the entrypoint guard cannot see; nil means none.
+func NewIndexedDBRepository(panicGuard func()) *IndexedDBRepository {
+	repository := &IndexedDBRepository{ready: make(chan struct{}), requests: make(chan indexedRequest, 2), completions: make(chan application.RepositoryCompletion, 8), done: make(chan struct{}), panicGuard: orNoGuard(panicGuard)}
 	go repository.open()
 	go repository.worker()
 	return repository
@@ -48,6 +54,7 @@ func NewIndexedDBRepository() *IndexedDBRepository {
 
 func (repository *IndexedDBRepository) open() {
 	defer close(repository.ready)
+	defer repository.panicGuard()
 	if err := repository.acquireWriterLease(); err != nil {
 		repository.openErr = err
 		return
@@ -60,7 +67,7 @@ func (repository *IndexedDBRepository) open() {
 	request := indexedDB.Call("open", indexedDBName, 1)
 	result := make(chan error, 1)
 	var upgrade, success, failure js.Func
-	upgrade = js.FuncOf(func(this js.Value, args []js.Value) any {
+	upgrade = repository.funcOf(func(this js.Value, args []js.Value) any {
 		database := request.Get("result")
 		for _, name := range []string{"worlds", "metadata", "control"} {
 			if !database.Get("objectStoreNames").Call("contains", name).Bool() {
@@ -69,9 +76,9 @@ func (repository *IndexedDBRepository) open() {
 		}
 		return nil
 	})
-	success = js.FuncOf(func(this js.Value, args []js.Value) any {
+	success = repository.funcOf(func(this js.Value, args []js.Value) any {
 		repository.db = request.Get("result")
-		versionChange := js.FuncOf(func(this js.Value, args []js.Value) any {
+		versionChange := repository.funcOf(func(this js.Value, args []js.Value) any {
 			repository.writable = false
 			repository.db.Call("close")
 			return nil
@@ -80,7 +87,7 @@ func (repository *IndexedDBRepository) open() {
 		result <- nil
 		return nil
 	})
-	failure = js.FuncOf(func(this js.Value, args []js.Value) any {
+	failure = repository.funcOf(func(this js.Value, args []js.Value) any {
 		result <- jsError(request, "open IndexedDB")
 		return nil
 	})
@@ -112,13 +119,13 @@ func (repository *IndexedDBRepository) acquireWriterLease() error {
 	acquired := make(chan error, 1)
 	var signalOnce sync.Once
 	signal := func(err error) { signalOnce.Do(func() { acquired <- err }) }
-	executor := js.FuncOf(func(this js.Value, args []js.Value) any {
+	executor := repository.funcOf(func(this js.Value, args []js.Value) any {
 		repository.lockRelease = args[0]
 		return nil
 	})
 	hold := js.Global().Get("Promise").New(executor)
 	executor.Release()
-	callback := js.FuncOf(func(this js.Value, args []js.Value) any {
+	callback := repository.funcOf(func(this js.Value, args []js.Value) any {
 		lock := args[0]
 		if lock.IsUndefined() || lock.IsNull() {
 			repository.writable = false
@@ -130,7 +137,7 @@ func (repository *IndexedDBRepository) acquireWriterLease() error {
 		signal(nil)
 		return hold
 	})
-	failure := js.FuncOf(func(this js.Value, args []js.Value) any {
+	failure := repository.funcOf(func(this js.Value, args []js.Value) any {
 		message := "Web Lock request failed"
 		if len(args) != 0 && !args[0].IsUndefined() {
 			message = args[0].Get("message").String()
@@ -219,6 +226,7 @@ func (repository *IndexedDBRepository) Close() error {
 }
 
 func (repository *IndexedDBRepository) worker() {
+	defer repository.panicGuard()
 	<-repository.ready
 	for {
 		select {
@@ -290,7 +298,7 @@ func (repository *IndexedDBRepository) collectUnreferencedWorlds() error {
 	var abortErr error
 	var worldKeysRequest js.Value
 	var metadataSuccess, keysSuccess, complete, failure js.Func
-	keysSuccess = js.FuncOf(func(this js.Value, args []js.Value) any {
+	keysSuccess = repository.funcOf(func(this js.Value, args []js.Value) any {
 		keys := worldKeysRequest.Get("result")
 		worlds := transaction.Call("objectStore", "worlds")
 		for index := 0; index < keys.Length(); index++ {
@@ -301,7 +309,7 @@ func (repository *IndexedDBRepository) collectUnreferencedWorlds() error {
 		}
 		return nil
 	})
-	metadataSuccess = js.FuncOf(func(this js.Value, args []js.Value) any {
+	metadataSuccess = repository.funcOf(func(this js.Value, args []js.Value) any {
 		values := metadataRequest.Get("result")
 		for index := 0; index < values.Length(); index++ {
 			var metadata application.SaveMetadata
@@ -320,8 +328,8 @@ func (repository *IndexedDBRepository) collectUnreferencedWorlds() error {
 		worldKeysRequest.Set("onsuccess", keysSuccess)
 		return nil
 	})
-	complete = js.FuncOf(func(this js.Value, args []js.Value) any { finish(nil); return nil })
-	failure = js.FuncOf(func(this js.Value, args []js.Value) any {
+	complete = repository.funcOf(func(this js.Value, args []js.Value) any { finish(nil); return nil })
+	failure = repository.funcOf(func(this js.Value, args []js.Value) any {
 		if abortErr != nil {
 			finish(abortErr)
 			return nil
@@ -353,7 +361,7 @@ func (repository *IndexedDBRepository) commit(slot application.SlotID, prepare f
 	var abortErr error
 	counterRequest := transaction.Call("objectStore", "control").Call("get", "sequence")
 	var counterSuccess, complete, failure js.Func
-	counterSuccess = js.FuncOf(func(this js.Value, args []js.Value) any {
+	counterSuccess = repository.funcOf(func(this js.Value, args []js.Value) any {
 		sequence := uint64(1)
 		if value := counterRequest.Get("result"); !value.IsUndefined() {
 			current, err := indexedSequence(value)
@@ -374,8 +382,8 @@ func (repository *IndexedDBRepository) commit(slot application.SlotID, prepare f
 		transaction.Call("objectStore", "control").Call("put", strconv.FormatUint(sequence, 10), "sequence")
 		return nil
 	})
-	complete = js.FuncOf(func(this js.Value, args []js.Value) any { result <- nil; return nil })
-	failure = js.FuncOf(func(this js.Value, args []js.Value) any {
+	complete = repository.funcOf(func(this js.Value, args []js.Value) any { result <- nil; return nil })
+	failure = repository.funcOf(func(this js.Value, args []js.Value) any {
 		if abortErr != nil {
 			result <- abortErr
 			return nil
@@ -403,8 +411,8 @@ func (repository *IndexedDBRepository) read(slot application.SlotID) (*applicati
 	var state application.SaveState
 	metadataRequest := transaction.Call("objectStore", "metadata").Call("get", slotKey(slot))
 	var metadataSuccess, worldSuccess, failure js.Func
-	worldSuccess = js.FuncOf(func(this js.Value, args []js.Value) any { return nil })
-	metadataSuccess = js.FuncOf(func(this js.Value, args []js.Value) any {
+	worldSuccess = repository.funcOf(func(this js.Value, args []js.Value) any { return nil })
+	metadataSuccess = repository.funcOf(func(this js.Value, args []js.Value) any {
 		value := metadataRequest.Get("result")
 		if value.IsUndefined() {
 			result <- errors.New("save slot not found")
@@ -419,7 +427,7 @@ func (repository *IndexedDBRepository) read(slot application.SlotID) (*applicati
 		}
 		worldRequest := transaction.Call("objectStore", "worlds").Call("get", metadata.Generation)
 		worldSuccess.Release()
-		worldSuccess = js.FuncOf(func(this js.Value, args []js.Value) any {
+		worldSuccess = repository.funcOf(func(this js.Value, args []js.Value) any {
 			worldValue := worldRequest.Get("result")
 			if worldValue.IsUndefined() {
 				result <- errors.New("save generation missing")
@@ -442,7 +450,7 @@ func (repository *IndexedDBRepository) read(slot application.SlotID) (*applicati
 		worldRequest.Set("onerror", failure)
 		return nil
 	})
-	failure = js.FuncOf(func(this js.Value, args []js.Value) any {
+	failure = repository.funcOf(func(this js.Value, args []js.Value) any {
 		result <- jsError(transaction, "read IndexedDB save")
 		return nil
 	})
@@ -468,18 +476,18 @@ func (repository *IndexedDBRepository) list() ([]application.SaveMetadata, error
 	var operationErr error
 	var finishOnce sync.Once
 	finish := func(err error) { finishOnce.Do(func() { result <- err }) }
-	complete := js.FuncOf(func(this js.Value, args []js.Value) any {
+	complete := repository.funcOf(func(this js.Value, args []js.Value) any {
 		finish(nil)
 		return nil
 	})
-	abort := js.FuncOf(func(this js.Value, args []js.Value) any {
+	abort := repository.funcOf(func(this js.Value, args []js.Value) any {
 		if operationErr == nil {
 			operationErr = jsError(transaction, "list IndexedDB saves")
 		}
 		finish(operationErr)
 		return nil
 	})
-	requestFailure := js.FuncOf(func(this js.Value, args []js.Value) any {
+	requestFailure := repository.funcOf(func(this js.Value, args []js.Value) any {
 		if operationErr == nil {
 			operationErr = jsError(transaction, "list IndexedDB saves")
 		}
@@ -491,7 +499,7 @@ func (repository *IndexedDBRepository) list() ([]application.SaveMetadata, error
 	transaction.Set("onerror", requestFailure)
 	for index, slot := range slots {
 		request := transaction.Call("objectStore", "metadata").Call("get", slotKey(slot))
-		callback := js.FuncOf(func(this js.Value, args []js.Value) any {
+		callback := repository.funcOf(func(this js.Value, args []js.Value) any {
 			if value := request.Get("result"); !value.IsUndefined() {
 				if err := json.Unmarshal([]byte(value.String()), &metadata[index]); err != nil {
 					operationErr = fmt.Errorf("decode IndexedDB metadata for slot %d: %w", slot, err)
@@ -566,3 +574,13 @@ func jsError(value js.Value, prefix string) error {
 }
 
 var _ application.CampaignRepository = (*IndexedDBRepository)(nil)
+
+// funcOf is js.FuncOf for this repository's callbacks: each invocation runs
+// the session's panic hook, because a callback runs on the JavaScript event
+// loop where the entrypoint guard cannot see a panic.
+func (repository *IndexedDBRepository) funcOf(handler func(this js.Value, args []js.Value) any) js.Func {
+	return js.FuncOf(func(this js.Value, args []js.Value) any {
+		defer repository.panicGuard()
+		return handler(this, args)
+	})
+}

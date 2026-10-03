@@ -397,6 +397,7 @@ internal/verification/   REFERENCE-CAMPAIGN DRIVER — imports application + gam
 
 internal/archtest/
   arch_test.go           parses imports in every .go file, including inactive build tags
+  panic_guard_test.go    every owned goroutine and js.FuncOf callback defers the session panic hook
 
 tools/generate_compatibility_fixture/
   main.go                intentional regeneration command for the frozen schema-v1 save fixture

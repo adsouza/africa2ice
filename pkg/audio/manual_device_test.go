@@ -23,7 +23,7 @@ func TestManualDevicePlayback(t *testing.T) {
 	if os.Getenv("A2I_AUDIO_MANUAL") == "" {
 		t.Skip("manual: needs a real sound device")
 	}
-	manager, err := NewManager()
+	manager, err := NewManager(nil)
 	if err != nil {
 		t.Fatalf("NewManager() = %v", err)
 	}

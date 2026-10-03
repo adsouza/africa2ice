@@ -17,7 +17,7 @@ import (
 func TestHostCompositionPropagatesRepositoryFailure(t *testing.T) {
 	want := errors.New("cannot open campaign storage")
 	calls := 0
-	game, err := composeHostedGame(1, nil, false, func() (application.CampaignRepository, error) { calls++; return nil, want }, func() (ui.UISettingsStore, error) {
+	game, err := composeHostedGame(1, nil, false, func(func()) (application.CampaignRepository, error) { calls++; return nil, want }, func(func()) (ui.UISettingsStore, error) {
 		t.Fatal("preferences opened after repository failure")
 		return nil, nil
 	}, true)
@@ -29,7 +29,7 @@ func TestHostCompositionPropagatesRepositoryFailure(t *testing.T) {
 func TestHostCompositionResumesThroughIsolatedRepository(t *testing.T) {
 	for _, resume := range []bool{false, true} {
 		t.Run(map[bool]string{false: "fresh", true: "resume"}[resume], func(t *testing.T) {
-			repository, err := storage.NewFileRepository(t.TempDir())
+			repository, err := storage.NewFileRepository(t.TempDir(), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -37,8 +37,8 @@ func TestHostCompositionResumesThroughIsolatedRepository(t *testing.T) {
 			settings := &settingsStoreStub{}
 			repositoryCalls, settingsCalls := 0, 0
 			game, err := composeHostedGame(17, nil, false,
-				func() (application.CampaignRepository, error) { repositoryCalls++; return repository, nil },
-				func() (ui.UISettingsStore, error) { settingsCalls++; return settings, nil }, resume)
+				func(func()) (application.CampaignRepository, error) { repositoryCalls++; return repository, nil },
+				func(func()) (ui.UISettingsStore, error) { settingsCalls++; return settings, nil }, resume)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -78,14 +78,14 @@ func (*failedSettingsRead) BeginRead(uint64) error { return errors.New("preferen
 func TestHostPreferenceFailuresUseDefaults(t *testing.T) {
 	for _, openFailure := range []bool{false, true} {
 		t.Run(map[bool]string{false: "read", true: "open"}[openFailure], func(t *testing.T) {
-			repository, err := storage.NewFileRepository(t.TempDir())
+			repository, err := storage.NewFileRepository(t.TempDir(), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer repository.Close()
 			game, err := composeHostedGame(17, nil, true,
-				func() (application.CampaignRepository, error) { return repository, nil },
-				func() (ui.UISettingsStore, error) {
+				func(func()) (application.CampaignRepository, error) { return repository, nil },
+				func(func()) (ui.UISettingsStore, error) {
 					if openFailure {
 						return nil, errors.New("preferences unavailable")
 					}
@@ -116,7 +116,7 @@ func TestHostPreferenceFailuresUseDefaults(t *testing.T) {
 // DecorateUISettingsStore directly, so it stays green whether or not
 // composeHostedGame ever calls it -- which is exactly how the wiring got dropped.
 func TestHostCompositionLogsPreferenceOperations(t *testing.T) {
-	repository, err := storage.NewFileRepository(t.TempDir())
+	repository, err := storage.NewFileRepository(t.TempDir(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,8 +124,8 @@ func TestHostCompositionLogsPreferenceOperations(t *testing.T) {
 	session, readLog := openLoggedSession(t)
 	settings := &settingsStoreStub{}
 	game, err := composeHostedGame(17, session, false,
-		func() (application.CampaignRepository, error) { return repository, nil },
-		func() (ui.UISettingsStore, error) { return settings, nil }, false)
+		func(func()) (application.CampaignRepository, error) { return repository, nil },
+		func(func()) (ui.UISettingsStore, error) { return settings, nil }, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,14 +146,14 @@ func (r *ownedRepository) Close() error { r.closes++; return r.CampaignRepositor
 
 func TestComposedHostOwnsRepositoryUntilClosed(t *testing.T) {
 	directory := t.TempDir()
-	repository, err := storage.NewFileRepository(directory)
+	repository, err := storage.NewFileRepository(directory, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	owned := &ownedRepository{CampaignRepository: repository}
 	game, err := composeHostedGame(17, nil, false,
-		func() (application.CampaignRepository, error) { return owned, nil },
-		func() (ui.UISettingsStore, error) { return nil, nil }, false)
+		func(func()) (application.CampaignRepository, error) { return owned, nil },
+		func(func()) (ui.UISettingsStore, error) { return nil, nil }, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestComposedHostOwnsRepositoryUntilClosed(t *testing.T) {
 	if owned.closes != 1 {
 		t.Fatalf("repository closed %d times", owned.closes)
 	}
-	reopened, err := storage.NewFileRepository(directory)
+	reopened, err := storage.NewFileRepository(directory, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestComposedHostOwnsRepositoryUntilClosed(t *testing.T) {
 }
 
 func TestHostConstructionUnwindReleasesRepository(t *testing.T) {
-	repository, err := storage.NewFileRepository(t.TempDir())
+	repository, err := storage.NewFileRepository(t.TempDir(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,8 +194,8 @@ func TestHostConstructionUnwindReleasesRepository(t *testing.T) {
 			}
 		}()
 		_, _ = composeHostedGame(17, nil, false,
-			func() (application.CampaignRepository, error) { return owned, nil },
-			func() (ui.UISettingsStore, error) { panic(sentinel) }, false)
+			func(func()) (application.CampaignRepository, error) { return owned, nil },
+			func(func()) (ui.UISettingsStore, error) { panic(sentinel) }, false)
 	}()
 	if owned.closes != 1 {
 		t.Fatalf("partial construction leaked repository: closes=%d", owned.closes)
@@ -217,5 +217,51 @@ func TestHostDoesNotCloseBorrowedPorts(t *testing.T) {
 	}
 	if port.closes != 0 {
 		t.Fatal("host closed borrowed port")
+	}
+}
+
+// composeHostedGame owns the session, so it is where each owner receives the
+// session's panic hook. An opener handed anything else would leave that
+// owner's goroutines and callbacks crashing without a session.panic record.
+func TestHostCompositionHandsOwnersTheSessionPanicGuard(t *testing.T) {
+	repository, err := storage.NewFileRepository(t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	session, readLog := openLoggedSession(t)
+	guards := map[string]func(){}
+	_, err = composeHostedGame(17, session, false,
+		func(panicGuard func()) (application.CampaignRepository, error) {
+			guards["repository"] = panicGuard
+			return repository, nil
+		},
+		func(panicGuard func()) (ui.UISettingsStore, error) {
+			guards["settings"] = panicGuard
+			return &settingsStoreStub{}, nil
+		}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, owner := range []string{"repository", "settings"} {
+		guard := guards[owner]
+		if guard == nil {
+			t.Fatalf("%s opener received no panic guard", owner)
+		}
+		recovered := make(chan any, 1)
+		go func() {
+			defer func() { recovered <- recover() }()
+			defer guard()
+			panic(owner + " worker failed")
+		}()
+		if got := <-recovered; got != owner+" worker failed" {
+			t.Fatalf("%s guard re-raised %#v, want the original panic", owner, got)
+		}
+	}
+	logged := readLog() // closes the session; read once
+	for _, owner := range []string{"repository", "settings"} {
+		if !strings.Contains(logged, `"value":"`+owner+` worker failed"`) {
+			t.Fatalf("%s guard did not record session.panic:\n%s", owner, logged)
+		}
 	}
 }

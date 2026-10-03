@@ -39,7 +39,7 @@ func TestSynthesizedEffectsAreBoundedStereoAndDistinct(t *testing.T) {
 func TestNoopAndLazyMasterSettingsAreSafeBeforeConstruction(t *testing.T) {
 	NoopManager{}.SetMaster(0.8, true)
 	NoopManager{}.Play(SFXChoiceClick)
-	lazy := NewLazyManager(nil)
+	lazy := NewLazyManager(nil, nil)
 	lazy.SetMaster(2, true)
 	if lazy.volume != 1 || !lazy.muted || !lazy.settled || lazy.manager != nil {
 		t.Fatalf("lazy settings = volume %v muted %t manager %T", lazy.volume, lazy.muted, lazy.manager)

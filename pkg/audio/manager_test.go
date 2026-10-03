@@ -188,3 +188,17 @@ func TestLazyManagerCallsAnUnopenedDeviceAnInitFailure(t *testing.T) {
 		t.Fatalf("reported stages = %v, want exactly one \"init\": the device never opened", stages)
 	}
 }
+
+// The device watcher runs on its own goroutine, outside the entrypoint guard,
+// so it must defer the session's panic hook. Driven directly with a fake
+// ready channel: opening a real device needs hardware no test lane has.
+func TestDeviceWatcherDefersThePanicGuard(t *testing.T) {
+	calls := 0
+	manager := &Manager{panicGuard: func() { calls++ }}
+	ready := make(chan struct{})
+	close(ready)
+	manager.awaitDevice(ready, func() error { return nil })
+	if calls != 1 || !manager.opened {
+		t.Fatalf("guard calls %d, opened %t; want one guard call and an opened device", calls, manager.opened)
+	}
+}

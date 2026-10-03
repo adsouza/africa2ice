@@ -100,7 +100,7 @@ func newGameWithPresentation(port gameapi.Game, sound gameaudio.SoundManager, se
 		port: port, sound: sound, frame: frame, scene: render.NewMapScene(),
 		panel: hud.New(), notesMode: notesModeFor(settings), guide: ui.NewGuideState(false),
 		fieldNote:       ui.CampaignOverviewFieldNote(),
-		openExternalURL: openExternalURL,
+		openExternalURL: func(url string) error { return openExternalURL(url, nil) },
 		notice:          "Outlined tiles are reachable — arrows choose, Enter confirms", noticeFrames: 300,
 		storage:           newStorageController(),
 		preferences:       preferences,
@@ -139,10 +139,13 @@ func newHostedGame(seed uint64, session *logging.Session, enableSound bool) (*Ga
 }
 
 func composeHostedGame(seed uint64, session *logging.Session, enableSound bool,
-	openRepository func() (application.CampaignRepository, error),
-	openSettings func() (ui.UISettingsStore, error), resume bool,
+	openRepository func(panicGuard func()) (application.CampaignRepository, error),
+	openSettings func(panicGuard func()) (ui.UISettingsStore, error), resume bool,
 ) (*Game, error) {
-	repository, err := openRepository()
+	// Owners start goroutines and JavaScript callbacks the entrypoint guard
+	// cannot see; each defers this hook instead (DESIGN.md §3).
+	panicGuard := session.PanicGuard
+	repository, err := openRepository(panicGuard)
 	if err != nil {
 		return nil, err
 	}
@@ -164,12 +167,13 @@ func composeHostedGame(seed uint64, session *logging.Session, enableSound bool,
 	if enableSound {
 		sound = gameaudio.NewLazyManager(audioReporter(session, os.Stderr, func(notice string) {
 			game.showNotice(notice)
-		}))
+		}), panicGuard)
 	}
-	settingsStore, settingsErr := openSettings()
+	settingsStore, settingsErr := openSettings(panicGuard)
 	settingsStore = logging.DecorateUISettingsStore(session, settingsStore)
 	game = newGameWithPresentation(logging.DecorateGame(session, service), sound, settingsStore)
 	game.logSession = session
+	game.openExternalURL = func(url string) error { return openExternalURL(url, panicGuard) }
 	game.scenes.Push(ui.SceneTitle)
 	if settingsErr != nil {
 		sound.SetMaster(ui.DefaultUISettings().MasterVolume, ui.DefaultUISettings().Muted)

@@ -23,7 +23,9 @@ func externalURLCommand(platform, url string) (*exec.Cmd, error) {
 	}
 }
 
-func openExternalURL(url string) error {
+// openExternalURL launches the platform browser. panicGuard is the session's
+// panic hook for the goroutine that reaps the launcher; nil means none.
+func openExternalURL(url string, panicGuard func()) error {
 	command, err := externalURLCommand(runtime.GOOS, url)
 	if err != nil {
 		return err
@@ -32,6 +34,12 @@ func openExternalURL(url string) error {
 		return err
 	}
 	// Reap the launcher without stalling the game while the browser starts.
-	go func() { _ = command.Wait() }()
+	if panicGuard == nil {
+		panicGuard = func() {}
+	}
+	go func() {
+		defer panicGuard()
+		_ = command.Wait()
+	}()
 	return nil
 }

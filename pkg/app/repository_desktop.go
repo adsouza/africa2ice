@@ -11,22 +11,22 @@ import (
 	"github.com/adsouza/africa2ice/pkg/ui"
 )
 
-func newCampaignRepository() (application.CampaignRepository, error) {
+func newCampaignRepository(panicGuard func()) (application.CampaignRepository, error) {
 	root, err := os.UserConfigDir()
 	if err != nil {
 		return nil, err
 	}
-	return storage.NewFileRepository(filepath.Join(root, "africa2ice", "saves"))
+	return storage.NewFileRepository(filepath.Join(root, "africa2ice", "saves"), panicGuard)
 }
 
 func shouldResumeSavedGameOnStartup() bool { return true }
 
-func newUISettingsStore() (ui.UISettingsStore, error) {
+func newUISettingsStore(panicGuard func()) (ui.UISettingsStore, error) {
 	root, err := os.UserConfigDir()
 	if err != nil {
 		return nil, err
 	}
-	store, err := ui.NewFileUISettingsStore(filepath.Join(root, "africa2ice", "ui_settings.json"))
+	store, err := ui.NewFileUISettingsStore(filepath.Join(root, "africa2ice", "ui_settings.json"), panicGuard)
 	if err != nil {
 		return nil, err
 	}
