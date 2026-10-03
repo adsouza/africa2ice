@@ -37,7 +37,7 @@ func TestSpendingTheMoveLeavesTheCameraFocused(t *testing.T) {
 	if game.desiredCameraMode() != render.CameraFocus {
 		t.Fatal("spending the move zoomed out; Focus must hold")
 	}
-	game.openRow, game.rowChosen = ui.RowResearch, true
+	game.disclosure.openRow, game.disclosure.rowChosen = ui.RowResearch, true
 	if game.desiredCameraMode() != render.CameraFocus {
 		t.Fatal("opening another row zoomed out; Focus must hold")
 	}
@@ -71,7 +71,7 @@ func TestCameraToggleHoldsUntilANewMovableSelectionRearmsIt(t *testing.T) {
 	if game.desiredCameraMode() != render.CameraOverview {
 		t.Fatal("Z should leave Focus")
 	}
-	game.openRow, game.rowChosen = ui.RowMove, true
+	game.disclosure.openRow, game.disclosure.rowChosen = ui.RowMove, true
 	if game.desiredCameraMode() != render.CameraOverview {
 		t.Fatal("reopening Move on the same selection re-armed Focus")
 	}

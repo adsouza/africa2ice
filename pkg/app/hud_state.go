@@ -18,18 +18,18 @@ func (g *Game) hudState() hud.State {
 	state := hud.State{
 		Frame:          frame,
 		SelectedBand:   g.selectedBand,
-		Preview:        render.MigrationPreview{BandID: g.migrationPreviewBand, TileID: g.migrationPreviewTile, Visible: g.hasMigrationPreview},
-		Hover:          render.TileHover{TileID: g.hoveredTile, Visible: g.hasHoveredTile},
-		OpenRow:        g.openRow,
+		Preview:        g.preview,
+		Hover:          g.hover,
+		OpenRow:        g.disclosure.openRow,
 		ResearchCursor: g.researchCursor,
-		DetailsOpen:    g.detailsOpen,
-		BandListOpen:   g.bandListOpen,
+		DetailsOpen:    g.disclosure.detailsOpen,
+		BandListOpen:   g.disclosure.bandListOpen,
 		Workforce: hud.WorkforceDraft{
 			Visible: g.workforce.Visible(), AllocationBP: g.workforce.Allocation(), SelectedRole: g.workforce.Role,
 			Dirty: g.workforce.Dirty(), Valid: g.workforce.Valid(),
 		},
 		InterbreedFocus: g.interbreedFocus,
-		EndTurn:         ui.EndTurnGateFor(frame, g.workforce.Dirty(), g.hasMigrationPreview, g.endTurnArmed),
+		EndTurn:         ui.EndTurnGateFor(frame, g.workforce.Dirty(), g.preview.Visible, g.disclosure.endTurnArmed),
 		Note:            note,
 		NotesMode:       g.notesMode,
 		Guide:           g.guide,
@@ -82,11 +82,7 @@ func (g *Game) overlayState() hud.OverlayState {
 // resetDisclosure returns the panel to its defaults for a new selection, a
 // load, a new campaign, or a completed turn (spec §5.2).
 func (g *Game) resetDisclosure() {
-	g.openRow = ui.DefaultOpenRow(g.selected())
-	g.rowChosen = false
-	g.detailsOpen = false
-	g.bandListOpen = false
-	g.endTurnArmed = false
+	g.disclosure.reset(g.selected())
 	// Arming is one-sided on purpose. Assigning the eligibility outright
 	// would zoom the player out again the moment they selected a band that
 	// had already acted, which is the behaviour the stored mode exists to
@@ -98,8 +94,4 @@ func (g *Game) resetDisclosure() {
 
 // advanceOpenRow moves to the next unfinished row after an accepted action
 // unless the player chose a row explicitly.
-func (g *Game) advanceOpenRow() {
-	if !g.rowChosen {
-		g.openRow = ui.DefaultOpenRow(g.selected())
-	}
-}
+func (g *Game) advanceOpenRow() { g.disclosure.advance(g.selected()) }
