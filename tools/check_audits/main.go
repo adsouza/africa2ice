@@ -42,35 +42,46 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
+	if err := audit(root); err != nil {
+		fail(err)
+	}
+	fmt.Println("citation and dependency-license audits match their repository inputs")
+}
 
+// audit runs every check against the repository at root.
+func audit(root string) error {
 	notices, err := os.ReadFile(filepath.Join(root, "THIRD_PARTY_NOTICES.md"))
 	if err != nil {
-		fail(err)
+		return err
 	}
 	goModules, err := checkGoModules(root, notices)
 	if err != nil {
-		fail(err)
+		return err
 	}
 	if err := checkNPMModules(root, notices); err != nil {
-		fail(err)
+		return err
 	}
-	if !strings.Contains(string(notices), binaryenNoticeRow) {
-		fail(errors.New("THIRD_PARTY_NOTICES.md does not enumerate pinned Binaryen 132"))
+	if err := checkNotices(root, notices, goModules); err != nil {
+		return err
 	}
-	if !strings.Contains(string(notices), "## Bundled Go Regular font") {
-		fail(errors.New("THIRD_PARTY_NOTICES.md does not include the bundled Go Regular font license"))
-	}
+	return checkFieldNoteCitations(root)
+}
+
+// noticeRequirement is one line THIRD_PARTY_NOTICES.md must contain and the
+// problem reported when it does not.
+type noticeRequirement struct {
+	line, problem string
+}
+
+func noticeRequirements(goModules map[string]string) []noticeRequirement {
 	fontSource := fmt.Sprintf("gofont/ttfs/README` at `%s`", goModules["golang.org/x/image"])
-	if !strings.Contains(string(notices), fontSource) {
-		fail(fmt.Errorf("bundled Go Regular license does not identify %s", fontSource))
+	requirements := []noticeRequirement{
+		{binaryenNoticeRow, "THIRD_PARTY_NOTICES.md does not enumerate pinned Binaryen 132"},
+		{"## Bundled Go Regular font", "THIRD_PARTY_NOTICES.md does not include the bundled Go Regular font license"},
+		{fontSource, fmt.Sprintf("bundled Go Regular license does not identify %s", fontSource)},
+		{"## Bundled Noto Emoji subset", "THIRD_PARTY_NOTICES.md does not include the bundled Noto Emoji subset license"},
 	}
-	if !strings.Contains(string(notices), "## Bundled Noto Emoji subset") {
-		fail(errors.New("THIRD_PARTY_NOTICES.md does not include the bundled Noto Emoji subset license"))
-	}
-	if err := checkGlyphFontVersion(root, notices); err != nil {
-		fail(err)
-	}
-	for _, required := range [...]string{
+	for _, section := range [...]string{
 		"### Apache License 2.0",
 		"### `github.com/rivo/uniseg` — MIT License",
 		"### `github.com/jezek/xgb` — BSD-3-Clause with patent grant",
@@ -78,15 +89,20 @@ func main() {
 		"### `github.com/go-text/typesetting` — Unlicense OR BSD-3-Clause",
 		"### Noto Emoji — SIL Open Font License 1.1",
 	} {
-		if !strings.Contains(string(notices), required) {
-			fail(fmt.Errorf("THIRD_PARTY_NOTICES.md is missing required license section %q", required))
+		requirements = append(requirements, noticeRequirement{section, fmt.Sprintf("THIRD_PARTY_NOTICES.md is missing required license section %q", section)})
+	}
+	return requirements
+}
+
+// checkNotices requires every fixed line of the notices and the bundled glyph
+// font's own version.
+func checkNotices(root string, notices []byte, goModules map[string]string) error {
+	for _, requirement := range noticeRequirements(goModules) {
+		if !strings.Contains(string(notices), requirement.line) {
+			return errors.New(requirement.problem)
 		}
 	}
-	if err := checkFieldNoteCitations(root); err != nil {
-		fail(err)
-	}
-
-	fmt.Println("citation and dependency-license audits match their repository inputs")
+	return checkGlyphFontVersion(root, notices)
 }
 
 // checkGlyphFontVersion asserts THIRD_PARTY_NOTICES.md identifies the bundled
