@@ -394,6 +394,7 @@ internal/verification/   REFERENCE-CAMPAIGN DRIVER — imports application + gam
   checkpoint.go          CheckpointRecord + canonical sorted-key JSON encoding
   run.go                 ReferenceRun(seed, turns, policy) -> []CheckpointRecord; no I/O, no wall clock
   map.go                 deterministic text map dump
+  testdata/reference_checkpoints.json  pinned 400-turn reference campaign; any outcome change must regenerate it and show its diff
 
 internal/archtest/
   arch_test.go           parses imports in every .go file, including inactive build tags
