@@ -1756,7 +1756,9 @@ flora/fauna/water stocks and contribute to its total population pressure. To pre
 iteration order from deciding who eats, the demographic phase first computes every band's
 workforce-derived flora and fauna demands plus its population-wide water demand, then allocates each
 resource proportionally across the tile. For each resource, allocations are non-negative, their sum
-never exceeds the available stock, and permuting band IDs cannot change the per-species totals.
+never exceeds the available stock beyond floating-point rounding (re-adding allocations can land an
+ulp above it), the remaining stock is clamped at zero so it can never go negative, and permuting
+band IDs cannot change the per-species totals.
 Total population across both species is used for tile degradation and for the
 destination-population term in migration scoring.
 
