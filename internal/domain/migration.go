@@ -105,7 +105,9 @@ func (world *World) scoreMigration(band Band, destination TileID, cost float64, 
 	habitat := world.habitat[destination]
 	tile := world.tiles[destination]
 	geography, _ := world.grid.Tile(destination)
-	ecologicalK := float64(habitat.BaselineK * (1 - tile.Degradation))
+	// The current turn's macro factor, as Stress and the frame use: a warned
+	// next-turn episode is priced once, by warningSuitability below.
+	ecologicalK := world.ecologicalK(destination)
 	if ecologicalK < 0 {
 		ecologicalK = 0
 	}

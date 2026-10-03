@@ -73,3 +73,36 @@ func TestMigrationCandidateArrivalStressAddsTheArrivingBand(t *testing.T) {
 		assertClose(t, "ArrivalStress", candidate.ArrivalStress, specStress(world, candidate.TileID, arriving, band.Technology))
 	}
 }
+
+// Migration ranking reads the same EcologicalK as Stress and the frame:
+// BaselineK · (1 − Degradation) · MacroHabitatFactor at the current turn. A
+// next-turn episode is already priced by W_j, so it must not enter K as well.
+func TestMigrationCandidatesUseSpecEcologicalK(t *testing.T) {
+	world, _ := stressFixture(t)
+	band := &world.bands[0]
+	band.Population = 4000 // overfill every destination so the crowding preview binds
+	macroAffected, crowded := 0, 0
+	for _, candidate := range world.MigrationCandidates(band.ID) {
+		geography, _ := world.grid.Tile(candidate.TileID)
+		factor := MacroImpactAt(geography, world.turn).HabitatFactor
+		if factor < 1 {
+			macroAffected++
+		}
+		want := float64(float64(world.habitat[candidate.TileID].BaselineK*(1-world.tiles[candidate.TileID].Degradation)) * factor)
+		assertClose(t, "EcologicalK", candidate.EcologicalK, want)
+		if candidate.WaterSurvivalEquivalent > want {
+			t.Fatalf("tile %d: WaterSurvivalEquivalent %v exceeds EcologicalK %v", candidate.TileID, candidate.WaterSurvivalEquivalent, want)
+		}
+		arriving := float64(band.Population)
+		total := float64(candidate.DestinationPopulation) + arriving
+		decline := 0.0
+		if growth := LogisticGrowth(arriving, total, float64(want*band.Technology.CapacityMultiplier()), 0); growth < 0 {
+			decline = -growth
+			crowded++
+		}
+		assertClose(t, "CrowdingDecline", candidate.CrowdingDecline, decline)
+	}
+	if macroAffected == 0 || crowded == 0 {
+		t.Fatalf("fixture exercises %d macro-affected and %d crowded candidates; both must be non-zero or this proves nothing", macroAffected, crowded)
+	}
+}

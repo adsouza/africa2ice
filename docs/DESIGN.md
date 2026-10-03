@@ -4796,6 +4796,9 @@ C_j = min(1, K_eff_j / (P_total_j + P_b))          // 0 where K_eff_j is zero
 S_j = EcologicalK_j · R_j · W_j · C_j / (MovementCost(origin, j) · (1 + P_total_j))
 ```
 
+`EcologicalK_j` takes the current turn's `MacroHabitatFactor`, as `Stress` and the projected tile
+capacity do; a warned next-turn episode is priced once, by `W_j`, not again through `EcologicalK_j`.
+
 `C_j` is the crowding safety factor: the share of the arriving population — the
 destination's residents plus the band considering the move — that the destination can
 actually support, where `K_eff_j` applies the band's own capacity multiplier to
