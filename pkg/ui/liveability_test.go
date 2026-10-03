@@ -20,10 +20,10 @@ func liveabilityFrame() *gameapi.Frame {
 		Tiles: []gameapi.Tile{tile(0, 212, 315), tile(1, 640, 480), {ID: 2, X: 2, Land: true, Explored: false}},
 		Bands: []gameapi.Band{
 			{
-				ID: 3, Species: gameapi.HomoSapiens, Population: 68, TileID: 0, Health: 1,
+				ID: 3, Species: gameapi.HomoSapiens, Population: 68, TileID: 0, Health: 1, Stress: 68.0 / 150,
 				SeasonalMortalityRate: 0.0003, ChronicMortalityRate: 0.0016,
 				LastFoodReport:      gameapi.FoodTurnReport{Turn: 12, RequiredFU: 300},
-				MigrationCandidates: []gameapi.MigrationCandidate{{TileID: 1, SeasonalMortalityRate: 0.0003, ChronicMortalityRate: 0.002}},
+				MigrationCandidates: []gameapi.MigrationCandidate{{TileID: 1, SeasonalMortalityRate: 0.0003, ChronicMortalityRate: 0.002, ArrivalStress: 108.0 / 150}},
 			},
 			{ID: 9, Species: gameapi.ArchaicHominin, Population: 40, TileID: 1},
 		},
@@ -229,6 +229,7 @@ func TestLowerCapacityTheBandComfortablyFitsIsNotAWarning(t *testing.T) {
 	frame := liveabilityFrame()
 	band := &frame.Bands[0] // population 68
 	frame.Tiles[0].EcologicalK, frame.Tiles[1].EcologicalK = 400, 200
+	frame.Bands[0].Stress, frame.Bands[0].MigrationCandidates[0].ArrivalStress = 68.0/400, 108.0/200
 	capacity := rowsByLabel(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1))["Capacity"]
 	// 68/400 = 17% against (68+40)/200 = 54%: tighter, but neither side is
 	// near the 67% crowding point.
@@ -249,6 +250,7 @@ func TestCapacityIsRedWhenTheBandWouldNotFit(t *testing.T) {
 	frame := liveabilityFrame()
 	band := &frame.Bands[0] // population 68, joining an archaic band of 40
 	frame.Tiles[1].EcologicalK = 100
+	frame.Bands[0].MigrationCandidates[0].ArrivalStress = 108.0 / 100
 	capacity := rowsByLabel(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1))["Capacity"]
 	if capacity.TargetTier != TierRed {
 		t.Fatalf("capacity target tier = %v for 108 people on a capacity of 100, want red: %+v", capacity.TargetTier, capacity)
@@ -301,6 +303,7 @@ func TestDegradedCapacityNamesItsBaseline(t *testing.T) {
 	frame := liveabilityFrame()
 	band := &frame.Bands[0] // population 68
 	frame.Tiles[0].EcologicalK, frame.Tiles[0].Degradation = 75, 0.5
+	frame.Bands[0].Stress = 68.0 / 75
 	byLabel := rowsByLabel(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1))
 	if capacity := byLabel["Capacity"]; capacity.Here != "75/150 · 91% full" {
 		t.Fatalf("degraded capacity = %q, want its baseline alongside", capacity.Here)
@@ -308,5 +311,44 @@ func TestDegradedCapacityNamesItsBaseline(t *testing.T) {
 	// An undegraded tile stays on the short form.
 	if capacity := byLabel["Capacity"]; capacity.Target != "150 · 72% full" {
 		t.Fatalf("undegraded capacity = %q, want no baseline pair", capacity.Target)
+	}
+}
+
+// Occupancy is the domain's Stress, read from the frame: HERE is the band's
+// projected Stress and TARGET its candidate's ArrivalStress. Recomputing it
+// from tile capacity left out degradation, macro habitat loss, or technology
+// on one side or the other, so the panel and the split gate disagreed.
+func TestCapacityOccupancyReadsProjectedStressNotTileCapacity(t *testing.T) {
+	frame := liveabilityFrame()
+	band := &frame.Bands[0]
+	// Both tiles keep K 150 and the same residents; only the projected values
+	// change, so a recomputation from capacity would still read 45% and 72%.
+	band.Stress, band.MigrationCandidates[0].ArrivalStress = 0.9, 0.3
+	capacity := rowsByLabel(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1))["Capacity"]
+	if capacity.Here != "150 · 90% full" || capacity.Target != "150 · 30% full" {
+		t.Fatalf("capacity values = here %q target %q, want the projected stress", capacity.Here, capacity.Target)
+	}
+	if capacity.HereTier != TierAmber || capacity.TargetTier != TierNormal {
+		t.Fatalf("capacity tiers = here %v target %v, want amber then normal", capacity.HereTier, capacity.TargetTier)
+	}
+}
+
+// A tile the band cannot reach has no ArrivalStress, exactly as it has no
+// route-dependent mortality, so its Capacity row shows capacity alone.
+func TestUnreachableTargetShowsCapacityWithoutOccupancy(t *testing.T) {
+	frame := liveabilityFrame()
+	band := &frame.Bands[0]
+	band.MigrationCandidates = nil
+	capacity := rowsByLabel(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1))["Capacity"]
+	if capacity.Target != "150" {
+		t.Fatalf("unreachable capacity = %q, want capacity without an occupancy figure", capacity.Target)
+	}
+	if capacity.TargetTier != TierNormal {
+		t.Fatalf("unreachable capacity tier = %v, want normal: no arrival to measure", capacity.TargetTier)
+	}
+	// With no arrival on one side there is no occupancy to compare, and a
+	// missing figure must not read as an empty, better tile.
+	if capacity.Delta != 0 {
+		t.Fatalf("unreachable capacity delta = %d, want 0", capacity.Delta)
 	}
 }

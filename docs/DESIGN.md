@@ -588,7 +588,7 @@ presence flag. The projection exposes that already-persisted intent so presentat
 the player selected; it adds no second queue or simulation authority. **Derived previews:**
 `OriginalResearchGainPreview`, the current tile's seasonal/chronic mortality-rate preview, the fixed nine-entry projected `ResearchOptions`
 availability/acquired/current-target view plus its authoritative cost and direct-prerequisite mask, the ranked `MigrationCandidates` with destination-specific
-seasonal/chronic mortality-rate previews and an arrival crowding-decline preview, the freshly allocated co-located
+seasonal/chronic mortality-rate previews, an arrival crowding-decline preview, and an arrival `Stress` (`ArrivalStress`), the freshly allocated co-located
 archaic `InterbreedCandidateIDs`, a fixed three-entry `PassageStatuses` array, and `Stress`. Together these let the HUD explain the band's
 capabilities, food outcome, and population change.
 

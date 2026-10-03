@@ -174,18 +174,36 @@ func (world *World) BandStress(id BandID) float64 {
 		return 0
 	}
 	band := world.bands[index]
-	habitat := world.habitat[band.TileID]
-	denominator := float64(habitat.BaselineK * band.Technology.CapacityMultiplier())
-	if denominator <= 0 {
-		return 0
-	}
 	var total uint64
 	for _, resident := range world.bands {
 		if resident.TileID == band.TileID {
 			total += uint64(resident.Population)
 		}
 	}
-	return float64(total) / denominator
+	return world.stress(band, band.TileID, total)
+}
+
+// stress is Stress = P_total / (EcologicalK · T_tech) for band's technology on
+// tile, where population is the whole-tile total including band.
+func (world *World) stress(band Band, tile TileID, population uint64) float64 {
+	denominator := float64(world.ecologicalK(tile) * band.Technology.CapacityMultiplier())
+	if denominator <= 0 {
+		return 0
+	}
+	return float64(population) / denominator
+}
+
+// ecologicalK is EcologicalK = BaselineK · (1 − Degradation) · MacroHabitatFactor
+// for tile at the current campaign turn.
+func (world *World) ecologicalK(tile TileID) float64 {
+	geography, _ := world.grid.Tile(tile)
+	return EcologicalK(world.habitat[tile].BaselineK, world.tiles[tile].Degradation, MacroImpactAt(geography, world.turn))
+}
+
+// EcologicalK is the tile capacity left after degradation and any active
+// macro-episode habitat loss, before a band's technology multiplier.
+func EcologicalK(baselineK, degradation float64, macro MacroImpact) float64 {
+	return float64(float64(baselineK*(1-degradation)) * macro.HabitatFactor)
 }
 
 func (world *World) PassageStatus(id BandID, passageID PassageID) PassageAvailability {

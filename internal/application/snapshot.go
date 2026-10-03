@@ -68,7 +68,7 @@ func projectFrame(world *domain.World, worldRevision, terrainRevision uint64) (*
 			publicTile.LocalTemperatureC, publicTile.MovementCost = habitat[id].LocalTemperatureC, habitat[id].MovementCost
 			publicTile.VegetationIndex, publicTile.BaselineK = habitat[id].VegetationIndex, habitat[id].BaselineK
 			publicTile.Degradation = tileStates[id].Degradation
-			publicTile.EcologicalK = habitat[id].BaselineK * (1 - tileStates[id].Degradation) * macroImpact.HabitatFactor
+			publicTile.EcologicalK = domain.EcologicalK(habitat[id].BaselineK, tileStates[id].Degradation, macroImpact)
 			caps := domain.ResourceCaps(habitat[id].Biome, season, tileStates[id].Degradation, habitat[id].BaselineK)
 			caps.Flora *= macroImpact.FloraFactor
 			caps.Fauna *= macroImpact.FaunaFactor
@@ -196,7 +196,7 @@ func projectFrame(world *domain.World, worldRevision, terrainRevision uint64) (*
 				WaterSurvivalEquivalent: candidate.WaterSurvivalEquivalent, DestinationPopulation: candidate.DestinationPopulation,
 				WarningSuitability:    candidate.WarningSuitability,
 				SeasonalMortalityRate: seasonalMortalityRate, ChronicMortalityRate: chronicMortalityRate,
-				CrowdingDecline: candidate.CrowdingDecline,
+				CrowdingDecline: candidate.CrowdingDecline, ArrivalStress: candidate.ArrivalStress,
 				Passage:         gameapi.PassageID(candidate.Passage),
 				RequiresPassage: candidate.RequiresPassage,
 			})
