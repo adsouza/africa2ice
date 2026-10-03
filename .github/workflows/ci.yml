@@ -120,11 +120,17 @@ jobs:
       # Every `go test` replays the fuzz seed corpus; this explores beyond it.
       # Only on main, so an input newly found here cannot fail an unrelated pull
       # request; a failing input is saved under testdata/fuzz and uploaded.
-      - name: Fuzz the user-reachable decoders
+      - name: Fuzz the decoders and domain invariants
         if: github.event_name == 'push'
         run: |
           go test -run '^$' -fuzz '^FuzzDecodeUISettings$' -fuzztime 30s ./pkg/ui
           go test -run '^$' -fuzz '^FuzzLoadSave$' -fuzztime 30s ./internal/application
+          # Domain invariants DESIGN.md states; cheap pure functions, so 15s each.
+          for target in FuzzProportionalAllocateNeverOverspends FuzzLogisticGrowthStaysWithinItsBounds \
+            FuzzNextDegradationIsBoundedAndMonotonic FuzzEcologicalKNeverExceedsBaselineAndFallsWithDegradation \
+            FuzzSplitConservesPopulationAndFood; do
+            go test -run '^$' -fuzz "^${target}\$" -fuzztime 15s ./internal/domain
+          done
       - name: Upload failing fuzz inputs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
