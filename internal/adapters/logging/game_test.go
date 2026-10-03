@@ -243,7 +243,7 @@ func TestPanicGuardLogsAndRepanicsWithOriginalValue(t *testing.T) {
 		defer GuardPanic(session)
 		panic(want)
 	}()
-	if logged := output.String(); !strings.Contains(logged, `"msg":"panic"`) || !strings.Contains(logged, "stack_clipped") {
+	if logged := output.String(); !strings.Contains(logged, `"msg":"session.panic"`) || !strings.Contains(logged, "stack_clipped") {
 		t.Fatalf("panic was not logged with bounded-stack metadata: %s", logged)
 	}
 	_ = session.Close()

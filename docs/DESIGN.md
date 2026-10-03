@@ -460,11 +460,12 @@ build metadata enter campaign compatibility.
 | Join point                           | Required records                                                                                                                                                  |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Process/session lifecycle            | build-attributed `session.start`, `session.end`, `init.error`, `run.error`, and `session.panic` with a stack before the panic is re-raised                        |
-| `gameapi.CampaignUseCases`           | paired `use_case.start` / `use_case.end` records for `Snapshot`, `Apply`, and `EndTurn`; commands log their bounded typed scalar fields, never serialized objects |
-| `gameapi.StorageUseCases`            | paired records for accepted/rejected begin operations; `PollStorage` emits only when it returns one or more completions, never once per empty frame poll          |
-| `application.CampaignRepository`     | `repository.start`, `repository.enqueued`/`repository.rejected`, and `repository.completion`, with op/slot plus save schema/algorithm IDs but no save payload     |
-| `ui.UISettingsStore`                 | `settings.start`, `settings.enqueued`/`settings.rejected`, and `settings.completion` records containing schema version and outcome but not the preference record  |
-| Composition and host action dispatch | target/mode and initialization; `action.dispatch` per typed `ui.Action`, `action.rejected`, `scene.transition`, and `host.error`; never raw key/pointer events    |
+| `gameapi.CampaignUseCases`           | `operation.start` / `operation.end` pairs with `layer=game` for `NewCampaign`, `Apply`, and `EndTurn`; commands log their bounded typed scalar fields, never serialized objects. `Snapshot` and `StateHash` are side-effect-free queries and pass through unlogged |
+| `gameapi.StorageUseCases`            | `operation.start` / `operation.end` pairs with `layer=game` for each begin operation, the end's `outcome` recording acceptance or rejection; `PollStorage` emits one `storage.completion` per returned completion, never once per empty frame poll |
+| `application.CampaignRepository`     | `operation.start` / `operation.end` pairs with `layer=repository`, the end's `outcome` recording enqueue or rejection, and one `repository.completion` per completion, with op/slot plus save schema/algorithm IDs but no save payload |
+| `ui.UISettingsStore`                 | `operation.start` / `operation.end` pairs with `layer=settings` and one `settings.completion` per completion, containing schema version and outcome but not the preference record |
+| Composition and host action dispatch | target/mode and initialization; `action.dispatch` per typed `ui.Action` (a scene change is an `ActionNavigate` dispatch carrying its navigation and scene) and `action.rejected`; `ui.intent` / `ui.intent_refused` per handled or deliberately dropped HUD intent; one `ui.pointer` per left-button press, never per-frame pointer state or key events |
+| Sink and platform degradation        | `log.fallback` when the desktop file cannot be created, `log.wrapped` and `log.record_clipped` from the size bound, `session.entropy_fallback`, and `audio.failure` |
 
 The host validates a complete action batch before logging dispatch: a rejected batch emits one
 `action.rejected` summary and no `action.dispatch` records, while an accepted batch emits one
@@ -518,7 +519,8 @@ unsynchronized tail. The operating system owns eventual cleanup of its temp dire
 not delete a session log on exit. The guard is also installed at every
 project-owned worker-goroutine and JavaScript-callback boundary, because a defer in the entrypoint
 cannot observe a panic on another goroutine. The sink and `Close` are concurrency-safe and idempotent;
-`Close` emits `session.end` with `outcome=success|error` once only when no panic was recorded. A panic
+`Close` emits `session.end` with `outcome=success|error` once only when no panic was recorded;
+`error` means an `init.error` or `run.error` record preceded it. A panic
 path writes `session.panic`, synchronizes, and closes without a contradictory normal end marker. A
 late adapter record after closure is dropped rather than writing through a closed file or appearing
 after the terminal marker.

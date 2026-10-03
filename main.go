@@ -79,10 +79,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 		newGame = newGameWithoutSound
 	}
 	game, err := newGame(0x9e3779b97f4a7c15, session)
-	if err == nil {
-		err = runGameLoop(game, func() error { return runGame(game) })
-	}
 	if err != nil {
+		session.LogInitError(err)
+		_, _ = fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if err := runGameLoop(game, func() error { return runGame(game) }); err != nil {
+		session.LogRunError(err)
 		_, _ = fmt.Fprintln(stderr, err)
 		return 1
 	}

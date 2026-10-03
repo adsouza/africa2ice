@@ -21,6 +21,11 @@ type Session struct {
 	started   time.Time
 	operation atomic.Uint64
 	closed    atomic.Bool
+	// panicked suppresses session.end, which would otherwise follow the panic
+	// record and read as a normal shutdown; failed makes session.end report an
+	// entry-point error.
+	panicked atomic.Bool
+	failed   atomic.Bool
 }
 
 const maxPanicStackBytes = 16 * 1024
@@ -40,7 +45,8 @@ func GuardPanic(session *Session) {
 			stack = stack[:maxPanicStackBytes]
 			clipped = true
 		}
-		session.logger.Error("panic", "value", value, "stack", string(stack), "stack_clipped", clipped)
+		session.panicked.Store(true)
+		session.logger.Error("session.panic", "value", value, "stack", string(stack), "stack_clipped", clipped)
 	}
 	panic(value)
 }
@@ -102,7 +108,13 @@ func (session *Session) Close() error {
 	if session == nil || !session.closed.CompareAndSwap(false, true) {
 		return nil
 	}
-	session.logger.Info("session.end", "duration_ms", float64(time.Since(session.started))/float64(time.Millisecond))
+	if !session.panicked.Load() {
+		outcome := "success"
+		if session.failed.Load() {
+			outcome = "error"
+		}
+		session.logger.Info("session.end", "outcome", outcome, "duration_ms", float64(time.Since(session.started))/float64(time.Millisecond))
+	}
 	return session.closer.Close()
 }
 
@@ -230,4 +242,18 @@ func fmtCommandKind(command gameapi.Command) string {
 	default:
 		return "unknown"
 	}
+}
+
+// LogInitError records a failure that prevented the game from being built.
+func (session *Session) LogInitError(err error) { session.logEntryError("init.error", err) }
+
+// LogRunError records a failure that ended the game loop.
+func (session *Session) LogRunError(err error) { session.logEntryError("run.error", err) }
+
+func (session *Session) logEntryError(event string, err error) {
+	if session == nil || err == nil {
+		return
+	}
+	session.failed.Store(true)
+	session.logger.Error(event, "error", err.Error())
 }
