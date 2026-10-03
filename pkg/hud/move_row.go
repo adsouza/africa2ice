@@ -161,7 +161,11 @@ func (p *Panel) buildMoveBody(state State, band *gameapi.Band) widget.PreferredS
 	targetHeaderLabel := t.label(targetHeader, 9.5, colorCyan)
 	p.handles.moveTargetHeader = targetHeaderLabel
 	grid.AddChild(t.label("", 9.5, colorDim), t.label("HERE", 9.5, colorGold), targetHeaderLabel)
-	for index, row := range ui.LiveabilityRows(band, here, target) {
+	rows := ui.LiveabilityRows(band, here, target)
+	p.handles.moveTargetValues = make([]*widget.Text, len(rows))
+	p.handles.moveTargetMarks = make([]*widget.Text, len(rows))
+	p.handles.moveTargetCells = make([]*widget.Container, len(rows))
+	for index, row := range rows {
 		grid.AddChild(t.label(row.Label, moveGridFontDIP, colorDim))
 		grid.AddChild(t.label(row.Here, moveGridFontDIP, tierColor(row.HereTier)))
 		grid.AddChild(p.moveTargetCell(index, row))
@@ -292,7 +296,14 @@ func (p *Panel) refreshTarget(state State) bool {
 	p.handles.moveTargetHeader.Label = targetHeader
 
 	here := ui.CurrentTileLiveability(state.Frame, band)
-	for index, row := range ui.LiveabilityRows(band, here, target) {
+	rows := ui.LiveabilityRows(band, here, target)
+	// The eruption row comes and goes with the tiles compared, so a refresh
+	// that would change the row count rebuilds the grid instead of indexing
+	// handles built for a different one.
+	if len(rows) != len(p.handles.moveTargetValues) {
+		return false
+	}
+	for index, row := range rows {
 		value, markLabel := p.handles.moveTargetValues[index], p.handles.moveTargetMarks[index]
 		value.Label = row.Target
 		value.SetColor(tierColor(row.TargetTier))

@@ -395,8 +395,8 @@ func MacroEpisodeFieldNote(episode gameapi.MacroEpisodeSummary) (render.FieldNot
 		Topic:        episode.Episode.String(),
 		Introduction: "Regional volcanic episode: " + state + ".",
 		Context:      "The Campanian Ignimbrite occurred about 39,850 years before present.",
-		GameEffect:   "The game uses a bounded regional impact envelope, not literal demographic counts.",
-		Hint:         "Warnings annotate explored destinations; they never move a band automatically.",
+		GameEffect:   "The game uses a bounded regional impact envelope, not literal demographic counts. During the one-turn warning a destination's attraction is multiplied by its safety factor, one minus the warned impact, so a dangerous tile ranks lower but is still a legal move.",
+		Hint:         "Warnings outline explored affected tiles and show on the Eruption row; they never move a band automatically.",
 		References:   "Giaccio et al. (2017); Silleni et al. (2020); Smith et al. (2016); Pyle et al. (2006).",
 	}, true
 }

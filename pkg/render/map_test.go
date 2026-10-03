@@ -895,3 +895,46 @@ func TestBiomeGlyphsRasterizeAtPhysicalScale(t *testing.T) {
 		t.Errorf("high-DPI glyph covered %d px against %d at 1x; expected near 4x", highDPI, standard)
 	}
 }
+
+// macroImpactPixels counts the pixels in a tile's overview cell that carry
+// the eruption outline colour.
+func macroImpactPixels(screen *ebiten.Image, x, y int) int {
+	count := 0
+	for py := mapOriginY + y*mapTileSize; py < mapOriginY+(y+1)*mapTileSize; py++ {
+		for px := mapOriginX + x*mapTileSize; px < mapOriginX+(x+1)*mapTileSize; px++ {
+			red, green, blue, _ := screen.At(px, py).RGBA()
+			if red>>8 == uint32(macroImpactColor.R) && green>>8 == uint32(macroImpactColor.G) && blue>>8 == uint32(macroImpactColor.B) {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+// Step 9: a one-turn eruption warning appears on explored affected tiles, and
+// only on explored ones, so a hidden epicenter never shows through the fog.
+// The projection had carried VisibleMacroImpact with no renderer reading it.
+func TestMapOutlinesExploredTilesAnEruptionReaches(t *testing.T) {
+	frame := haloRenderFrame()
+	warned, active, clear, hidden := 30*TerrainGridWidth+40, 30*TerrainGridWidth+44, 30*TerrainGridWidth+48, 30*TerrainGridWidth+52
+	for _, id := range []int{warned, active, clear} {
+		frame.Tiles[id].Explored = true
+	}
+	frame.Tiles[warned].VisibleMacroImpact = gameapi.MacroImpactSummary{Visible: true, Warned: true, Intensity: 0.55}
+	frame.Tiles[active].VisibleMacroImpact = gameapi.MacroImpactSummary{Visible: true, Intensity: 0.55}
+	frame.Tiles[hidden].VisibleMacroImpact = gameapi.MacroImpactSummary{Visible: true, Warned: true, Intensity: 1}
+	screen := renderMapOffscreen(t, frame, 0, MigrationPreview{}, EndScene{}, "")
+	warnedPixels, activePixels := macroImpactPixels(screen, 40, 30), macroImpactPixels(screen, 44, 30)
+	if warnedPixels == 0 || activePixels == 0 {
+		t.Fatalf("eruption outline pixels = warned %d, active %d; want both outlined", warnedPixels, activePixels)
+	}
+	if warnedPixels >= activePixels {
+		t.Errorf("warned outline (%d px) should be dashed, lighter than the solid active one (%d px)", warnedPixels, activePixels)
+	}
+	if got := macroImpactPixels(screen, 48, 30); got != 0 {
+		t.Errorf("a clear explored tile shows %d eruption pixels", got)
+	}
+	if got := macroImpactPixels(screen, 52, 30); got != 0 {
+		t.Errorf("an unexplored tile shows %d eruption pixels", got)
+	}
+}

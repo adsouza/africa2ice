@@ -7236,6 +7236,14 @@ The same 2D HUD layout applies on desktop and web around the top-down map:
   instead.
 - **Move row, open:** a HERE/TARGET comparison grid — Biome, Region, Nearby lake, Food, Capacity (with degradation),
   Water, Shelter, Mortality (seasonal · chronic), Route (cost multiplier, turns), Archaic presence.
+  While a macro episode touches either tile, an eleventh **Eruption** row appears: `55% next` on
+  the warning turn, `55% now` while it strikes, `clear` on an untouched side, and for a reachable
+  warned target the multiplicative safety factor that scales its attraction, `55% next · ×0.45`.
+  It is amber below half intensity and red at or above it, so the wide zone reads amber and the
+  proximal and direct zones red. A direct-zone target's `×0.00` stays a legal move. On the map the
+  same explored tiles carry an outline in the timeline's eruption colour, dashed for the warning
+  and solid while the episode strikes; unexplored tiles carry neither, so no hidden epicenter or
+  archaic exposure shows through the fog.
   Nearby lake identifies Lake Turkana and Lake Victoria at their fixed starting-anchor tiles;
   these are geographic labels for nearby lakes, not lake outlines or changes to land, resources,
   or movement. Uncataloged and unexplored tiles show an em dash. Labels are rebuilt from static
@@ -10284,7 +10292,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | Terminal end-scene dialog rect             | origin `(60, 70)`; `784 × 508` logical pixels; centred on the top-down map area | Policy                          | §8    |
 | Focus camera scale and transition          | `3×`; `15` update ticks; clamped to the map area above the drawer | Policy                                        | §8    |
 | Field Notes drawer heights                 | hidden `20`, compact `102`, expanded `340` logical px           | Policy                                          | §8    |
-| Liveability tiers (presentation only)      | food red `< RequiredFU`, amber `< 1.5 × RequiredFU`; water red `< 0.25 cap`, amber `< 0.5 cap`; degradation amber `≥ 0.25`, red `≥ 0.5`; mortality amber `≥ 0.004`, red `≥ 0.008`; shelter amber `< 0.3`; archaic present amber | Initial | §8 |
+| Liveability tiers (presentation only)      | food red `< RequiredFU`, amber `< 1.5 × RequiredFU`; water red `< 0.25 cap`, amber `< 0.5 cap`; degradation amber `≥ 0.25`, red `≥ 0.5`; mortality amber `≥ 0.004`, red `≥ 0.008`; shelter amber `< 0.3`; eruption amber `> 0`, red `≥ 0.5` intensity; archaic present amber | Initial | §8 |
 | UI settings schema                         | `4`: `FieldNotesVisible`, `MasterVolume`, `Muted`, `GuideDismissed`, `FieldNotesExpanded`, `ReducedMotion`, `EasyMode`; schema 1–3 decode with the newer presentation fields false and `EasyMode` true | Policy | §8 |
 | `MaxRenderScale`                           | `2.0`                                                          | Policy                                          | §8    |
 | Minimum gameplay viewport                  | `1,280 × 720 DIPs`                                             | Policy                                          | §8    |

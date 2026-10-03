@@ -127,8 +127,14 @@ type FaunaSummary struct {
 }
 
 type MacroImpactSummary struct {
-	Visible        bool
-	Episode        MacroEpisode
+	Visible bool
+	Episode MacroEpisode
+	// Warned is true on the one-turn warning before the episode: the factors
+	// and Intensity describe next turn's impact, not the current one.
+	Warned bool
+	// Intensity is the episode's impact on this tile in [0, 1]. A migration
+	// candidate's safety factor is 1 − Intensity during a warning.
+	Intensity      float64
 	ResourceFactor float64
 	HabitatFactor  float64
 }
