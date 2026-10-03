@@ -117,6 +117,21 @@ jobs:
         run: Xvfb :99 -screen 0 1280x720x24 > /tmp/xvfb.log 2>&1 &
       - name: Test under the race detector
         run: go test -race ./...
+      # Every `go test` replays the fuzz seed corpus; this explores beyond it.
+      # Only on main, so an input newly found here cannot fail an unrelated pull
+      # request; a failing input is saved under testdata/fuzz and uploaded.
+      - name: Fuzz the user-reachable decoders
+        if: github.event_name == 'push'
+        run: |
+          go test -run '^$' -fuzz '^FuzzDecodeUISettings$' -fuzztime 30s ./pkg/ui
+          go test -run '^$' -fuzz '^FuzzLoadSave$' -fuzztime 30s ./internal/application
+      - name: Upload failing fuzz inputs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-failures
+          path: "**/testdata/fuzz/**"
+          if-no-files-found: ignore
 
   web-release:
     runs-on: ubuntu-24.04
