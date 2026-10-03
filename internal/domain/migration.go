@@ -23,6 +23,10 @@ type MigrationCandidate struct {
 	// term on its first turn at this destination, or zero if the tile has room.
 	// It is a magnitude, not a signed growth value.
 	CrowdingDecline float64
+	// ArrivalStress is the Stress the band would read on arrival: the
+	// destination's residents plus the band, over the destination's
+	// EcologicalK · T_tech. It is BandStress evaluated before the move.
+	ArrivalStress   float64
 	Passage         PassageID
 	RequiresPassage bool
 }
@@ -101,7 +105,9 @@ func (world *World) scoreMigration(band Band, destination TileID, cost float64, 
 	habitat := world.habitat[destination]
 	tile := world.tiles[destination]
 	geography, _ := world.grid.Tile(destination)
-	ecologicalK := float64(habitat.BaselineK * (1 - tile.Degradation))
+	// The current turn's macro factor, as Stress and the frame use: a warned
+	// next-turn episode is priced once, by warningSuitability below.
+	ecologicalK := world.ecologicalK(destination)
 	if ecologicalK < 0 {
 		ecologicalK = 0
 	}
@@ -127,6 +133,7 @@ func (world *World) scoreMigration(band Band, destination TileID, cost float64, 
 	crowdingDecline := 0.0
 	arriving := float64(band.Population)
 	arrivingTotal := float64(destinationPopulation) + arriving
+	arrivalStress := world.stress(band, destination, destinationPopulation+uint64(band.Population))
 	if growth := LogisticGrowth(arriving, arrivingTotal, arrivalK, 0); growth < 0 {
 		crowdingDecline = -growth
 		if world.easyMode {
@@ -178,8 +185,8 @@ func (world *World) scoreMigration(band Band, destination TileID, cost float64, 
 		TileID: destination, Cost: cost, Attraction: attraction, EcologicalK: ecologicalK,
 		UsableFoodEquivalent: usableFood, WaterSurvivalEquivalent: waterSurvival,
 		DestinationPopulation: destinationPopulation, WarningSuitability: warningSuitability,
-		CrowdingDecline: crowdingDecline,
-		Passage:         passage, RequiresPassage: requiresPassage,
+		CrowdingDecline: crowdingDecline, ArrivalStress: arrivalStress,
+		Passage: passage, RequiresPassage: requiresPassage,
 	}
 }
 

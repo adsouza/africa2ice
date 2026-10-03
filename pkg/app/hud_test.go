@@ -34,12 +34,12 @@ func TestEndTurnIntentHonorsTheDirtyDraftGuardLikeSpace(t *testing.T) {
 	}
 	game.discardAssignmentDraft()
 	game.handleIntents([]hud.Intent{{Kind: hud.IntentEndTurn}})
-	if stub.endTurns != 0 || !game.endTurnArmed {
-		t.Fatalf("soft block: turns %d armed %t", stub.endTurns, game.endTurnArmed)
+	if stub.endTurns != 0 || !game.disclosure.endTurnArmed {
+		t.Fatalf("soft block: turns %d armed %t", stub.endTurns, game.disclosure.endTurnArmed)
 	}
 	game.handleIntents([]hud.Intent{{Kind: hud.IntentEndTurn, Force: true}})
-	if stub.endTurns != 1 || game.endTurnArmed {
-		t.Fatalf("armed click: turns %d armed %t", stub.endTurns, game.endTurnArmed)
+	if stub.endTurns != 1 || game.disclosure.endTurnArmed {
+		t.Fatalf("armed click: turns %d armed %t", stub.endTurns, game.disclosure.endTurnArmed)
 	}
 }
 
@@ -60,7 +60,7 @@ func TestIntentsReuseHotkeyPaths(t *testing.T) {
 	}
 	game.handleIntents([]hud.Intent{{Kind: hud.IntentDiscardWorkforce}})
 	game.handleIntents([]hud.Intent{{Kind: hud.IntentOpenRow, Row: ui.RowWorkforce}, {Kind: hud.IntentToggleDetails}})
-	if game.openRow != ui.RowWorkforce || !game.detailsOpen {
+	if game.disclosure.openRow != ui.RowWorkforce || !game.disclosure.detailsOpen {
 		t.Fatal("OpenRow/ToggleDetails not applied")
 	}
 	game.handleIntents([]hud.Intent{{Kind: hud.IntentSetNotesMode, Notes: hud.NotesExpanded}})
@@ -112,19 +112,19 @@ func TestAcceptedActionsAdvanceOpenRowUnlessThePlayerChoseOne(t *testing.T) {
 	}
 
 	game, _ := newGameWithMoveDone()
-	if game.openRow != ui.RowResearch || game.rowChosen {
-		t.Fatalf("setup: open row %v chosen %t, want Research open and unchosen", game.openRow, game.rowChosen)
+	if game.disclosure.openRow != ui.RowResearch || game.disclosure.rowChosen {
+		t.Fatalf("setup: open row %v chosen %t, want Research open and unchosen", game.disclosure.openRow, game.disclosure.rowChosen)
 	}
 	game.chooseResearchTechnology(gameapi.Firecraft)
-	if game.openRow != ui.RowMove {
-		t.Fatalf("unchosen: open row after research accepted = %v, want RowMove (both rows done)", game.openRow)
+	if game.disclosure.openRow != ui.RowMove {
+		t.Fatalf("unchosen: open row after research accepted = %v, want RowMove (both rows done)", game.disclosure.openRow)
 	}
 
 	chosenGame, _ := newGameWithMoveDone()
-	chosenGame.openRow, chosenGame.rowChosen = ui.RowWorkforce, true
+	chosenGame.disclosure.openRow, chosenGame.disclosure.rowChosen = ui.RowWorkforce, true
 	chosenGame.chooseResearchTechnology(gameapi.Firecraft)
-	if chosenGame.openRow != ui.RowWorkforce {
-		t.Fatalf("chosen: open row after research accepted = %v, want unchanged RowWorkforce", chosenGame.openRow)
+	if chosenGame.disclosure.openRow != ui.RowWorkforce {
+		t.Fatalf("chosen: open row after research accepted = %v, want unchanged RowWorkforce", chosenGame.disclosure.openRow)
 	}
 }
 
@@ -132,8 +132,8 @@ func TestSpaceEndsTheTurnPastTheSoftBlock(t *testing.T) {
 	stub := &gameStub{frame: migrationPreviewFrame()}
 	game := New(stub)
 	game.endTurn(false)
-	if stub.endTurns != 0 || !game.endTurnArmed {
-		t.Fatalf("unforced end turn with a band still needing a move = turns %d armed %t", stub.endTurns, game.endTurnArmed)
+	if stub.endTurns != 0 || !game.disclosure.endTurnArmed {
+		t.Fatalf("unforced end turn with a band still needing a move = turns %d armed %t", stub.endTurns, game.disclosure.endTurnArmed)
 	}
 	stub2 := &gameStub{frame: migrationPreviewFrame()}
 	game2 := New(stub2)
@@ -147,10 +147,10 @@ func TestSelectionChangeResetsDisclosure(t *testing.T) {
 	frame := migrationPreviewFrame()
 	frame.Bands = append(frame.Bands, gameapi.Band{ID: 9, Species: gameapi.HomoSapiens, Population: 50, TileID: 0, HasResearchTarget: true, SpatialActionUsed: true})
 	game := New(&gameStub{frame: frame})
-	game.detailsOpen, game.openRow, game.rowChosen = true, ui.RowWorkforce, true
+	game.disclosure.detailsOpen, game.disclosure.openRow, game.disclosure.rowChosen = true, ui.RowWorkforce, true
 	game.handleIntents([]hud.Intent{{Kind: hud.IntentSelectBand, Band: 9}})
-	if game.selectedBand != 9 || game.detailsOpen || game.openRow != ui.RowMove || game.rowChosen {
-		t.Fatalf("after select: band %d details %t row %v chosen %t", game.selectedBand, game.detailsOpen, game.openRow, game.rowChosen)
+	if game.selectedBand != 9 || game.disclosure.detailsOpen || game.disclosure.openRow != ui.RowMove || game.disclosure.rowChosen {
+		t.Fatalf("after select: band %d details %t row %v chosen %t", game.selectedBand, game.disclosure.detailsOpen, game.disclosure.openRow, game.disclosure.rowChosen)
 	}
 }
 
@@ -196,7 +196,7 @@ func TestBandActionIntentsStopWhenTheCampaignEnds(t *testing.T) {
 		}
 	}
 	game.handleIntents([]hud.Intent{{Kind: hud.IntentToggleDetails}})
-	if !game.detailsOpen {
+	if !game.disclosure.detailsOpen {
 		t.Fatal("overlay/disclosure intents stopped working after the campaign ended")
 	}
 	game.handleIntents([]hud.Intent{{Kind: hud.IntentNewCampaign}})

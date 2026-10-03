@@ -236,6 +236,9 @@ type MigrationCandidate struct {
 	// CrowdingDecline is the people this band would lose to crowding on its
 	// first turn at the destination, or zero if the tile has room for it.
 	CrowdingDecline float64
+	// ArrivalStress is the Stress this band would read once at the
+	// destination: residents plus the band over EcologicalK · T_tech.
+	ArrivalStress   float64
 	Passage         PassageID
 	RequiresPassage bool
 }

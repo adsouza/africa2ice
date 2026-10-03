@@ -17,7 +17,7 @@ import (
 
 func TestFileRepositoryCloseKeepsLeaseUntilActiveWriteExits(t *testing.T) {
 	directory := t.TempDir()
-	repository, err := NewFileRepository(directory)
+	repository, err := NewFileRepository(directory, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestFileRepositoryCloseKeepsLeaseUntilActiveWriteExits(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 
-	competitor, err := NewFileRepository(directory)
+	competitor, err := NewFileRepository(directory, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestFileRepositoryCloseKeepsLeaseUntilActiveWriteExits(t *testing.T) {
 		t.Fatal("Close did not return after active write exited")
 	}
 
-	after, err := NewFileRepository(directory)
+	after, err := NewFileRepository(directory, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

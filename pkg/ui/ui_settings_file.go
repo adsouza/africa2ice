@@ -14,13 +14,17 @@ type FileUISettingsStore struct {
 	mu          sync.Mutex
 	active      bool
 	completions []UISettingsCompletion
+	// panicGuard is deferred by each operation's goroutine; never nil.
+	panicGuard func()
 }
 
-func NewFileUISettingsStore(path string) (*FileUISettingsStore, error) {
+// NewFileUISettingsStore stores preferences at path. panicGuard is the
+// session's panic hook for the store's goroutines; nil means none.
+func NewFileUISettingsStore(path string, panicGuard func()) (*FileUISettingsStore, error) {
 	if path == "" {
 		return nil, errors.New("UI settings path is empty")
 	}
-	return &FileUISettingsStore{path: path}, nil
+	return &FileUISettingsStore{path: path, panicGuard: orNoGuard(panicGuard)}, nil
 }
 
 func (store *FileUISettingsStore) BeginRead(revision uint64) error {
@@ -28,6 +32,7 @@ func (store *FileUISettingsStore) BeginRead(revision uint64) error {
 		return errors.New("UI settings operation already active")
 	}
 	go func() {
+		defer store.panicGuard()
 		settings := DefaultUISettings()
 		payload, err := os.ReadFile(store.path)
 		if errors.Is(err, os.ErrNotExist) {
@@ -46,6 +51,7 @@ func (store *FileUISettingsStore) BeginWrite(revision uint64, settings UISetting
 	}
 	settings = NormalizeUISettings(settings)
 	go func() {
+		defer store.panicGuard()
 		payload, err := EncodeUISettings(settings)
 		if err == nil {
 			err = os.MkdirAll(filepath.Dir(store.path), 0o755)

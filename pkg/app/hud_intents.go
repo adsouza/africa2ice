@@ -83,13 +83,13 @@ func (g *Game) handleIntent(intent hud.Intent) {
 	switch intent.Kind {
 	case hud.IntentSelectBand:
 		g.selectBandByID(intent.Band)
-		g.bandListOpen = false
+		g.disclosure.bandListOpen = false
 	case hud.IntentToggleBandList:
-		g.bandListOpen = !g.bandListOpen
+		g.disclosure.bandListOpen = !g.disclosure.bandListOpen
 	case hud.IntentToggleShortcuts:
 		g.toggleShortcutSheet()
 	case hud.IntentOpenRow:
-		g.openRow, g.rowChosen = intent.Row, true
+		g.disclosure.choose(intent.Row)
 	case hud.IntentToggleDetails:
 		g.toggleDetails()
 	case hud.IntentSetNotesMode:
@@ -164,7 +164,7 @@ func (g *Game) moveToBestTile() {
 				// The game chose this destination, not the player; leave the
 				// Move row open and pinned so its queued summary stays
 				// visible instead of auto-advancing to the next row.
-				g.openRow, g.rowChosen = ui.RowMove, true
+				g.disclosure.choose(ui.RowMove)
 			}
 			return
 		}
@@ -272,16 +272,14 @@ func (g *Game) endTurn(force bool) {
 		g.showNotice("Apply or discard workforce changes before ending the turn")
 		return
 	}
-	if g.hasMigrationPreview {
+	if g.preview.Visible {
 		g.showNotice("Press Enter to queue the migration, or Esc to clear it before ending the turn.")
 		return
 	}
-	if waiting := ui.BandsNeedingMove(g.frame.Bands); waiting > 0 && !force && !g.endTurnArmed {
-		g.endTurnArmed = true
+	if !g.disclosure.confirmEndTurn(ui.BandsNeedingMove(g.frame.Bands), force) {
 		g.showNotice("Some bands have not moved. Click End turn again or press Space to end the turn anyway.")
 		return
 	}
-	g.endTurnArmed = false
 	g.dispatchBatch([]ui.Action{ui.EndTurnAction()})
 }
 

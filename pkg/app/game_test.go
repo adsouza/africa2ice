@@ -162,20 +162,20 @@ func TestKeyboardMigrationPreviewCanTurnIntoReachableCorner(t *testing.T) {
 	game := New(stub)
 
 	game.handleDirectionalMigration(0, -1)
-	if !game.hasMigrationPreview || game.migrationPreviewTile != 1 || stub.appliedCommand != nil {
-		t.Fatalf("north preview = (visible %t, tile %d, command %T), want blocked tile 1 without a command", game.hasMigrationPreview, game.migrationPreviewTile, stub.appliedCommand)
+	if !game.preview.Visible || game.preview.TileID != 1 || stub.appliedCommand != nil {
+		t.Fatalf("north preview = (visible %t, tile %d, command %T), want blocked tile 1 without a command", game.preview.Visible, game.preview.TileID, stub.appliedCommand)
 	}
 
 	game.handleDirectionalMigration(-1, 0)
-	if game.migrationPreviewTile != 2 {
-		t.Fatalf("turned preview tile = %d, want northwest corner 2", game.migrationPreviewTile)
+	if game.preview.TileID != 2 {
+		t.Fatalf("turned preview tile = %d, want northwest corner 2", game.preview.TileID)
 	}
 	game.confirmMigrationPreview()
 	command, ok := stub.appliedCommand.(gameapi.QueueMigration)
 	if !ok || command.BandID != 7 || command.TileID != 2 {
 		t.Fatalf("applied command = %#v, want QueueMigration for band 7 to tile 2", stub.appliedCommand)
 	}
-	if game.hasMigrationPreview {
+	if game.preview.Visible {
 		t.Fatal("confirmed migration left the keyboard preview active")
 	}
 }
@@ -207,11 +207,11 @@ func TestFieldNotesAndSplitHotkeysRemainDistinct(t *testing.T) {
 	// Neither key is row-owned, so the open row cannot steal or duplicate them.
 	for _, row := range []ui.ChecklistRow{ui.RowMove, ui.RowResearch, ui.RowWorkforce} {
 		rowGame := New(&gameStub{frame: migrationPreviewFrame()})
-		rowGame.openRow = row
+		rowGame.disclosure.openRow = row
 		rowGame.handleRowKey(fieldNotesHotkey, false)
 		rowGame.handleRowKey(splitBandHotkey, false)
-		if rowGame.notesMode != hud.NotesExpanded || rowGame.hasMigrationPreview {
-			t.Fatalf("row %v bound F or N: notes %v, preview %t", row, rowGame.notesMode, rowGame.hasMigrationPreview)
+		if rowGame.notesMode != hud.NotesExpanded || rowGame.preview.Visible {
+			t.Fatalf("row %v bound F or N: notes %v, preview %t", row, rowGame.notesMode, rowGame.preview.Visible)
 		}
 	}
 }
@@ -394,8 +394,8 @@ func TestKeyboardMigrationDoesNotReplaceQueuedSpatialAction(t *testing.T) {
 	game := New(stub)
 
 	game.handleDirectionalMigration(0, -1)
-	if game.hasMigrationPreview || stub.appliedCommand != nil {
-		t.Fatalf("spent spatial action created preview=%t or command=%T", game.hasMigrationPreview, stub.appliedCommand)
+	if game.preview.Visible || stub.appliedCommand != nil {
+		t.Fatalf("spent spatial action created preview=%t or command=%T", game.preview.Visible, stub.appliedCommand)
 	}
 	if game.notice != "This band has already used its spatial action this turn." {
 		t.Fatalf("spent-action notice = %q", game.notice)
@@ -1058,7 +1058,7 @@ func TestStartingNewCampaignReplacesTerminalPresentationState(t *testing.T) {
 	game.setNotesMode(hud.NotesHidden)
 	game.fieldNote, _ = ui.TechnologyFieldNote(gameapi.Firecraft, 7, 1)
 	game.breakthroughFrames = breakthroughCelebrationFrames
-	game.hasMigrationPreview = true
+	game.preview.Visible = true
 	game.regionalPulseFocused = true
 
 	fresh := migrationPreviewFrame()
@@ -1075,8 +1075,8 @@ func TestStartingNewCampaignReplacesTerminalPresentationState(t *testing.T) {
 	if stub.newCampaigns != 1 || game.frame != fresh || game.frame.CampaignResult != gameapi.Ongoing {
 		t.Fatalf("new campaign = calls %d, frame %#v", stub.newCampaigns, game.frame)
 	}
-	if game.fieldNote.Topic != "WELCOME" || game.breakthroughFrames != 0 || game.hasMigrationPreview || game.regionalPulseFocused {
-		t.Fatalf("new campaign retained stale presentation: note %#v, breakthrough %d, preview %t, pulse focus %t", game.fieldNote, game.breakthroughFrames, game.hasMigrationPreview, game.regionalPulseFocused)
+	if game.fieldNote.Topic != "WELCOME" || game.breakthroughFrames != 0 || game.preview.Visible || game.regionalPulseFocused {
+		t.Fatalf("new campaign retained stale presentation: note %#v, breakthrough %d, preview %t, pulse focus %t", game.fieldNote, game.breakthroughFrames, game.preview.Visible, game.regionalPulseFocused)
 	}
 	if game.notice != "New campaign begun" || game.selectedBand != 7 {
 		t.Fatalf("new campaign notice/selection = %q/%d", game.notice, game.selectedBand)

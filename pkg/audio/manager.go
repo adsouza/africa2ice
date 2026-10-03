@@ -53,6 +53,9 @@ type Manager struct {
 	// and read from the game loop, so it needs the mutex.
 	mutex  sync.Mutex
 	opened bool
+
+	// panicGuard is deferred by the device-watching goroutine; never nil.
+	panicGuard func()
 }
 
 // NewManager opens the sound device. The open runs on oto's own goroutine, so
@@ -60,7 +63,10 @@ type Manager struct {
 // rather than from this call: waiting on oto's ready channel here would stall
 // the game loop, and on wasm would deadlock the event loop the browser needs
 // in order to resume audio in the first place.
-func NewManager() (*Manager, error) {
+//
+// panicGuard is the session's panic hook for that watching goroutine; nil
+// means none.
+func NewManager(panicGuard func()) (*Manager, error) {
 	context, ready, err := oto.NewContext(&oto.NewContextOptions{
 		SampleRate:   sampleRate,
 		ChannelCount: channelCount,
@@ -69,20 +75,26 @@ func NewManager() (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
-	manager := &Manager{context: context, volume: 0.5}
+	manager := &Manager{context: context, volume: 0.5, panicGuard: orNoGuard(panicGuard)}
 	// oto stores a setup error before it closes ready, so the error is already
 	// final here: a clean ready means the device genuinely came up, and any
 	// error after this point is a working device that later stopped.
-	go func() {
-		<-ready
-		if context.Err() != nil {
-			return
-		}
-		manager.mutex.Lock()
-		manager.opened = true
-		manager.mutex.Unlock()
-	}()
+	go manager.awaitDevice(ready, context.Err)
 	return manager, nil
+}
+
+// awaitDevice records that the device opened once oto reports it ready
+// without an error. It runs on its own goroutine, so it defers the session's
+// panic hook.
+func (manager *Manager) awaitDevice(ready <-chan struct{}, deviceErr func() error) {
+	defer manager.panicGuard()
+	<-ready
+	if deviceErr() != nil {
+		return
+	}
+	manager.mutex.Lock()
+	manager.opened = true
+	manager.mutex.Unlock()
 }
 
 // Err reports a device that never opened or has stopped working.
@@ -175,8 +187,10 @@ type LazyManager struct {
 	pending *Sound
 }
 
-func NewLazyManager(report Reporter) *LazyManager {
-	return newLazyManager(func() (SoundManager, error) { return NewManager() }, report)
+// NewLazyManager defers opening the device to the first sound. panicGuard is
+// the session's panic hook, passed on to the device's goroutine; nil means none.
+func NewLazyManager(report Reporter, panicGuard func()) *LazyManager {
+	return newLazyManager(func() (SoundManager, error) { return NewManager(panicGuard) }, report)
 }
 
 func newLazyManager(create func() (SoundManager, error), report Reporter) *LazyManager {

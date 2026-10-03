@@ -1,6 +1,12 @@
 package logging
 
-import "github.com/adsouza/africa2ice/internal/application"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+
+	"github.com/adsouza/africa2ice/internal/application"
+)
 
 type repositoryDecorator struct {
 	session *Session
@@ -15,7 +21,7 @@ func DecorateCampaignRepository(session *Session, next application.CampaignRepos
 }
 
 func (decorator *repositoryDecorator) BeginWrite(operation application.RepositoryOpID, slot application.SlotID, state application.SaveState) error {
-	return decorator.begin("write", operation, slot, func() error { return decorator.next.BeginWrite(operation, slot, state) })
+	return decorator.begin("write", operation, slot, func() error { return decorator.next.BeginWrite(operation, slot, state) }, saveIdentity(state)...)
 }
 
 func (decorator *repositoryDecorator) BeginRead(operation application.RepositoryOpID, slot application.SlotID) error {
@@ -30,11 +36,26 @@ func (decorator *repositoryDecorator) BeginList(operation application.Repository
 	return decorator.begin("list", operation, 0, func() error { return decorator.next.BeginList(operation) })
 }
 
-func (decorator *repositoryDecorator) begin(name string, operation application.RepositoryOpID, slot application.SlotID, call func() error) error {
-	id, started := decorator.session.start("repository", name, "repository_operation_id", uint64(operation), "slot", int(slot))
+func (decorator *repositoryDecorator) begin(name string, operation application.RepositoryOpID, slot application.SlotID, call func() error, identity ...any) error {
+	attributes := append([]any{"repository_operation_id", uint64(operation), "slot", int(slot)}, identity...)
+	id, started := decorator.session.start("repository", name, attributes...)
 	err := call()
-	decorator.session.end(id, started, "repository", name, err, "repository_operation_id", uint64(operation), "slot", int(slot))
+	decorator.session.end(id, started, "repository", name, err, attributes...)
 	return err
+}
+
+// saveIdentity names a save's format without any of its contents: the schema
+// version and the first 12 hex digits of SHA-256 over its algorithm
+// identifiers. Every write in a session carries this build's digest, so a
+// load whose digest differs is visibly an older or foreign save; the save
+// itself holds the full identifiers.
+func saveIdentity(state application.SaveState) []any {
+	digest := "unavailable"
+	if encoded, err := json.Marshal(state.AlgorithmVersions); err == nil {
+		sum := sha256.Sum256(encoded)
+		digest = hex.EncodeToString(sum[:])[:12]
+	}
+	return []any{"schema_version", state.SchemaVersion, "algorithm_versions", digest}
 }
 
 func (decorator *repositoryDecorator) Poll() []application.RepositoryCompletion {
@@ -50,6 +71,9 @@ func (decorator *repositoryDecorator) Poll() []application.RepositoryCompletion 
 		if completion.Err != nil {
 			attributes[7] = "error"
 			attributes = append(attributes, "error", completion.Err.Error())
+		}
+		if completion.State != nil {
+			attributes = append(attributes, saveIdentity(*completion.State)...)
 		}
 		decorator.session.logger.Info("repository.completion", attributes...)
 	}

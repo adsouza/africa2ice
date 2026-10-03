@@ -45,11 +45,8 @@ type Game struct {
 	pendingLakeNotes       []render.FieldNote
 	openExternalURL        func(string) error
 	breakthroughFrames     int
-	migrationPreviewBand   gameapi.BandID
-	migrationPreviewTile   gameapi.TileID
-	hasMigrationPreview    bool
-	hoveredTile            gameapi.TileID
-	hasHoveredTile         bool
+	preview                render.MigrationPreview
+	hover                  render.TileHover
 	windowClosingRequested bool
 	storage                storageController
 	preferences            preferenceController
@@ -65,11 +62,7 @@ type Game struct {
 	regionalPulseFocused   bool
 	logSession             *logging.Session
 	panel                  *hud.Panel
-	openRow                ui.ChecklistRow
-	rowChosen              bool // player opened a row explicitly; auto-advance yields until reset
-	detailsOpen            bool
-	bandListOpen           bool
-	endTurnArmed           bool
+	disclosure             panelDisclosure
 	guide                  ui.GuideState
 	notesMode              hud.NotesMode
 	shortcutsOpen          bool
@@ -107,7 +100,7 @@ func newGameWithPresentation(port gameapi.Game, sound gameaudio.SoundManager, se
 		port: port, sound: sound, frame: frame, scene: render.NewMapScene(),
 		panel: hud.New(), notesMode: notesModeFor(settings), guide: ui.NewGuideState(false),
 		fieldNote:       ui.CampaignOverviewFieldNote(),
-		openExternalURL: openExternalURL,
+		openExternalURL: func(url string) error { return openExternalURL(url, nil) },
 		notice:          "Outlined tiles are reachable — arrows choose, Enter confirms", noticeFrames: 300,
 		storage:           newStorageController(),
 		preferences:       preferences,
@@ -146,10 +139,13 @@ func newHostedGame(seed uint64, session *logging.Session, enableSound bool) (*Ga
 }
 
 func composeHostedGame(seed uint64, session *logging.Session, enableSound bool,
-	openRepository func() (application.CampaignRepository, error),
-	openSettings func() (ui.UISettingsStore, error), resume bool,
+	openRepository func(panicGuard func()) (application.CampaignRepository, error),
+	openSettings func(panicGuard func()) (ui.UISettingsStore, error), resume bool,
 ) (*Game, error) {
-	repository, err := openRepository()
+	// Owners start goroutines and JavaScript callbacks the entrypoint guard
+	// cannot see; each defers this hook instead (DESIGN.md §3).
+	panicGuard := session.PanicGuard
+	repository, err := openRepository(panicGuard)
 	if err != nil {
 		return nil, err
 	}
@@ -171,12 +167,13 @@ func composeHostedGame(seed uint64, session *logging.Session, enableSound bool,
 	if enableSound {
 		sound = gameaudio.NewLazyManager(audioReporter(session, os.Stderr, func(notice string) {
 			game.showNotice(notice)
-		}))
+		}), panicGuard)
 	}
-	settingsStore, settingsErr := openSettings()
+	settingsStore, settingsErr := openSettings(panicGuard)
 	settingsStore = logging.DecorateUISettingsStore(session, settingsStore)
 	game = newGameWithPresentation(logging.DecorateGame(session, service), sound, settingsStore)
 	game.logSession = session
+	game.openExternalURL = func(url string) error { return openExternalURL(url, panicGuard) }
 	game.scenes.Push(ui.SceneTitle)
 	if settingsErr != nil {
 		sound.SetMaster(ui.DefaultUISettings().MasterVolume, ui.DefaultUISettings().Muted)
@@ -263,7 +260,7 @@ func (g *Game) Update() error {
 		return nil
 	}
 	if g.scenes.Current() != ui.SceneGameplay {
-		g.hasHoveredTile = false
+		g.hover.Visible = false
 		g.handleSceneInput()
 		return nil
 	}
@@ -287,7 +284,7 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	g.scene.SetTileHover(render.TileHover{TileID: g.hoveredTile, Visible: g.hasHoveredTile})
+	g.scene.SetTileHover(g.hover)
 	g.scene.SetCamera(g.camera, g.mapVisibleHeight())
 	g.scene.SetGuideHighlight(g.guide.Step == ui.GuideMove && g.frame != nil && g.frame.CampaignResult == gameapi.Ongoing)
 	// The chrome (pkg/hud) draws over this image and can change what it
@@ -301,9 +298,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.scene.SetChromeRevision(maphash.Comparable(chromeRevisionSeed, g.panel.PresentationKey()))
 	g.scene.SetViewport(g.viewport)
 	displayFrame := g.displayFrame()
-	painted := g.scene.Draw(screen, displayFrame, g.selectedBand, render.MigrationPreview{
-		BandID: g.migrationPreviewBand, TileID: g.migrationPreviewTile, Visible: g.hasMigrationPreview,
-	}, g.notice, g.endScene(displayFrame), g.viewportInitialized && !g.viewport.SupportsGameplay())
+	painted := g.scene.Draw(screen, displayFrame, g.selectedBand, g.preview, g.notice, g.endScene(displayFrame), g.viewportInitialized && !g.viewport.SupportsGameplay())
 	// The chrome draws over the map image rather than into it, so the two
 	// layers must always paint together and never separately: painting the
 	// panel alone over a stale map (or vice versa) leaves stale pixels
@@ -698,7 +693,7 @@ func (g *Game) toggleCameraFocus() { g.cameraFocused = !g.cameraFocused }
 // global meaning; while the Workforce row is open, D is row-owned instead
 // (handleRowKey's ui.RowWorkforce case discards the draft), matching the
 // row-owned model arrows, Enter, and -/+ already use there.
-func (g *Game) toggleDetails() { g.detailsOpen = !g.detailsOpen }
+func (g *Game) toggleDetails() { g.disclosure.detailsOpen = !g.disclosure.detailsOpen }
 
 // focusInterbreedPartner moves the partner comparison onto another candidate
 // without spending anything. The picker chips used to emit IntentInterbreed,
@@ -819,7 +814,7 @@ func (g *Game) handleMapClick() {
 }
 
 func (g *Game) syncTileHover() {
-	g.hasHoveredTile = false
+	g.hover.Visible = false
 	// The chrome sits over the map's right edge and bottom drawer; a pointer
 	// there must not also light a tile underneath it.
 	if g.panel.Hovered() {
@@ -830,8 +825,7 @@ func (g *Game) syncTileHover() {
 	if !ok {
 		return
 	}
-	g.hoveredTile = tileID
-	g.hasHoveredTile = true
+	g.hover = render.TileHover{TileID: tileID, Visible: true}
 }
 
 // exploredHoverTile is the camera-aware, drawer-aware pick shared by hover
@@ -945,8 +939,8 @@ func (g *Game) handleDirectionalMigration(dx, dy int) {
 		return
 	}
 	cursor := band.TileID
-	if g.hasMigrationPreview && g.migrationPreviewBand == band.ID {
-		cursor = g.migrationPreviewTile
+	if g.preview.Visible && g.preview.BandID == band.ID {
+		cursor = g.preview.TileID
 	}
 	tileID, ok := ui.MoveMigrationPreview(g.frame, band, cursor, dx, dy)
 	if !ok {
@@ -958,9 +952,7 @@ func (g *Game) handleDirectionalMigration(dx, dy int) {
 		g.showNotice("Migration choice cleared")
 		return
 	}
-	g.migrationPreviewBand = band.ID
-	g.migrationPreviewTile = tileID
-	g.hasMigrationPreview = true
+	g.preview = render.MigrationPreview{BandID: band.ID, TileID: tileID, Visible: true}
 	diagnostic := ui.DiagnoseMigration(g.frame, band, tileID)
 	if diagnostic.Reason == ui.MigrationAllowed {
 		g.focusPassageForCandidate(band, tileID)
@@ -986,15 +978,15 @@ func (g *Game) focusPassageForCandidate(band *gameapi.Band, tileID gameapi.TileI
 }
 
 func (g *Game) confirmMigrationPreview() {
-	if !g.hasMigrationPreview {
+	if !g.preview.Visible {
 		return
 	}
 	band := g.selected()
-	if band == nil || band.ID != g.migrationPreviewBand {
+	if band == nil || band.ID != g.preview.BandID {
 		g.clearMigrationPreview()
 		return
 	}
-	if g.tryQueueMigration(band, g.migrationPreviewTile) {
+	if g.tryQueueMigration(band, g.preview.TileID) {
 		g.clearMigrationPreview()
 	}
 }
@@ -1115,9 +1107,7 @@ func (g *Game) startNewCampaign() {
 }
 
 func (g *Game) clearMigrationPreview() {
-	g.hasMigrationPreview = false
-	g.migrationPreviewBand = 0
-	g.migrationPreviewTile = 0
+	g.preview = render.MigrationPreview{}
 }
 
 func (g *Game) handleSceneInput() bool {

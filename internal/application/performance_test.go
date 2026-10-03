@@ -93,8 +93,8 @@ func maximumProjectionWorld(b *testing.B) *domain.World {
 		band.LastMortality = domain.MortalityReport{}
 		band.LastOutcomeReport = domain.OutcomeReport{}
 		band.SpatialActionUsed = false
-		band.HasQueuedMigration = false
-		band.HasInterbreedTarget = false
+		band.QueuedMigration = domain.Option[domain.MigrationOrder]{}
+		band.InterbreedTarget = domain.Option[domain.BandID]{}
 		state.Bands[index] = band
 	}
 	state.NextBandID = domain.MaxBands + 1

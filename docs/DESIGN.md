@@ -121,7 +121,7 @@ Capitalized lifecycle terms in this register — **Locked**, **Initial**, **Poli
 | Highland polygons supplied neither numeric elevation nor a biome threshold                                                                              | **A sparse authored elevation layer:** non-highland land and water are `0 km`; each of the ten highland polygons has a representative `1.25–3.0 km` height; overlaps take the maximum; `HighlandElevationKm = 1.0 km`, with `ElevationKm > HighlandElevationKm` classifying Mountainous Highlands                                                                                                                                                                                                                         | This makes absolute temperature, highland classification, altitude UV, hypoxia pressure, orographic moisture, and terrain height computable from one deterministic geography input. The coarse plateau values are Initial gameplay abstractions, not range-wide mean elevations or a paleotopographic reconstruction.                                                                                                                                                                                                                                                                                                                                                                                        |
 | Named water gaps need migration semantics                                                                                                               | **Historically asymmetric passages:** coastal navigation unlocks high-cost Wallacea crossings; a climate-derived Beringian land bridge opens independently of abrupt/seasonal/noise variation                                                                                                                                                                                                                                                                                                                        | The deep Wallacea channels required water travel, while the far-northeastern route should respond to long-term glacial conditions without implementing global dynamic coastlines.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | There is no geographic victory rule                                                                                                                     | **Route-neutral regional achievements:** track sapiens establishment in every named region; Frangistan, South Asia, Yellow River Basin, Sahul, and Beringia are equal destinations                                                                                                                                                                                                                                                                                                                                   | No single dispersal route is the canonical win path. Reaching any destination proves dispersal; the complete regional record distinguishes broader outcomes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Save slots and non-modal UX                                                                                                                             | **Slots 1–3 manual, 99 quick-save, 101–103 rolling autosaves; no overwrite modal; two-second result toasts**                                                                                                                                                                                                                                                                                                                                                                                                         | Ctrl+S on Windows/Linux and Cmd+S on macOS quick-save, while manual saves open from the Game Menu. Autosave triggers are coalesced so asynchronous storage remains bounded.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Save slots and non-modal UX                                                                                                                             | **Slots 1–3 manual, 99 quick-save, 101–103 rolling autosaves; no overwrite modal; 3–9 second result toasts**                                                                                                                                                                                                                                                                                                                                                                                                         | Ctrl+S on Windows/Linux and Cmd+S on macOS quick-save, while manual saves open from the Game Menu. Autosave triggers are coalesced so asynchronous storage remains bounded.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Campaign length and terminal conditions are undefined                                                                                                   | **A 400-turn campaign from 80,000 BP to 20,000 BP in four 100-turn campaign eras:** turns advance 300, 150, 100, then 50 years, with explicit victory and loss states                                                                                                                                                                                                                                                                                                                                                | A finite campaign needs a clock and terminal invariant before it can be implemented or balanced. Progressively shorter turn spans provide finer late-game decisions while preserving the 400-turn play length.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Web release requirements                                                                                                                                | **Stripped, trimmed, `wasm-opt -O3` release build; Brotli compressed-size gate that ratchets down to the measured build; native CI matrix; automated Chromium boot/action/save smoke; measured performance gate; step 2a measures size and frame rate on the dependency skeleton**                                                                                                                                                                                                                                                                                                                                                      | Compilation and static artifact checks cannot detect a loader, console-panic, IndexedDB, or unusably slow runtime failure. The browser test toolchain is development-only: the game and deployed site remain Go/WASM plus the required static loader. Transfer size and frame rate are properties of the pinned dependency set and the release geometry rather than of game code, so both are measured at the walking skeleton where the answer is free, and `wasm-opt -O3` is not the size lever it looks like — it optimizes decompressed size and startup.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Desktop is a target but has no distribution contract                                                                                                    | **SemVer-tagged GitHub Releases contain unsigned portable archives for Linux amd64, Windows amd64, and macOS arm64 plus `SHA256SUMS`; the web build remains the recommended friction-free release**                                                                                                                                                                                                                                                                                                                    | A native target should produce something users can run, not merely prove that `go build` succeeds. Signing, notarization, installers, and automatic updates remain outside v1, so the release notes must state the resulting OS trust prompts rather than implying a signed desktop package.                                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -279,7 +279,7 @@ pkg/gameapi/             DRIVING PORT + DTO + SHARED POLICY CONTRACT — stdlib 
   doc.go                 package contract and architectural role
   enums.go               Biome, Season, Tech, HeritableTrait, Species, Region, FaunaGroup, MacroEpisode + String()
   frame.go               immutable projection values, including tiles, bands, passages, events, and outcomes
-  command.go             Command iface + SetAssignment, QueueMigration, SplitBand, ResearchTech, Interbreed
+  command.go             Command iface + SetAssignment, QueueMigration, SplitBand, ResearchTech, Interbreed, SetEasyMode
   errors.go              stable ErrorCode/GameError boundary values; no domain types
   game.go                Game inbound port: Snapshot, NewCampaign, Apply, EndTurn, and storage use cases
   storage.go             operations/results, slot constants/kinds, SlotMetadata
@@ -361,7 +361,7 @@ pkg/render/              DRAWING ADAPTER — gameapi + Ebitengine; no domain/app
 pkg/ui/                  DRIVING PRESENTATION ADAPTER — gameapi + render + audio; no domain/application
   scene_stack.go         typed scene-stack router
   action.go              simulation, turn, storage, and scene-navigation actions
-  toast.go               two-second queued success/error notifications
+  toast.go               length-scaled (3–9 s) queued success/error notifications
   field_notes.go         bundled sourced entries keyed by gameapi context values; no domain imports
   migration.go           migration-preview movement and terrain diagnostics
   bands.go               attention order, warning tiers, and the Move-row Done predicate
@@ -394,9 +394,11 @@ internal/verification/   REFERENCE-CAMPAIGN DRIVER — imports application + gam
   checkpoint.go          CheckpointRecord + canonical sorted-key JSON encoding
   run.go                 ReferenceRun(seed, turns, policy) -> []CheckpointRecord; no I/O, no wall clock
   map.go                 deterministic text map dump
+  testdata/reference_checkpoints.json  pinned 400-turn reference campaign; any outcome change must regenerate it and show its diff
 
 internal/archtest/
   arch_test.go           parses imports in every .go file, including inactive build tags
+  panic_guard_test.go    every owned goroutine and js.FuncOf callback defers the session panic hook
 
 tools/generate_compatibility_fixture/
   main.go                intentional regeneration command for the frozen schema-v1 save fixture
@@ -460,11 +462,12 @@ build metadata enter campaign compatibility.
 | Join point                           | Required records                                                                                                                                                  |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Process/session lifecycle            | build-attributed `session.start`, `session.end`, `init.error`, `run.error`, and `session.panic` with a stack before the panic is re-raised                        |
-| `gameapi.CampaignUseCases`           | paired `use_case.start` / `use_case.end` records for `Snapshot`, `Apply`, and `EndTurn`; commands log their bounded typed scalar fields, never serialized objects |
-| `gameapi.StorageUseCases`            | paired records for accepted/rejected begin operations; `PollStorage` emits only when it returns one or more completions, never once per empty frame poll          |
-| `application.CampaignRepository`     | `repository.start`, `repository.enqueued`/`repository.rejected`, and `repository.completion`, with op/slot plus save schema/algorithm IDs but no save payload     |
-| `ui.UISettingsStore`                 | `settings.start`, `settings.enqueued`/`settings.rejected`, and `settings.completion` records containing schema version and outcome but not the preference record  |
-| Composition and host action dispatch | target/mode and initialization; `action.dispatch` per typed `ui.Action`, `action.rejected`, `scene.transition`, and `host.error`; never raw key/pointer events    |
+| `gameapi.CampaignUseCases`           | `operation.start` / `operation.end` pairs with `layer=game` for `NewCampaign`, `Apply`, and `EndTurn`; commands log their bounded typed scalar fields, never serialized objects. `Snapshot` and `StateHash` are side-effect-free queries and pass through unlogged |
+| `gameapi.StorageUseCases`            | `operation.start` / `operation.end` pairs with `layer=game` for each begin operation, the end's `outcome` recording acceptance or rejection; `PollStorage` emits one `storage.completion` per returned completion, never once per empty frame poll |
+| `application.CampaignRepository`     | `operation.start` / `operation.end` pairs with `layer=repository`, the end's `outcome` recording enqueue or rejection, and one `repository.completion` per completion, with op/slot and, on records that carry a save, its `schema_version` and an `algorithm_versions` digest (the first 12 hex digits of SHA-256 over its algorithm identifiers), but no save payload |
+| `ui.UISettingsStore`                 | `operation.start` / `operation.end` pairs with `layer=settings` and one `settings.completion` per completion, containing schema version and outcome but not the preference record |
+| Composition and host action dispatch | target/mode and initialization; `action.dispatch` per typed `ui.Action` (a scene change is an `ActionNavigate` dispatch carrying its navigation and scene) and `action.rejected`; `ui.intent` / `ui.intent_refused` per handled or deliberately dropped HUD intent; one `ui.pointer` per left-button press, never per-frame pointer state or key events |
+| Sink and platform degradation        | `log.fallback` when the desktop file cannot be created, `log.wrapped` and `log.record_clipped` from the size bound, `session.entropy_fallback`, and `audio.failure` |
 
 The host validates a complete action batch before logging dispatch: a rejected batch emits one
 `action.rejected` summary and no `action.dispatch` records, while an accepted batch emits one
@@ -518,7 +521,8 @@ unsynchronized tail. The operating system owns eventual cleanup of its temp dire
 not delete a session log on exit. The guard is also installed at every
 project-owned worker-goroutine and JavaScript-callback boundary, because a defer in the entrypoint
 cannot observe a panic on another goroutine. The sink and `Close` are concurrency-safe and idempotent;
-`Close` emits `session.end` with `outcome=success|error` once only when no panic was recorded. A panic
+`Close` emits `session.end` with `outcome=success|error` once only when no panic was recorded;
+`error` means an `init.error` or `run.error` record preceded it. A panic
 path writes `session.panic`, synchronizes, and closes without a contradictory normal end marker. A
 late adapter record after closure is dropped rather than writing through a closed file or appearing
 after the terminal marker.
@@ -588,7 +592,7 @@ presence flag. The projection exposes that already-persisted intent so presentat
 the player selected; it adds no second queue or simulation authority. **Derived previews:**
 `OriginalResearchGainPreview`, the current tile's seasonal/chronic mortality-rate preview, the fixed nine-entry projected `ResearchOptions`
 availability/acquired/current-target view plus its authoritative cost and direct-prerequisite mask, the ranked `MigrationCandidates` with destination-specific
-seasonal/chronic mortality-rate previews and an arrival crowding-decline preview, the freshly allocated co-located
+seasonal/chronic mortality-rate previews, an arrival crowding-decline preview, and an arrival `Stress` (`ArrivalStress`), the freshly allocated co-located
 archaic `InterbreedCandidateIDs`, a fixed three-entry `PassageStatuses` array, and `Stress`. Together these let the HUD explain the band's
 capabilities, food outcome, and population change.
 
@@ -730,7 +734,7 @@ The application service permits one active storage operation and at most one exp
 operation queued FIFO, making save-then-load and delete-then-list ordering identical on desktop and
 web. Autosave pressure
 is represented separately by the single `autoNeeded` flag in §9. Additional or duplicate clicks are
-rejected with a two-second “storage operation already pending” toast, so neither user input nor
+rejected with a “storage operation already pending” toast, so neither user input nor
 autosave triggers can create an unbounded queue.
 
 `ui.Action` is a tagged value containing an action kind plus only the relevant payload
@@ -1363,7 +1367,7 @@ derived geography rather than mutable or serialized campaign state. The Initial 
 before release; afterward, changing any height, mask, threshold, or overlap rule changes downstream
 simulation and requires a geography-version change and explicit migration.
 
-Validation requires exactly ten unique entries in stable order; finite heights strictly above
+Validation requires exactly eleven unique entries in stable order; finite heights strictly above
 `HighlandElevationKm` and no greater than the catalog maximum `3.0 km`; a finite non-negative strict
 threshold; at least one contributing land tile from every feature; elevation exactly zero on water
 and uncovered land; finite tile values in `[0, 3]`; maximum-overlap and feature-order invariance; seed
@@ -3474,7 +3478,7 @@ actually loading/replacing the world, leaving gameplay for the title, or ending 
 while the draft is dirty. Every mouse, keyboard, and menu entry point uses the same UI guard before
 changing selection/scenes or emitting a protected action. The selected band, draft, world, and
 storage queue remain unchanged by the blocked attempt. A persistent inline message says “Apply or
-discard workforce changes”; it is not a modal or a two-second toast. Clicking the sole selected band
+discard workforce changes”; it is not a modal or a transient toast. Clicking the sole selected band
 again is a no-op rather than a selection change, so it preserves the dirty draft without showing the
 guard message.
 
@@ -4796,6 +4800,9 @@ C_j = min(1, K_eff_j / (P_total_j + P_b))          // 0 where K_eff_j is zero
 S_j = EcologicalK_j · R_j · W_j · C_j / (MovementCost(origin, j) · (1 + P_total_j))
 ```
 
+`EcologicalK_j` takes the current turn's `MacroHabitatFactor`, as `Stress` and the projected tile
+capacity do; a warned next-turn episode is priced once, by `W_j`, not again through `EcologicalK_j`.
+
 `C_j` is the crowding safety factor: the share of the arriving population — the
 destination's residents plus the band considering the move — that the destination can
 actually support, where `K_eff_j` applies the band's own capacity multiplier to
@@ -5738,6 +5745,51 @@ impact, sorted/idempotent species-specific achievement latching for each destina
 one/two-to-four/five-destination epilogue classification, sapiens extinction with surviving archaic
 bands, turn-400 sapiens extinction taking precedence over dispersal failure, successful survival
 through any one destination, and turn-400 failure without a destination.
+
+### Easy mode
+
+Easy mode is a single world-level rule switch, `World.easyMode`, added after the original design to
+make the first campaigns survivable while a player learns the systems. It is **on by default**. It
+is not a difficulty ladder: there is exactly one alternative rule set, and §14's exclusion of
+difficulty levels still holds for anything beyond this toggle. When enabled it changes these rules
+and nothing else. Apart from exploration, which only sapiens bands perform, each applies to archaic
+bands as well, so the computer's competitors split and survive under the same relaxed rules:
+
+- **Exploration radius.** Each living sapiens band reveals a 5×5 footprint (radius 2) instead of
+  the ordinary 3×3. Enabling the mode reveals the larger footprint immediately; disabling it never
+  re-hides a tile, because exploration is monotonic.
+- **Splitting.** The `Stress > SplitStressThreshold` crowding requirement is waived, and the source
+  minimum falls from `MinSplitSourcePopulation = 40` to `EasyMinSplitSourcePopulation = 20`. Every
+  other split rule stands: an unused spatial action, an adjacent explored destination with
+  `BaselineK > 0`, the band cap, and ID exhaustion.
+- **A 10% per-turn loss cap.** A band that starts the turn with `P` people loses at most
+  `floor(P / 10)` to everything in the turn together. Phase 3 caps negative logistic growth at that
+  budget, then scales the three phase-3 mortality causes so they fit what remains of it. Phase 5
+  limits any macro-episode loss to the budget still unspent. After each stochastic rounding the
+  population is floored at `P − floor(P / 10)`, so rounding cannot breach the cap. Migration
+  previews apply the same cap to `CrowdingDecline`, so the preview matches the outcome.
+- **No acute incidents.** Phase 5 does not resolve acute hazards at all, so it draws no RNG for them
+  and emits no `AcuteIncident` events.
+- **No habitat-collapse extinction.** A band on a tile whose `BaselineK` has fallen to zero is not
+  zeroed by the habitat-collapse transition (§7). It resolves the turn normally, and the loss cap
+  bounds what its zero capacity costs it, so the player has turns to move it.
+
+Health, food, research, gene flow, climate, and macro-episode timing are unchanged. A toggle
+changes rules from the next resolved turn, and the RNG streams of the two modes diverge as soon as
+an acute draw is skipped, so the same seed played in each mode produces different campaigns.
+
+**Ownership and persistence.** The player's choice lives in `UISettings.EasyMode` (§8), a Settings
+checkbox remembered across launches, but the rule state belongs to the world. `gameapi.SetEasyMode`
+sets it, and it is serialized in `SaveState` as `easy_mode` (§9) so that a restored world
+reproduces its turns exactly. The host applies the preference to every new campaign
+(`NewCampaign` inherits the current world's flag) and re-applies it after each load and once the
+initial preference read completes. In practice the preference therefore governs every campaign
+the player sees, whatever flag a save was written with.
+
+**Gates run in normal mode.** `NewWorld` starts with the flag off, and neither the headless
+verification runner nor any route policy sets it. The §13 viability gate, the balance pass, and the
+release-readiness sweep therefore measure the normal rules; Easy mode is calibrated only by its own
+domain tests (`internal/domain/easy_mode_test.go`).
 
 ### Turn pipeline (`internal/domain/turn.go`)
 
@@ -7472,26 +7524,32 @@ save payload, or any action queue.
 
 Presentation preferences persist locally across application sessions in a versioned `UISettings`
 record; they are intentionally absent from `SaveState`, slot metadata, campaign hashes, and
-cloud/export semantics. The current record is schema `3`, with seven required JSON fields:
-`SchemaVersion`, `FieldNotesVisible bool`, `MasterVolume float64`, `Muted bool`,
-`GuideDismissed bool`, `FieldNotesExpanded bool`, and `ReducedMotion bool` (§11 for the audio
-fields' behavior).
+cloud/export semantics. The one exception is `EasyMode`, which selects simulation rules rather than
+presentation: the preference records the player's choice, and the host applies it to the world,
+which persists its own copy in `SaveState` (§7 "Easy mode"). The current record is schema `4`, with
+eight required JSON fields: `SchemaVersion`, `FieldNotesVisible bool`, `MasterVolume float64`,
+`Muted bool`, `GuideDismissed bool`, `FieldNotesExpanded bool`, `ReducedMotion bool`, and
+`EasyMode bool` (§11 for the audio fields' behavior).
 Desktop stores it in
 `os.UserConfigDir()/africa2ice/ui_settings.json`; web stores one record in a separate
 `africa2ice-ui` IndexedDB database so world-save locking and migrations remain independent.
 
 Defaults are **per record, not per field**: an absent, malformed, or unsupported-schema record
-supplies all six preferences at once — Field Notes visible, `MasterVolume` `0.5`, `Muted` false,
-`GuideDismissed` false, `FieldNotesExpanded` true, and `ReducedMotion` false. A schema-3 record is
-accepted only when all seven required fields are present, non-null, and have the exact JSON types
-above. A schema-2 record — the same six fields as before `ReducedMotion` existed — is still
+supplies all seven preferences at once — Field Notes visible, `MasterVolume` `0.5`, `Muted` false,
+`GuideDismissed` false, `FieldNotesExpanded` true, `ReducedMotion` false, and `EasyMode` true. A
+schema-4 record is accepted only when all eight required fields are present, non-null, and have the
+exact JSON types above. A schema-3 record — the same seven fields as before `EasyMode` existed — is
+still accepted when those are present, non-null, and correctly typed; `EasyMode` is not required for
+it and takes its default, `true`, so a player upgrading from an earlier release starts in Easy mode
+exactly as a new player does. A schema-2 record — the same six fields as before `ReducedMotion` existed — is still
 accepted when those are present, non-null, and correctly typed; `ReducedMotion` is not required
-for it and decodes as `false`. A schema-1 record — `SchemaVersion`, `FieldNotesVisible`,
+for it and decodes as `false`, and `EasyMode` decodes as `true`. A schema-1 record — `SchemaVersion`, `FieldNotesVisible`,
 `MasterVolume`, and `Muted` only, predating the first-turn guide and the drawer's compact/expanded
 height — is still accepted when those four original fields are present, non-null, and correctly
 typed; `GuideDismissed`, `FieldNotesExpanded`, and `ReducedMotion` are not required for it and
-decode as `false`. Any accepted schema is normalized to the current `SchemaVersion == 3` before it
-reaches the caller, so a decoded schema-1 or schema-2 record's next write persists it as schema 3
+decode as `false`, while `EasyMode` decodes as `true`. Any accepted schema is normalized to the
+current `SchemaVersion == 4` before it reaches the caller, so a decoded schema-1, schema-2, or
+schema-3 record's next write persists it as schema 4
 — decoding upgrades the in-memory record in place rather than rewriting the file as a separate
 migration step. Any other `SchemaVersion` value falls back to the whole-record default rather than
 partially decoding. Unknown extra fields are ignored. A syntactically valid object with a missing,
@@ -7517,9 +7575,9 @@ otherwise become idle. Thus rapid slider/toggle input is bounded and last-value-
 completion order is delayed. Failure shows one toast but does not revert the current preference;
 the next user change supplies the next retry.
 
-Until the initial read settles, presentation renders the defaults but all four preference-
-mutating Settings controls — the master-volume slider, the mute toggle, the reduced-motion toggle,
-and show-first-turn-guide — are disabled under a compact “Loading preferences…” label. Field Notes visibility is no longer a
+Until the initial read settles, presentation renders the defaults but all five preference-
+mutating Settings controls — the master-volume slider, the Easy mode checkbox, the mute toggle, the
+reduced-motion toggle, and show-first-turn-guide — are disabled under a compact “Loading preferences…” label. Field Notes visibility is no longer a
 Settings control (the drawer's own `F`/`Shift+F` and edge controls are its only toggle), so it is
 unaffected by this gate. The completion atomically installs either the
 validated stored record or the complete default record before enabling those controls. A write can
@@ -7581,7 +7639,11 @@ Auto groups even when rows are empty. Overwriting is always non-modal. Deletion 
 selected row plus an explicit DEL/BACKSPACE action, but opens no confirmation modal.
 
 `ToastManager` reports completion, never mere request submission: “Saved Manual 1”, “Quick-saved”,
-“Autosaved — Auto 2”, or a concise failure. Each toast remains for two seconds. Its FIFO is capped at
+“Autosaved — Auto 2”, or a concise failure. Each toast remains for 1.5 seconds plus 1/15 second per
+character of its message, clamped to 3–9 seconds (`ui.NoticeFrames`: 90 frames plus 4 per rune at
+60 TPS, clamped to `[180, 540]`). The base catches the eye and the per-character term buys reading
+time, while the clamp keeps a short confirmation from flashing past and a long diagnostic from
+pinning the bar. Transient HUD notices use the same timing. The toast FIFO is capped at
 four entries and coalesces identical messages; errors displace the oldest success when full. A small
 pending icon identifies an active storage operation without blocking play or opening a modal.
 
@@ -7658,7 +7720,9 @@ schema. Older executables reject schema-2 saves. The state includes `WorldSeed`,
 `PassageAlgorithm: "named-asymmetric-v1"`, `ResourceAlgorithm: "toward-cap-v1"`,
 `HazardAlgorithm: "split-v1"`,
 `KinSupportAlgorithm: "saturating-kin-acute-v1"`,
-`PopulationRoundingAlgorithm: "stochastic-v1"`, the campaign turn and terminal result,
+`PopulationRoundingAlgorithm: "stochastic-v1"`, the campaign turn and terminal result, the Easy mode
+rule flag `easy_mode` (§7; omitted when false and read as false when absent, so adding it needed no
+schema change),
 `ExploredTiles[ExplorationWordCount]`, the sorted unique
 `SapiensEstablishedRegions`, every non-derived tile and band field including `Species`, acquired-tech
 bitset, research target, fixed research-progress vector, fixed
@@ -7670,7 +7734,10 @@ passage ID, queued interbreeding intents with sapiens actor, archaic target, and
 tile, each tile's resource stocks and `Degradation`, the bounded chronological event feed,
 `RNGAlgorithm: "pcg-splitmix-v1"`, and the serialized `WorldRNG` bytes. That identifier versions the
 `SplitMix64` seed expansion, the `WorldRNG.Float64` mapping over raw PCG output, and the marshalled
-PCG state together, because all three sit between a world seed and a simulation draw.
+PCG state together, because all three sit between a world seed and a simulation draw. A band
+with no queued migration, interbreeding intent, or research target saves those fields as zeros
+behind a false presence flag; load reads them only when the flag is set, so older saves carrying
+stale values behind a false flag load unchanged.
 `CampaignClockAlgorithm` versions the 80,000/20,000 BP endpoints, four 100-turn era intervals and
 their three internal boundaries, their 300/150/100/50-year turn spans, and the piecewise
 `CampaignDate`/`CalendarProgress`
@@ -8381,10 +8448,15 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    to its non-overlapping basin destination, Sahul and western Alaska are in bounds, Wallacea and the
    Bering Strait remain explicit water gaps, region masks are stable, and generation is deterministic.
    Implement §6's authored elevation model and `BaseMoisture` here, since `worldgen.go` owns both and
-   step 4's temperature and vegetation index read them. Elevation fixtures assert the exact ten-entry
-   stable catalog, `HighlandElevationKm = 1.0 km`, zero on water/uncovered land, maximum on overlap,
-   strict threshold boundaries, all ten features contributing land, feature-order and seed
-   invariance, finite `[0, 3]` bounds, and the checked 6,144-value checksum. For moisture, implement
+   step 4's temperature and vegetation index read them. Elevation fixtures assert the exact
+   eleven-entry stable catalog in §6's order (Atlas, Ethiopian Highlands, Zagros, Caucasus west
+   massif, Caucasus east massif, Himalaya / Tibetan Plateau, Alps, Urals, Altai, Central Range of
+   New Guinea, Alaska Range), `HighlandElevationKm = 1.0 km`, zero on water/uncovered land, maximum
+   on overlap, strict threshold boundaries, all eleven features contributing land, feature-order and
+   seed invariance, finite `[0, 3]` bounds, and the checked 6,144-value checksum. The Caucasus is
+   two features, not one: the gap between its massifs is the Colchis corridor that §6's dispersal
+   corridor invariant requires, so `TestCaucasusPassCarriesTheEasternCorridor` belongs to this
+   step's fixtures too. For moisture, implement
    the 64-entry `ZonalMoisture` table under the same bit-pattern, tolerance-assertion, and checksum
    discipline as `LatitudeSinSquared`, plus river, continentality, and orographic terms. Assert a
    finite `BaseMoisture` in `[0, 1]` for all 6,144 tiles, a profile symmetric in absolute latitude,
@@ -8828,7 +8900,7 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    is recorded only after the benchmark workloads themselves are reviewed for exactly 6,144 tiles,
    256 bands, deterministic inputs, and complete turn/projection work; a fast benchmark that silently
    omits a subsystem is a test defect, not a performance improvement.
-9. **Scenes + audio** — scene stack, widgets, grouped save/load scene, bounded two-second toast
+9. **Scenes + audio** — scene stack, widgets, grouped save/load scene, bounded 3–9 second toast
    queue, all scenes including the terminal scene, typed `ui.Action` batches, and `SoundManager`
    wired to UI events. Cover the settings scene's master-volume slider and mute checkbox: the
    persisted level applies to the first emitted sound of a session, `Muted` silences without discarding the
@@ -8973,12 +9045,14 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    alerts. Catalog completeness and reference tests cover every closed enum/context key. Toggling,
    focusing, and scrolling leave selection, draft, action batch, revision, RNG, and frame untouched.
    Exercise absent/malformed/unsupported-schema `UISettings`, local cross-session persistence of all
-   six preferences, whole-record defaulting (Field Notes visible, `MasterVolume` `0.5`, `Muted`
-   false, `GuideDismissed` false, `FieldNotesExpanded` true, `ReducedMotion` false), required-field
-   presence for schema 1 (three fields), schema 2 (five fields), and schema 3 (six fields), null and
-   wrong-type rejection, decoding a schema-1 or schema-2 record and re-stamping it schema 3,
+   seven preferences, whole-record defaulting (Field Notes visible, `MasterVolume` `0.5`, `Muted`
+   false, `GuideDismissed` false, `FieldNotesExpanded` true, `ReducedMotion` false, `EasyMode`
+   true), required-field presence for schema 1 (three fields), schema 2 (five fields), schema 3 (six
+   fields), and schema 4 (seven fields), null and wrong-type rejection, decoding a schema-1, -2, or
+   -3 record with `EasyMode` true and re-stamping it schema 4, applying the stored `EasyMode` to new
+   and loaded campaigns once the read settles,
    `MasterVolume` clamping on read and write, write failure, and campaign load/delete
-   independence on desktop and the separate web database. With the initial read pending, all four
+   independence on desktop and the separate web database. With the initial read pending, all five
    preference controls render disabled and issue no write; installing either a valid result or the
    whole-record defaults enables them atomically. This step owns `ui_settings_file.go` and
    `ui_settings_idb_js.go`, including their shared record-validation contract; step 11 composes and
@@ -9471,7 +9545,7 @@ current-date labels must stay legible while intermediate labels may drop. Field 
 a required inspector or alert at any size.
 
 *Audio and feedback.* A triggered acute incident produces one typed feed entry and one sound; a
-no-event turn produces neither. A completed turn fills Auto 1 with a two-second toast without
+no-event turn produces neither. A completed turn fills Auto 1 with a transient toast without
 interrupting play. `Ctrl+S`/`Cmd+S` quick-saves to slot 99 without opening a scene.
 
 *Flows worth driving by hand.* Open `ESC` → Save, overwrite Manual 1 with no confirmation modal,
@@ -9532,8 +9606,8 @@ failed or aborted transaction must leave the previous slot usable and the campai
 
 ## 14. Out of scope for this build
 
-Direct combat, diplomacy, player control of archaic bands, alternate archaic policies or difficulty
-levels, persistent camps or shelter inventories, guard rosters or separate security/hygiene workforce
+Direct combat, diplomacy, player control of archaic bands, alternate archaic policies, difficulty
+levels beyond the single Easy mode toggle (§7), persistent camps or shelter inventories, guard rosters or separate security/hygiene workforce
 roles, sanitation stocks or tracked infections/epidemics, individual cave ownership/capacity/occupancy,
 separately simulated animal-species populations, selective prey depletion/extinction or replacement,
 species-wide research pools, species-specific technology graphs (DAGs), detailed Neanderthal/Denisovan
@@ -9884,7 +9958,7 @@ Earlier fixtures use explicit values that are never release data.
 | `RiverCorridorBonus` / `RiverAdjacentBonus` | `0.35` / `0.20`                                                                | Initial | `GeographyAlgorithm`          |
 | `ContinentalityMax` / `ContinentalityRange` | `0.20` / `8` tiles                                                             | Initial | `GeographyAlgorithm`          |
 | `OrographicBonus`                           | `0.10`                                                                         | Initial | `GeographyAlgorithm`          |
-| Authored elevation catalog                  | §6 ten height-valued highland polygons; `1.25–3.0 km`, maximum on overlap       | Initial | `GeographyAlgorithm`          |
+| Authored elevation catalog                  | §6 eleven height-valued highland polygons; `1.25–3.0 km`, maximum on overlap    | Initial | `GeographyAlgorithm`          |
 | `HighlandElevationKm`                       | `1.0 km`; strict `ElevationKm > HighlandElevationKm` classification             | Initial | `GeographyAlgorithm`          |
 | Authored escarpment catalog                 | §6 exact 17 cardinal land-boundary entries with deliberate pass gaps            | Locked  | `GeographyAlgorithm`          |
 | `MaxEscarpmentEdges`                        | `24`                                                                            | Locked  | `GeographyAlgorithm`          |
@@ -10061,6 +10135,9 @@ Earlier fixtures use explicit values that are never release data.
 | New-game starting tile IDs                                 | deterministic nearest valid tiles generated from the anchors and frozen                         | Step 4  | scenario contract          |
 | Split ratio                                                | population near-`50/50`, odd person stays with source; stored FU `50/50` unless the smaller descendant's cap binds, then its overflow stays with source | Locked | `BandAlgorithm` |
 | `MinSplitSourcePopulation`                                 | `2 × MinEstablishedBand = 40`                                                                   | Derived | `BandAlgorithm`            |
+| `EasyMinSplitSourcePopulation` (Easy mode)                 | `20`; Easy mode also waives `SplitStressThreshold`                                              | Policy  | §7 Easy mode               |
+| Easy mode per-turn loss cap                                | `floor(P_start / 10)` people across growth, phase-3 mortality, and macro loss; no acute incidents | Policy | §7 Easy mode             |
+| Easy mode exploration radius                               | `2` (5×5 footprint) instead of `1` (3×3)                                                        | Policy  | §7 Easy mode               |
 | `DestinationRegions`                                       | `{Frangistan, SouthAsia, YellowRiverBasin, Sahul, Beringia}`                                    | Locked  | campaign outcome contract  |
 | Cardinal / diagonal step length                            | `1` / `math.Sqrt2`                                                                              | Locked  | `MovementAlgorithm`        |
 | Escarpment movement rule                                  | symmetric cardinal block; diagonals require all four enclosing cardinal sides clear             | Locked  | `MovementAlgorithm`        |
@@ -10124,13 +10201,14 @@ one that may rise on demand is a number that records whatever the build happens 
 | ------------------------------------------ | -------------------------------------------------------------- | ----------------------------------------------- | ----- |
 | Save slot IDs                              | Manual `1`–`3`; quick `99`; autosave `101`–`103`               | Locked                                          | §9    |
 | Autosave interval fallback                 | `5` minutes of monotonic running time                          | Policy                                          | §9    |
-| Toast display duration                     | `2` seconds                                                    | Policy                                          | §9    |
+| Toast display duration                     | `1.5` s + `1/15` s per character, clamped to `3`–`9` s         | Policy                                          | §9    |
 | Toast FIFO capacity                        | `4` entries                                                    | Policy                                          | §9    |
-| `UISettings.SchemaVersion`                 | `3`; see "UI settings schema" below for the required fields per version | Locked                          | §8    |
+| `UISettings.SchemaVersion`                 | `4`; see "UI settings schema" below for the required fields per version | Locked                          | §8    |
 | `UISettings` `FieldNotesVisible` default   | `true`                                                         | Policy                                          | §8    |
 | `UISettings` `MasterVolume` default        | `0.5`                                                          | Policy                                          | §8    |
 | `UISettings` `MasterVolume` range          | `[0, 1]`                                                       | Locked                                          | §8    |
 | `UISettings` `Muted` default               | `false`                                                        | Policy                                          | §8    |
+| `UISettings` `EasyMode` default            | `true`, also for schema 1–3 records that predate the field     | Policy                                          | §7, §8 |
 | Go toolchain                              | `1.26.4`                                                       | Locked                                          | §10/§13 |
 | Binaryen toolchain                        | `version_132`; Linux x86-64 SHA-256 `195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572` | Locked | §10 |
 | Compressed-wasm measurement                | `brotli -q 11`; raw and `gzip -9` recorded alongside, not gated | Locked                                         | §10   |
@@ -10155,7 +10233,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | Focus camera scale and transition          | `3×`; `15` update ticks; clamped to the map area above the drawer | Policy                                        | §8    |
 | Field Notes drawer heights                 | hidden `20`, compact `102`, expanded `340` logical px           | Policy                                          | §8    |
 | Liveability tiers (presentation only)      | food red `< RequiredFU`, amber `< 1.5 × RequiredFU`; water red `< 0.25 cap`, amber `< 0.5 cap`; degradation amber `≥ 0.25`, red `≥ 0.5`; mortality amber `≥ 0.004`, red `≥ 0.008`; shelter amber `< 0.3`; archaic present amber | Initial | §8 |
-| UI settings schema                         | `3`: `FieldNotesVisible`, `MasterVolume`, `Muted`, `GuideDismissed`, `FieldNotesExpanded`, `ReducedMotion`; schema 1 and schema 2 decode with the newer fields false | Policy | §8 |
+| UI settings schema                         | `4`: `FieldNotesVisible`, `MasterVolume`, `Muted`, `GuideDismissed`, `FieldNotesExpanded`, `ReducedMotion`, `EasyMode`; schema 1–3 decode with the newer presentation fields false and `EasyMode` true | Policy | §8 |
 | `MaxRenderScale`                           | `2.0`                                                          | Policy                                          | §8    |
 | Minimum gameplay viewport                  | `1,280 × 720 DIPs`                                             | Policy                                          | §8    |
 | Sapiens band warning thresholds            | suffering: latest decline/food shortfall or `Health < 0.50`; danger: `Health < 0.80` or seasonal + chronic rate `>= 0.004` | Policy | §8 |

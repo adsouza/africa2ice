@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -33,8 +34,14 @@ func TestReferenceRunIsDeterministic(t *testing.T) {
 	}
 }
 
+// referenceRecords runs the full reference campaign once per test binary;
+// the margin and pinned-outcome tests both judge the same run.
+var referenceRecords = sync.OnceValues(func() ([]CheckpointRecord, error) {
+	return ReferenceRun(ReferenceSeed, MaxTurns, "reference")
+})
+
 func TestReferenceCampaignClearsReleaseMargins(t *testing.T) {
-	records, err := ReferenceRun(ReferenceSeed, MaxTurns, "reference")
+	records, err := referenceRecords()
 	if err != nil {
 		t.Fatal(err)
 	}

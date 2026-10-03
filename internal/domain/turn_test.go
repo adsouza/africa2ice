@@ -16,7 +16,7 @@ func TestAdvanceTurnPublishesOneCompleteTransition(t *testing.T) {
 		t.Fatalf("turn/result = %d/%d", world.Turn(), world.Result())
 	}
 	for _, band := range world.Bands() {
-		if band.LastFoodReport.Turn != 1 || band.LastOutcomeReport.Turn != 1 || band.SpatialActionUsed || band.HasQueuedMigration || band.HasInterbreedTarget {
+		if band.LastFoodReport.Turn != 1 || band.LastOutcomeReport.Turn != 1 || band.SpatialActionUsed || band.QueuedMigration.Present() || band.InterbreedTarget.Present() {
 			t.Fatalf("band not finalized: %#v", band)
 		}
 		if band.LastOutcomeReport.StartingPopulation == 0 || band.LastOutcomeReport.EndingPopulation != band.Population || band.LastOutcomeReport.StartingHealth != 1 || band.LastOutcomeReport.EndingHealth != band.Health {

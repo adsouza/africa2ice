@@ -266,35 +266,36 @@ func (world *World) advanceTurn() error {
 
 	for index := range nextBands {
 		band := &nextBands[index]
-		if band.HasQueuedMigration && band.Population > 0 && nextHabitat[band.QueuedMigration].BaselineK > 0 {
-			valid := band.TileID == band.QueuedOrigin
-			if valid && band.QueueUsesPassage {
-				if band.QueuedPassage >= PassageCount {
+		if order, queued := band.QueuedMigration.Get(); queued && band.Population > 0 && nextHabitat[order.Destination].BaselineK > 0 {
+			valid := band.TileID == order.Origin
+			passageID, usesPassage := order.Passage.Get()
+			if valid && usesPassage {
+				if passageID >= PassageCount {
 					valid = false
 				} else {
-					passage := passageCatalog[band.QueuedPassage]
+					passage := passageCatalog[passageID]
 					destination, atEndpoint := passageDestination(passage, band.TileID)
-					valid = atEndpoint && destination == band.QueuedMigration && passageAvailability(*band, passage, nextHabitat, nextClimate.LongTermTempOffset, false) == PassageAvailable
+					valid = atEndpoint && destination == order.Destination && passageAvailability(*band, passage, nextHabitat, nextClimate.LongTermTempOffset, false) == PassageAvailable
 				}
 			} else if valid {
 				valid = false
 				for _, edge := range world.grid.OrdinaryEdges(band.TileID) {
-					if edge.To == band.QueuedMigration {
+					if edge.To == order.Destination {
 						valid = true
 						break
 					}
 				}
 			}
 			if valid {
-				band.TileID = band.QueuedMigration
+				band.TileID = order.Destination
 				geography, _ := world.grid.Tile(band.TileID)
 				world.appendBandEvent(*band, Event{Turn: nextTurn, Kind: EventMigration, BandID: band.ID, TileID: band.TileID, Region: geography.Region})
-				if band.QueueUsesPassage {
-					work[index].crossed, work[index].crossedPassage = true, band.QueuedPassage
+				if usesPassage {
+					work[index].crossed, work[index].crossedPassage = true, passageID
 				}
 			}
 		}
-		band.HasQueuedMigration, band.QueueUsesPassage = false, false
+		band.QueuedMigration = Option[MigrationOrder]{}
 		capacity := FoodStorageCapacity(band.Population)
 		if float64(band.StoredFood) > capacity {
 			band.StoredFood = FU(capacity)
@@ -385,7 +386,7 @@ func (world *World) advanceTurn() error {
 			geography, _ := world.grid.Tile(nextBands[index].TileID)
 			world.appendBandEvent(nextBands[index], Event{Turn: nextTurn, Kind: EventInterbreeding, BandID: nextBands[index].ID, TileID: nextBands[index].TileID, Region: geography.Region})
 		}
-		nextBands[index].HasInterbreedTarget = false
+		nextBands[index].InterbreedTarget = Option[BandID]{}
 	}
 	result := CampaignOngoing
 	hasSapiens := false

@@ -23,7 +23,7 @@ func TestKeyboardModalBlocksRealCommandCombinations(t *testing.T) {
 	stub := &gameStub{frame: migrationPreviewFrame()}
 	game := New(stub)
 	game.shortcutsOpen = true
-	game.openRow = ui.RowWorkforce
+	game.disclosure.openRow = ui.RowWorkforce
 	game.handleGameplayKeyState(keysDown(), keysDown(ebiten.KeySpace, ebiten.KeyTab, ebiten.KeyB, ebiten.KeyArrowRight))
 	if stub.endTurns != 0 || len(stub.appliedCommands) != 0 || game.workforce.Dirty() {
 		t.Fatal("commands escaped shortcut modal")
@@ -41,7 +41,7 @@ func TestKeyboardModalBlocksRealCommandCombinations(t *testing.T) {
 func TestKeyboardDraftOwnershipAndGlobalPriority(t *testing.T) {
 	stub := &gameStub{frame: migrationPreviewFrame()}
 	game := New(stub)
-	game.openRow = ui.RowWorkforce
+	game.disclosure.openRow = ui.RowWorkforce
 	game.workforce.Role = gameapi.Foraging
 	game.handleGameplayKeyState(keysDown(ebiten.KeyShift), keysDown(ebiten.KeyArrowRight))
 	if game.workforce.Allocation()[gameapi.Foraging] != 500 {
@@ -53,15 +53,15 @@ func TestKeyboardDraftOwnershipAndGlobalPriority(t *testing.T) {
 		t.Fatal("dirty Tab discarded draft or leaked into turn")
 	}
 	game.handleGameplayKeyState(keysDown(), keysDown(ebiten.KeyD))
-	if game.workforce.Dirty() || game.detailsOpen {
+	if game.workforce.Dirty() || game.disclosure.detailsOpen {
 		t.Fatal("D did not belong exclusively to workforce")
 	}
 	game.handleGameplayKeyState(keysDown(ebiten.KeyShift), keysDown(ebiten.KeyArrowUp))
-	if game.openRow != ui.RowResearch || game.workforce.Role != gameapi.Foraging {
+	if game.disclosure.openRow != ui.RowResearch || game.workforce.Role != gameapi.Foraging {
 		t.Fatal("Shift+Up was not owned by global row navigation")
 	}
 	game.handleGameplayKeyState(keysDown(), keysDown(ebiten.KeyD))
-	if !game.detailsOpen {
+	if !game.disclosure.detailsOpen {
 		t.Fatal("D did not toggle details outside workforce")
 	}
 	game.handleGameplayKeyState(keysDown(), keysDown(ebiten.Key2, ebiten.KeyEnter))
@@ -194,9 +194,9 @@ func TestGameplayKeyboardDispatchesBestTileAndCyclesBands(t *testing.T) {
 	frame.Bands = append(frame.Bands, second)
 	stub := &gameStub{frame: frame}
 	game := New(stub)
-	game.hasMigrationPreview = true
+	game.preview.Visible = true
 	game.handleGameplayKeyState(keysDown(), keysDown(ebiten.KeyTab))
-	if game.selectedBand != 8 || game.hasMigrationPreview {
+	if game.selectedBand != 8 || game.preview.Visible {
 		t.Fatal("Tab did not select next band and clear preview")
 	}
 	game.handleGameplayKeyState(keysDown(ebiten.KeyShift), keysDown(ebiten.KeyTab))

@@ -236,8 +236,8 @@ func buildTemporalRoute(grid *Grid, target Region) (*temporalRoute, error) {
 // research cost among those whose prerequisites are met, ties broken by the
 // enum's own order.
 func cheapestAvailableResearch(state TechnologyState, prefer Technology) (Technology, bool) {
-	if state.HasTarget {
-		return state.Target, false
+	if target, ok := state.Target.Get(); ok {
+		return target, false
 	}
 	if prefer < TechCount && !state.Has(prefer) && state.PrerequisitesMet(prefer) {
 		return prefer, true
@@ -255,8 +255,8 @@ func cheapestAvailableResearch(state TechnologyState, prefer Technology) (Techno
 }
 
 func routeResearch(state TechnologyState, target Region) (Technology, bool) {
-	if state.HasTarget {
-		return state.Target, false
+	if target, ok := state.Target.Get(); ok {
+		return target, false
 	}
 	priority := survivalResearchPriority
 	if target == Sahul {

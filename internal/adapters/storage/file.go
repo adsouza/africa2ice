@@ -39,9 +39,14 @@ type FileRepository struct {
 	// Only the worker goroutine touches it.
 	sequence       uint64
 	sequenceLoaded bool
+	// panicGuard is deferred by the worker goroutine, so a panic there is
+	// recorded before it ends the process; never nil.
+	panicGuard func()
 }
 
-func NewFileRepository(directory string) (*FileRepository, error) {
+// NewFileRepository opens the save directory. panicGuard is the session's
+// panic hook for the worker goroutine; nil means none.
+func NewFileRepository(directory string, panicGuard func()) (*FileRepository, error) {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return nil, err
 	}
@@ -49,7 +54,7 @@ func NewFileRepository(directory string) (*FileRepository, error) {
 	if err != nil {
 		return nil, err
 	}
-	repository := &FileRepository{directory: directory, lease: lease, writable: writable, requests: make(chan fileRequest, 2), completions: make(chan application.RepositoryCompletion, 8), done: make(chan struct{})}
+	repository := &FileRepository{directory: directory, lease: lease, writable: writable, requests: make(chan fileRequest, 2), completions: make(chan application.RepositoryCompletion, 8), done: make(chan struct{}), panicGuard: orNoGuard(panicGuard)}
 	repository.workerWG.Add(1)
 	go repository.worker()
 	return repository, nil
@@ -119,6 +124,7 @@ func (repository *FileRepository) Close() error {
 
 func (repository *FileRepository) worker() {
 	defer repository.workerWG.Done()
+	defer repository.panicGuard()
 	for {
 		select {
 		case request := <-repository.requests:

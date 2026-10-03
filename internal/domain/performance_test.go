@@ -71,8 +71,8 @@ func maximumWorkloadState(b *testing.B) State {
 		band.LastMortality = MortalityReport{}
 		band.LastOutcomeReport = OutcomeReport{}
 		band.SpatialActionUsed = false
-		band.HasQueuedMigration = false
-		band.HasInterbreedTarget = false
+		band.QueuedMigration = Option[MigrationOrder]{}
+		band.InterbreedTarget = Option[BandID]{}
 		state.Bands[index] = band
 	}
 	state.NextBandID = MaxBands + 1

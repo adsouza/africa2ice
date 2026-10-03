@@ -62,7 +62,7 @@ func (g *Game) handleGameplayKeyState(pressed, justPressed func(ebiten.Key) bool
 		g.changeOpenRow(-1)
 	case shift && justPressed(ebiten.KeyArrowDown):
 		g.changeOpenRow(1)
-	case justPressed(ebiten.KeyD) && g.openRow != ui.RowWorkforce:
+	case justPressed(ebiten.KeyD) && g.disclosure.openRow != ui.RowWorkforce:
 		g.toggleDetails()
 	case justPressed(splitBandHotkey):
 		g.splitSelectedBand()
@@ -95,7 +95,7 @@ func (g *Game) handleGameplayKeyState(pressed, justPressed func(ebiten.Key) bool
 // handleRowKey routes arrows, Enter, and Workforce's −/+ to whichever row is
 // open; none of them act while a different row owns the keyboard.
 func (g *Game) handleRowKey(key ebiten.Key, shift bool) {
-	switch g.openRow {
+	switch g.disclosure.openRow {
 	case ui.RowMove:
 		switch key {
 		case ebiten.KeyArrowUp:
@@ -145,21 +145,17 @@ func (g *Game) adjustSelectedRole(deltaBP int, shift bool) {
 
 // changeOpenRow moves the accordion by delta rows, wrapping, and records that
 // the player chose the row so auto-advance yields.
-func (g *Game) changeOpenRow(delta int) {
-	count := int(ui.ChecklistRowCount)
-	g.openRow = ui.ChecklistRow((int(g.openRow) + delta + count) % count)
-	g.rowChosen = true
-}
+func (g *Game) changeOpenRow(delta int) { g.disclosure.step(delta) }
 
 // escape peels one transient layer (spec §8) and reports whether it did; the
 // caller opens the menu when nothing was peeled.
 func (g *Game) escape() bool {
 	switch {
-	case g.hasMigrationPreview:
+	case g.preview.Visible:
 		g.clearMigrationPreview()
 		g.showNotice("Migration choice cleared")
-	case g.bandListOpen:
-		g.bandListOpen = false
+	case g.disclosure.bandListOpen:
+		g.disclosure.bandListOpen = false
 	case g.shortcutsOpen:
 		g.shortcutsOpen = false
 	default:

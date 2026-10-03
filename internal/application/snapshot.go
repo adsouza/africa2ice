@@ -68,7 +68,7 @@ func projectFrame(world *domain.World, worldRevision, terrainRevision uint64) (*
 			publicTile.LocalTemperatureC, publicTile.MovementCost = habitat[id].LocalTemperatureC, habitat[id].MovementCost
 			publicTile.VegetationIndex, publicTile.BaselineK = habitat[id].VegetationIndex, habitat[id].BaselineK
 			publicTile.Degradation = tileStates[id].Degradation
-			publicTile.EcologicalK = habitat[id].BaselineK * (1 - tileStates[id].Degradation) * macroImpact.HabitatFactor
+			publicTile.EcologicalK = domain.EcologicalK(habitat[id].BaselineK, tileStates[id].Degradation, macroImpact)
 			caps := domain.ResourceCaps(habitat[id].Biome, season, tileStates[id].Degradation, habitat[id].BaselineK)
 			caps.Flora *= macroImpact.FloraFactor
 			caps.Fauna *= macroImpact.FaunaFactor
@@ -129,12 +129,11 @@ func projectFrame(world *domain.World, worldRevision, terrainRevision uint64) (*
 		publicBand := gameapi.Band{
 			ID: gameapi.BandID(band.ID), Species: mapSpecies(band.Species), TileID: gameapi.TileID(band.TileID),
 			Population: uint32(band.Population), Health: float64(band.Health), StoredFood: float64(band.StoredFood),
-			AcquiredTech: band.Technology.Acquired, HasResearchTarget: band.Technology.HasTarget,
-			SpatialActionUsed: band.SpatialActionUsed, QueuedMigration: gameapi.TileID(band.QueuedMigration), HasQueuedMigration: band.HasQueuedMigration,
-			HasInterbreedTarget: band.HasInterbreedTarget, InterbreedTargetID: gameapi.BandID(band.InterbreedTarget),
-			Stress:         world.BandStress(band.ID),
-			LastFoodReport: gameapi.FoodTurnReport{Turn: band.LastFoodReport.Turn, RequiredFU: band.LastFoodReport.RequiredFU, DeficitFU: band.LastFoodReport.DeficitFU},
-			LastMortality:  gameapi.MortalityReport{Starvation: band.LastMortality.Starvation, Seasonal: band.LastMortality.Seasonal, Chronic: band.LastMortality.Chronic, Macro: band.LastMortality.Macro, Acute: band.LastMortality.Acute},
+			AcquiredTech:      band.Technology.Acquired,
+			SpatialActionUsed: band.SpatialActionUsed,
+			Stress:            world.BandStress(band.ID),
+			LastFoodReport:    gameapi.FoodTurnReport{Turn: band.LastFoodReport.Turn, RequiredFU: band.LastFoodReport.RequiredFU, DeficitFU: band.LastFoodReport.DeficitFU},
+			LastMortality:     gameapi.MortalityReport{Starvation: band.LastMortality.Starvation, Seasonal: band.LastMortality.Seasonal, Chronic: band.LastMortality.Chronic, Macro: band.LastMortality.Macro, Acute: band.LastMortality.Acute},
 			LastOutcomeReport: gameapi.OutcomeReport{
 				Turn: band.LastOutcomeReport.Turn, StartingPopulation: uint32(band.LastOutcomeReport.StartingPopulation), EndingPopulation: uint32(band.LastOutcomeReport.EndingPopulation), Growth: band.LastOutcomeReport.Growth,
 				StartingHealth: float64(band.LastOutcomeReport.StartingHealth), EndingHealth: float64(band.LastOutcomeReport.EndingHealth), NutritionDelta: band.LastOutcomeReport.NutritionDelta,
@@ -143,6 +142,12 @@ func projectFrame(world *domain.World, worldRevision, terrainRevision uint64) (*
 			},
 		}
 		geography, _ := grid.Tile(band.TileID)
+		if order, queued := band.QueuedMigration.Get(); queued {
+			publicBand.QueuedMigration, publicBand.HasQueuedMigration = gameapi.TileID(order.Destination), true
+		}
+		if target, intends := band.InterbreedTarget.Get(); intends {
+			publicBand.InterbreedTargetID, publicBand.HasInterbreedTarget = gameapi.BandID(target), true
+		}
 		publicBand.SeasonalMortalityRate, publicBand.ChronicMortalityRate = domain.Phase3MortalityRates(band, geography, habitat[band.TileID], season)
 		for index := range publicBand.AllocationBP {
 			publicBand.AllocationBP[index] = uint16(band.Allocation[index])
@@ -154,13 +159,13 @@ func projectFrame(world *domain.World, worldRevision, terrainRevision uint64) (*
 			publicBand.ResearchOptions[publicTechnology] = gameapi.ResearchOption{
 				Available:        !acquired && band.Technology.PrerequisitesMet(technology),
 				Acquired:         acquired,
-				Current:          band.Technology.HasTarget && band.Technology.Target == technology,
+				Current:          band.Technology.Target == domain.Some(technology),
 				Cost:             domain.ResearchCost[technology],
 				PrerequisiteMask: domain.TechnologyPrerequisiteMask(technology),
 			}
 		}
-		if band.Technology.HasTarget {
-			publicBand.ResearchTarget = mapTech(band.Technology.Target)
+		if target, researching := band.Technology.Target.Get(); researching {
+			publicBand.ResearchTarget, publicBand.HasResearchTarget = mapTech(target), true
 			publicBand.OriginalResearchGainPreview = domain.ResearchGain(band.Workers(domain.Toolcraft))
 		}
 		for trait := domain.HeritableTrait(0); trait < domain.HeritableTraitCount; trait++ {
@@ -196,7 +201,7 @@ func projectFrame(world *domain.World, worldRevision, terrainRevision uint64) (*
 				WaterSurvivalEquivalent: candidate.WaterSurvivalEquivalent, DestinationPopulation: candidate.DestinationPopulation,
 				WarningSuitability:    candidate.WarningSuitability,
 				SeasonalMortalityRate: seasonalMortalityRate, ChronicMortalityRate: chronicMortalityRate,
-				CrowdingDecline: candidate.CrowdingDecline,
+				CrowdingDecline: candidate.CrowdingDecline, ArrivalStress: candidate.ArrivalStress,
 				Passage:         gameapi.PassageID(candidate.Passage),
 				RequiresPassage: candidate.RequiresPassage,
 			})

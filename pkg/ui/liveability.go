@@ -19,10 +19,10 @@ const (
 	shelterAmber               = 0.3
 	// Capacity is tiered by how much of the tile would be in use once the band
 	// arrives, not by degradation alone: a smaller capacity the band fits
-	// several times over is not a warning (user-reported). The amber point is
-	// the domain's own crowding threshold — domain.World.BandStress divides a
-	// tile's total resident population by its capacity and splits a band past
-	// SplitStressThreshold — so the panel and the simulation agree on when a
+	// several times over is not a warning (user-reported). Occupancy is the
+	// domain's projected Stress (HERE) or ArrivalStress (TARGET), never
+	// recomputed here, and the amber point is the threshold past which the
+	// domain permits a split, so the panel and the simulation agree on when a
 	// tile is crowded.
 	capacityOccupancyAmber = gameapi.SplitStressThreshold // 0.67
 	capacityOccupancyRed   = 1.0
@@ -76,6 +76,11 @@ type TileLiveability struct {
 	// reach, and both are "who would be here once this band is".
 	ResidentBands      int
 	ResidentPopulation uint64
+	// Occupancy is the band's Stress once on this tile, read from the frame:
+	// Band.Stress for HERE, MigrationCandidate.ArrivalStress for a reachable
+	// TARGET. HasOccupancy is false where the band cannot arrive.
+	Occupancy    float64
+	HasOccupancy bool
 	// ArchaicBands is kept alongside ResidentBands so the Others row can name
 	// the species while every neighbour is archaic. The matching population is
 	// not kept: the row reports ResidentPopulation, and an archaic-only
@@ -95,6 +100,7 @@ func CurrentTileLiveability(frame *gameapi.Frame, band *gameapi.Band) TileLiveab
 	if summary.Available {
 		summary.Status = "current"
 		summary.SeasonalRisk, summary.ChronicRisk, summary.HasRisk = band.SeasonalMortalityRate, band.ChronicMortalityRate, true
+		summary.Occupancy, summary.HasOccupancy = band.Stress, true
 	}
 	return summary
 }
@@ -136,6 +142,7 @@ func TargetTileLiveability(frame *gameapi.Frame, band *gameapi.Band, tile gameap
 		}
 		summary.SeasonalRisk, summary.ChronicRisk, summary.HasRisk = candidate.SeasonalMortalityRate, candidate.ChronicMortalityRate, true
 		summary.CrowdingDecline = candidate.CrowdingDecline
+		summary.Occupancy, summary.HasOccupancy = candidate.ArrivalStress, true
 		return summary
 	}
 	if gameapi.EscarpmentBlocks(frame, band.TileID, tile) {
@@ -185,21 +192,6 @@ func summarizeTile(frame *gameapi.Frame, tileID gameapi.TileID, self *gameapi.Ba
 	return summary
 }
 
-// ProjectedOccupancy is the share of the tile's capacity in use once a band of
-// arriving people is present, alongside the residents already counted. It is
-// the presentation twin of domain.World.BandStress, over EcologicalK rather
-// than BaselineK so that the ratio matches the capacity displayed beside it.
-func (s TileLiveability) ProjectedOccupancy(arriving uint64) float64 {
-	people := float64(s.ResidentPopulation + arriving)
-	if s.EcologicalK <= 0 {
-		if people > 0 {
-			return capacityOccupancyRed // no capacity at all is full by definition
-		}
-		return 0
-	}
-	return people / s.EcologicalK
-}
-
 // LiveabilityRow is one HERE / TARGET comparison line for the Move row.
 type LiveabilityRow struct {
 	Label      string
@@ -221,10 +213,6 @@ func LiveabilityRows(band *gameapi.Band, here, target TileLiveability) []Liveabi
 	required := 0.0
 	if band != nil && band.LastFoodReport.Turn > 0 {
 		required = band.LastFoodReport.RequiredFU
-	}
-	population := uint64(0)
-	if band != nil {
-		population = uint64(band.Population)
 	}
 	both := here.Available && target.Available
 	row := func(label string, value func(TileLiveability) string, tier func(TileLiveability) LiveabilityTier, higherIsBetter bool, metric func(TileLiveability) float64) LiveabilityRow {
@@ -271,12 +259,22 @@ func LiveabilityRows(band *gameapi.Band, here, target TileLiveability) []Liveabi
 		}
 		return TierNormal
 	}
-	occupancy := func(s TileLiveability) float64 { return s.ProjectedOccupancy(population) }
+	// Occupancy only compares when the band could stand on both tiles; a
+	// missing figure is not an empty tile.
+	var occupancy func(TileLiveability) float64
+	if here.HasOccupancy && target.HasOccupancy {
+		occupancy = func(s TileLiveability) float64 { return s.Occupancy }
+	}
+	// Likewise an unreachable tile's "unavailable" mortality is not a zero rate.
+	var mortality func(TileLiveability) float64
+	if here.HasRisk && target.HasRisk {
+		mortality = func(s TileLiveability) float64 { return s.SeasonalRisk + s.ChronicRisk }
+	}
 	capacityTier := func(s TileLiveability) LiveabilityTier {
-		switch used := occupancy(s); {
-		case s.Degradation >= degradationRed, used >= capacityOccupancyRed:
+		switch {
+		case s.Degradation >= degradationRed, s.HasOccupancy && s.Occupancy >= capacityOccupancyRed:
 			return TierRed
-		case s.Degradation >= degradationAmber, used >= capacityOccupancyAmber:
+		case s.Degradation >= degradationAmber, s.HasOccupancy && s.Occupancy >= capacityOccupancyAmber:
 			return TierAmber
 		}
 		return TierNormal
@@ -291,7 +289,10 @@ func LiveabilityRows(band *gameapi.Band, here, target TileLiveability) []Liveabi
 		if s.Degradation > 0 {
 			capacity = fmt.Sprintf("%.0f/%.0f", s.EcologicalK, s.BaselineK)
 		}
-		return fmt.Sprintf("%s · %.0f%% full", capacity, occupancy(s)*100)
+		if !s.HasOccupancy {
+			return capacity
+		}
+		return fmt.Sprintf("%s · %.0f%% full", capacity, s.Occupancy*100)
 	}
 	mortalityTier := func(s TileLiveability) LiveabilityTier {
 		total := s.SeasonalRisk + s.ChronicRisk
@@ -370,7 +371,7 @@ func LiveabilityRows(band *gameapi.Band, here, target TileLiveability) []Liveabi
 		row("Capacity", capacityValue, capacityTier, false, occupancy),
 		row("Water", func(s TileLiveability) string { return fmt.Sprintf("%.0f / %.0f", s.WaterStock, s.WaterCap) }, waterTier, true, func(s TileLiveability) float64 { return s.WaterStock }),
 		row("Shelter", func(s TileLiveability) string { return fmt.Sprintf("%.0f%%", s.NaturalShelter*100) }, shelterTier, true, func(s TileLiveability) float64 { return s.NaturalShelter }),
-		row("Mortality", mortalityValue, mortalityTier, false, func(s TileLiveability) float64 { return s.SeasonalRisk + s.ChronicRisk }),
+		row("Mortality", mortalityValue, mortalityTier, false, mortality),
 		row("Route", routeValue, normal, true, nil),
 		row("Others", othersValue, normal, true, nil),
 	}

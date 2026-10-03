@@ -20,13 +20,18 @@ type IndexedDBUISettingsStore struct {
 	active         bool
 	completions    []UISettingsCompletion
 	pendingRelease []js.Func
+	// panicGuard is deferred by every IndexedDB callback; never nil.
+	panicGuard func()
 }
 
-func NewIndexedDBUISettingsStore() (*IndexedDBUISettingsStore, error) {
+// NewIndexedDBUISettingsStore stores preferences in IndexedDB. panicGuard is
+// the session's panic hook for the store's JavaScript callbacks, which run
+// where the entrypoint guard cannot see; nil means none.
+func NewIndexedDBUISettingsStore(panicGuard func()) (*IndexedDBUISettingsStore, error) {
 	if js.Global().Get("indexedDB").IsUndefined() {
 		return nil, errors.New("IndexedDB is unavailable")
 	}
-	return &IndexedDBUISettingsStore{}, nil
+	return &IndexedDBUISettingsStore{panicGuard: orNoGuard(panicGuard)}, nil
 }
 
 func (store *IndexedDBUISettingsStore) BeginRead(revision uint64) error {
@@ -87,6 +92,7 @@ func (store *IndexedDBUISettingsStore) open(operation UISettingsOperation, revis
 	}
 	callback := func(handler func(js.Value, []js.Value)) js.Func {
 		function := js.FuncOf(func(this js.Value, arguments []js.Value) any {
+			defer store.panicGuard()
 			handler(this, arguments)
 			return nil
 		})

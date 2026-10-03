@@ -5,6 +5,7 @@ package storage
 import (
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -48,7 +49,7 @@ func waitServiceOperation(t *testing.T, service *application.GameService, operat
 
 func TestFileRepositoryWriteReadListDelete(t *testing.T) {
 	directory := t.TempDir()
-	repository, err := NewFileRepository(directory)
+	repository, err := NewFileRepository(directory, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +93,7 @@ func TestFileRepositoryWriteReadListDelete(t *testing.T) {
 }
 
 func TestOldestSupportedSaveAdvancesAndResavesThroughFileRepository(t *testing.T) {
-	repository, err := NewFileRepository(t.TempDir())
+	repository, err := NewFileRepository(t.TempDir(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +159,7 @@ func TestOldestSupportedSaveAdvancesAndResavesThroughFileRepository(t *testing.T
 // turn, and keeping every turn's world forever would grow the save directory
 // without bound.
 func TestFileRepositoryOverwriteCommitsANewGeneration(t *testing.T) {
-	repository, _ := NewFileRepository(t.TempDir())
+	repository, _ := NewFileRepository(t.TempDir(), nil)
 	defer func() { _ = repository.Close() }()
 	firstService, _ := application.NewGameService(1)
 	first, _ := firstService.ExportSaveState()
@@ -180,12 +181,12 @@ func TestFileRepositoryOverwriteCommitsANewGeneration(t *testing.T) {
 
 func TestFileRepositorySecondProcessViewIsReadOnly(t *testing.T) {
 	directory := t.TempDir()
-	first, err := NewFileRepository(directory)
+	first, err := NewFileRepository(directory, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = first.Close() }()
-	second, err := NewFileRepository(directory)
+	second, err := NewFileRepository(directory, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +223,7 @@ func slotFiles(t *testing.T, directory string) (meta, world int) {
 // of every metadata file, or the cost of a save grows with the campaign.
 func TestFileRepositoryReclaimsSupersededRecords(t *testing.T) {
 	directory := t.TempDir()
-	repository, err := NewFileRepository(directory)
+	repository, err := NewFileRepository(directory, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +271,7 @@ func TestFileRepositoryReclaimsSupersededRecords(t *testing.T) {
 // used, or autosave rotation would compare stale numbers across slots.
 func TestFileRepositoryResumesCommitSequenceAcrossProcesses(t *testing.T) {
 	directory := t.TempDir()
-	first, err := NewFileRepository(directory)
+	first, err := NewFileRepository(directory, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +289,7 @@ func TestFileRepositoryResumesCommitSequenceAcrossProcesses(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	second, err := NewFileRepository(directory)
+	second, err := NewFileRepository(directory, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,5 +300,21 @@ func TestFileRepositoryResumesCommitSequenceAcrossProcesses(t *testing.T) {
 	resumed := waitCompletion(t, second)
 	if resumed.Err != nil || resumed.Metadata.CommitSequence != 4 {
 		t.Fatalf("resumed commit sequence = %#v, want 4", resumed.Metadata)
+	}
+}
+
+// The worker goroutine is the repository's own; a panic there escapes the
+// entrypoint guard unless the worker defers the session's hook itself.
+func TestFileRepositoryWorkerDefersThePanicGuard(t *testing.T) {
+	var calls atomic.Int32
+	repository, err := NewFileRepository(t.TempDir(), func() { calls.Add(1) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("worker ran its panic guard %d times, want once on exit", got)
 	}
 }

@@ -1,3 +1,8 @@
 # Go formatters emit LF. Keep checkouts identical on Windows so goimports
 # validates source content instead of reporting line-ending-only rewrites.
 *.go text eol=lf
+
+# The pinned reference campaign is compared byte for byte, and the CLI that
+# regenerates it writes LF. Converting it on a Windows checkout made the test
+# report "only formatting differs". Still text, so reviewers can read its diff.
+internal/verification/testdata/reference_checkpoints.json text eol=lf

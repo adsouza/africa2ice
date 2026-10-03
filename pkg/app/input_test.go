@@ -55,8 +55,8 @@ func TestBestTileKeepsTheMoveRowOpen(t *testing.T) {
 		frame.Bands[0].HasQueuedMigration = true
 		stub := &gameStub{frame: frame}
 		game := New(stub)
-		game.openRow = ui.RowMove
-		game.rowChosen = false
+		game.disclosure.openRow = ui.RowMove
+		game.disclosure.rowChosen = false
 		return game, stub
 	}
 
@@ -65,8 +65,8 @@ func TestBestTileKeepsTheMoveRowOpen(t *testing.T) {
 	if _, ok := stub.appliedCommand.(gameapi.QueueMigration); !ok {
 		t.Fatalf("moveToBestTile did not queue a migration: %#v", stub.appliedCommand)
 	}
-	if game.openRow != ui.RowMove || !game.rowChosen {
-		t.Fatalf("moveToBestTile left openRow=%v rowChosen=%t, want RowMove/true", game.openRow, game.rowChosen)
+	if game.disclosure.openRow != ui.RowMove || !game.disclosure.rowChosen {
+		t.Fatalf("moveToBestTile left openRow=%v rowChosen=%t, want RowMove/true", game.disclosure.openRow, game.disclosure.rowChosen)
 	}
 
 	// Contrast: a row the player did not open via the Best tile shortcut
@@ -76,7 +76,7 @@ func TestBestTileKeepsTheMoveRowOpen(t *testing.T) {
 	if _, ok := researchStub.appliedCommand.(gameapi.ResearchTech); !ok {
 		t.Fatalf("chooseResearchTechnology did not apply a ResearchTech command: %#v", researchStub.appliedCommand)
 	}
-	if researchGame.openRow == ui.RowMove {
+	if researchGame.disclosure.openRow == ui.RowMove {
 		t.Fatalf("chooseResearchTechnology left the row at Move; expected it to still advance away, want %v", ui.RowResearch)
 	}
 }
@@ -84,19 +84,19 @@ func TestBestTileKeepsTheMoveRowOpen(t *testing.T) {
 func TestArrowsBelongToTheOpenRow(t *testing.T) {
 	stub := &gameStub{frame: migrationPreviewFrame()}
 	game := New(stub)
-	game.openRow = ui.RowMove
+	game.disclosure.openRow = ui.RowMove
 	// migrationPreviewFrame's only migration candidate sits diagonally from the
 	// band's home tile; MoveMigrationPreview accepts only single-axis steps
 	// (see TestKeyboardMigrationPreviewCanTurnIntoReachableCorner), so reaching
 	// it takes Up then Left.
 	game.handleRowKey(ebiten.KeyArrowUp, false)
 	game.handleRowKey(ebiten.KeyArrowLeft, false)
-	if !game.hasMigrationPreview {
+	if !game.preview.Visible {
 		t.Fatal("arrows in the Move row did not move the destination cursor")
 	}
 	game.clearMigrationPreview()
 
-	game.openRow, game.rowChosen = ui.RowWorkforce, true
+	game.disclosure.openRow, game.disclosure.rowChosen = ui.RowWorkforce, true
 	game.workforce.Role = gameapi.Foraging
 	game.handleRowKey(ebiten.KeyArrowDown, false)
 	if game.workforce.Role != gameapi.HuntingAndFishing {
@@ -107,7 +107,7 @@ func TestArrowsBelongToTheOpenRow(t *testing.T) {
 	if got := game.workforce.Allocation()[gameapi.HuntingAndFishing]; got != 600 {
 		t.Fatalf("Right then Shift+Right = %d BP, want 600", got)
 	}
-	if game.hasMigrationPreview {
+	if game.preview.Visible {
 		t.Fatal("Workforce arrows leaked into the migration cursor")
 	}
 	game.handleRowKey(ebiten.KeyEnter, false)
@@ -123,21 +123,21 @@ func TestArrowsBelongToTheOpenRow(t *testing.T) {
 
 	// − and + belong to the Workforce row exactly like Left/Right, so they
 	// step the selected role there and do nothing while another row is open.
-	game.openRow, game.rowChosen = ui.RowWorkforce, true
+	game.disclosure.openRow, game.disclosure.rowChosen = ui.RowWorkforce, true
 	game.workforce.Role = gameapi.Foraging
 	game.handleRowKey(ebiten.KeyEqual, true)
 	game.handleRowKey(ebiten.KeyMinus, false)
 	if got := game.workforce.Allocation()[gameapi.Foraging]; got != 400 {
 		t.Fatalf("Shift++ then − in the Workforce row = %d BP, want 400", got)
 	}
-	game.openRow = ui.RowMove
+	game.disclosure.openRow = ui.RowMove
 	game.handleRowKey(ebiten.KeyMinus, false)
 	game.handleRowKey(ebiten.KeyEqual, true)
 	if got := game.workforce.Allocation()[gameapi.Foraging]; got != 400 {
 		t.Fatalf("−/+ with the Move row open changed the draft to %d BP, want 400", got)
 	}
 
-	game.openRow = ui.RowResearch
+	game.disclosure.openRow = ui.RowResearch
 	game.researchCursor = gameapi.Firecraft
 	game.handleRowKey(ebiten.KeyArrowDown, false)
 	game.handleRowKey(ebiten.KeyEnter, false)
@@ -148,18 +148,18 @@ func TestArrowsBelongToTheOpenRow(t *testing.T) {
 
 func TestPageKeysAndShiftArrowsChangeTheOpenRow(t *testing.T) {
 	game := New(&gameStub{frame: migrationPreviewFrame()})
-	game.openRow = ui.RowMove
+	game.disclosure.openRow = ui.RowMove
 	game.changeOpenRow(1)
 	game.changeOpenRow(1)
-	if game.openRow != ui.RowWorkforce || !game.rowChosen {
-		t.Fatalf("two steps down = %v chosen %t", game.openRow, game.rowChosen)
+	if game.disclosure.openRow != ui.RowWorkforce || !game.disclosure.rowChosen {
+		t.Fatalf("two steps down = %v chosen %t", game.disclosure.openRow, game.disclosure.rowChosen)
 	}
 	game.changeOpenRow(1)
-	if game.openRow != ui.RowMove {
+	if game.disclosure.openRow != ui.RowMove {
 		t.Fatal("open row did not wrap")
 	}
 	game.changeOpenRow(-1)
-	if game.openRow != ui.RowWorkforce {
+	if game.disclosure.openRow != ui.RowWorkforce {
 		t.Fatal("open row did not wrap backwards")
 	}
 }
@@ -197,11 +197,11 @@ func TestEscapePeelsOneLayerAtATime(t *testing.T) {
 	// candidate takes two single-axis moves, Up then Left.
 	game.handleDirectionalMigration(0, -1)
 	game.handleDirectionalMigration(-1, 0)
-	game.bandListOpen = true
-	if !game.escape() || game.hasMigrationPreview || !game.bandListOpen {
+	game.disclosure.bandListOpen = true
+	if !game.escape() || game.preview.Visible || !game.disclosure.bandListOpen {
 		t.Fatal("first Esc should clear only the cursor")
 	}
-	if !game.escape() || game.bandListOpen {
+	if !game.escape() || game.disclosure.bandListOpen {
 		t.Fatal("second Esc should close the band list")
 	}
 	if game.escape() {
@@ -216,7 +216,7 @@ func TestEscapePeelsOneLayerAtATime(t *testing.T) {
 // keyboard_routing_test.go also verifies the complete keyboard dispatch path.
 func TestDetailsHotkeyIsRowOwnedAgainstWorkforce(t *testing.T) {
 	game := New(&gameStub{frame: migrationPreviewFrame()})
-	game.openRow = ui.RowMove
+	game.disclosure.openRow = ui.RowMove
 
 	// With Move open, handleRowKey does not own D at all (RowMove's switch
 	// has no KeyD case) — it is the global toggleDetails path that owns it,
@@ -226,30 +226,30 @@ func TestDetailsHotkeyIsRowOwnedAgainstWorkforce(t *testing.T) {
 	if game.workforce.Allocation() != draftBefore {
 		t.Fatal("handleRowKey's D case touched the workforce draft with the Move row open")
 	}
-	detailsBefore := game.detailsOpen
+	detailsBefore := game.disclosure.detailsOpen
 	game.toggleDetails()
-	if game.detailsOpen == detailsBefore {
+	if game.disclosure.detailsOpen == detailsBefore {
 		t.Fatal("toggleDetails did not flip detailsOpen")
 	}
 	game.toggleDetails()
-	if game.detailsOpen != detailsBefore {
+	if game.disclosure.detailsOpen != detailsBefore {
 		t.Fatal("toggleDetails did not flip detailsOpen back")
 	}
 
 	// With Workforce open and a dirty draft, D is row-owned: it discards the
 	// draft and must not touch detailsOpen.
-	game.openRow, game.rowChosen = ui.RowWorkforce, true
+	game.disclosure.openRow, game.disclosure.rowChosen = ui.RowWorkforce, true
 	game.workforce.Role = gameapi.Foraging
 	game.handleRowKey(ebiten.KeyArrowRight, false)
 	if !game.workforce.Dirty() {
 		t.Fatal("setup: Right should have dirtied the workforce draft")
 	}
-	detailsBefore = game.detailsOpen
+	detailsBefore = game.disclosure.detailsOpen
 	game.handleRowKey(ebiten.KeyD, false)
 	if game.workforce.Dirty() {
 		t.Fatal("D did not discard the dirty workforce draft with the Workforce row open")
 	}
-	if game.detailsOpen != detailsBefore {
+	if game.disclosure.detailsOpen != detailsBefore {
 		t.Fatal("D changed detailsOpen while the Workforce row was open; that row should own D instead")
 	}
 }

@@ -38,7 +38,7 @@ func TestArchaicPlanningUsesClosedAssignmentResearchAndRankedSplit(t *testing.T)
 	if child.TileID != candidates[0].TileID || source.TileID == child.TileID || !source.SpatialActionUsed || !child.SpatialActionUsed {
 		t.Fatalf("incorrect ranked split: source=%#v child=%#v", source, child)
 	}
-	if !source.Technology.HasTarget || source.Technology.Target != PlantKnowledge || child.Technology != source.Technology || child.Allocation != source.Allocation {
+	if source.Technology.Target != Some(PlantKnowledge) || child.Technology != source.Technology || child.Allocation != source.Allocation {
 		t.Fatalf("planning state was not applied/copied: source=%#v child=%#v", source, child)
 	}
 }

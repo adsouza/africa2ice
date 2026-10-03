@@ -9,7 +9,7 @@ import (
 )
 
 func TestFileUISettingsStoreRoundTripsCompleteRecord(t *testing.T) {
-	store, err := NewFileUISettingsStore(filepath.Join(t.TempDir(), "nested", "ui_settings.json"))
+	store, err := NewFileUISettingsStore(filepath.Join(t.TempDir(), "nested", "ui_settings.json"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,4 +41,33 @@ func waitForUISettingsCompletion(t *testing.T, store UISettingsStore) UISettings
 	}
 	t.Fatal("timed out waiting for UI settings completion")
 	return UISettingsCompletion{}
+}
+
+// Reads and writes run on goroutines the store starts; each must defer the
+// session's panic hook, which the entrypoint guard cannot stand in for.
+func TestFileUISettingsStoreGoroutinesDeferThePanicGuard(t *testing.T) {
+	ran := make(chan struct{}, 2)
+	store, err := NewFileUISettingsStore(filepath.Join(t.TempDir(), "ui_settings.json"), func() { ran <- struct{}{} })
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForGuard := func(operation string) {
+		t.Helper()
+		select {
+		case <-ran:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s goroutine never ran its panic guard", operation)
+		}
+		for len(store.Poll()) == 0 {
+			time.Sleep(time.Millisecond)
+		}
+	}
+	if err := store.BeginWrite(1, DefaultUISettings()); err != nil {
+		t.Fatal(err)
+	}
+	waitForGuard("write")
+	if err := store.BeginRead(2); err != nil {
+		t.Fatal(err)
+	}
+	waitForGuard("read")
 }

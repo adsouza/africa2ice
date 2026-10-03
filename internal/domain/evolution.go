@@ -42,11 +42,12 @@ func applyKnowledgeAndGenetics(bands []Band, grid *Grid, research map[BandID]flo
 		}
 	}
 	for actorIndex, actor := range snapshot {
-		if actor.Species != HomoSapiens || !actor.HasInterbreedTarget {
+		intended, intends := actor.InterbreedTarget.Get()
+		if actor.Species != HomoSapiens || !intends {
 			continue
 		}
 		for targetIndex, target := range snapshot {
-			if target.ID == actor.InterbreedTarget && target.Species == ArchaicHominin {
+			if target.ID == intended && target.Species == ArchaicHominin {
 				geneticPartners[actorIndex] = append(geneticPartners[actorIndex], geneticPartner{targetIndex, InterbreedGeneFlowRate})
 				geneticPartners[targetIndex] = append(geneticPartners[targetIndex], geneticPartner{actorIndex, InterbreedGeneFlowRate})
 				completedInterbreeding[actor.ID] = true
@@ -63,7 +64,7 @@ func applyKnowledgeAndGenetics(bands []Band, grid *Grid, research map[BandID]flo
 				continue
 			}
 			gain := float64(float64(sourceCounts[index][technology]) * DiffusionRate * ResearchCost[technology])
-			if state.HasTarget && state.Target == technology {
+			if target, ok := state.Target.Get(); ok && target == technology {
 				gain += research[snapshot[index].ID]
 			}
 			state.AdvanceResearch(technology, gain)
@@ -71,8 +72,8 @@ func applyKnowledgeAndGenetics(bands []Band, grid *Grid, research map[BandID]flo
 		// Choose only after all gains have landed, so this turn's production
 		// cannot be reused on a newly selected target. Archaic bands retain
 		// their own research priority in planArchaicOwned.
-		if bands[index].Species == HomoSapiens && frozen.HasTarget && state.Has(frozen.Target) {
-			state.selectNextResearch(frozen.Target)
+		if target, ok := frozen.Target.Get(); bands[index].Species == HomoSapiens && ok && state.Has(target) {
+			state.selectNextResearch(target)
 		}
 		bands[index].Technology = state
 	}

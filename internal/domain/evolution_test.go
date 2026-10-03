@@ -28,7 +28,7 @@ func TestSameSpeciesGeneFlowIsReciprocalAndPopulationWeighted(t *testing.T) {
 func TestActiveInterbreedingCreatesCrossSpeciesGeneFlow(t *testing.T) {
 	grid, _ := (WorldGenerator{}).Generate()
 	bands := []Band{
-		{ID: 1, Species: HomoSapiens, TileID: StartingTileIDs[0], Population: 100, Heritable: uniformTraits(0.1), HasInterbreedTarget: true, InterbreedTarget: 2},
+		{ID: 1, Species: HomoSapiens, TileID: StartingTileIDs[0], Population: 100, Heritable: uniformTraits(0.1), InterbreedTarget: Some(BandID(2))},
 		{ID: 2, Species: ArchaicHominin, TileID: StartingTileIDs[0], Population: 100, Heritable: uniformTraits(0.9)},
 	}
 	applyKnowledgeAndGenetics(bands, grid, nil, nil, NewWorldRNG(2))
@@ -122,7 +122,7 @@ func TestCompletedResearchAutomaticallyContinues(t *testing.T) {
 		{name: "archaic keeps own policy", target: Firecraft, finished: true, archaic: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			state := TechnologyState{Target: tc.target, HasTarget: true}
+			state := TechnologyState{Target: Some(tc.target)}
 			for _, tech := range tc.learned {
 				state.Acquired |= 1 << tech
 				state.Progress[tech] = ResearchCost[tech]
@@ -146,7 +146,7 @@ func TestCompletedResearchAutomaticallyContinues(t *testing.T) {
 			}
 			applyKnowledgeAndGenetics(bands, grid, gains, nil, NewWorldRNG(1))
 			got := bands[0].Technology
-			if !got.Has(tc.target) || got.HasTarget == tc.finished || (!tc.finished && got.Target != tc.want) {
+			if !got.Has(tc.target) || got.Target.Present() == tc.finished || (!tc.finished && got.Target != Some(tc.want)) {
 				t.Fatalf("unexpected research state: %+v", got)
 			}
 			if !tc.finished && got.Progress[tc.want] != 0 {
@@ -172,14 +172,14 @@ func TestAutomaticResearchPreservesProgressAndManualChoice(t *testing.T) {
 	state.Progress[Firecraft] = ResearchCost[Firecraft] - 1
 	state.Progress[HaftedTools] = 12
 	applyKnowledgeAndGenetics(bands, grid, map[BandID]float64{1: 1}, nil, NewWorldRNG(1))
-	if state.Target != HaftedTools || state.Progress[HaftedTools] != 12 {
+	if state.Target != Some(HaftedTools) || state.Progress[HaftedTools] != 12 {
 		t.Fatalf("next target lost its saved progress: %+v", state)
 	}
 	if err := state.Select(PlantKnowledge); err != nil {
 		t.Fatal(err)
 	}
 	applyKnowledgeAndGenetics(bands, grid, map[BandID]float64{1: 1}, nil, NewWorldRNG(1))
-	if state.Target != PlantKnowledge || state.Progress[PlantKnowledge] != 1 || state.Progress[HaftedTools] != 12 {
+	if state.Target != Some(PlantKnowledge) || state.Progress[PlantKnowledge] != 1 || state.Progress[HaftedTools] != 12 {
 		t.Fatalf("manual override was not preserved: %+v", state)
 	}
 }

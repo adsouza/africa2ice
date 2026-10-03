@@ -140,7 +140,7 @@ var algorithmCases = []algorithmCase{{
 			if band.Species != domain.ArchaicHominin {
 				return nil
 			}
-			return []any{band.ID, band.TileID, band.Allocation, band.HasQueuedMigration, band.QueuedMigration}
+			return []any{band.ID, band.TileID, band.Allocation, band.QueuedMigration}
 		})
 	},
 }, {
@@ -236,7 +236,7 @@ var algorithmCases = []algorithmCase{{
 	field: "TechnologyOwnershipAlgorithm", current: "band-local-v1", unsupported: "species-global-v2",
 	probe: func(world *domain.World) string {
 		return eachBand(world, func(band domain.Band) []any {
-			return []any{band.Technology.Acquired, band.Technology.Target, band.Technology.HasTarget}
+			return []any{band.Technology.Acquired, band.Technology.Target}
 		})
 	},
 }, {
@@ -250,7 +250,7 @@ var algorithmCases = []algorithmCase{{
 	field: "KnowledgeContactAlgorithm", current: "co-located-cross-species-v1", unsupported: "adjacent-contact-v2",
 	probe: func(world *domain.World) string {
 		return eachBand(world, func(band domain.Band) []any {
-			return []any{band.TileID, band.Species, band.HasInterbreedTarget, band.InterbreedTarget}
+			return []any{band.TileID, band.Species, band.InterbreedTarget}
 		})
 	},
 }, {

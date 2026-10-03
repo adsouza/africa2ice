@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -206,5 +207,48 @@ func TestDefaultRunGameLoopAlwaysCloses(t *testing.T) {
 	}
 	if panicking.closes == 0 {
 		t.Fatal("panicking loop leaked the host")
+	}
+}
+
+// The session log is the post-incident record, so a construction or loop
+// failure must land in the file run() announces, not only on stderr.
+func TestRunRecordsEntryPointFailuresInTheSessionLog(t *testing.T) {
+	previousNew, previousLoop := newGameWithSound, runGameLoop
+	t.Cleanup(func() { newGameWithSound, runGameLoop = previousNew, previousLoop })
+	for _, tc := range []struct {
+		event string
+		setup func()
+	}{
+		{"init.error", func() {
+			newGameWithSound = func(uint64, *logging.Session) (*app.Game, error) { return nil, errors.New("boom") }
+		}},
+		{"run.error", func() {
+			newGameWithSound = func(uint64, *logging.Session) (*app.Game, error) { return app.NewWalkingSkeleton(), nil }
+			runGameLoop = func(closable, func() error) error { return errors.New("boom") }
+		}},
+	} {
+		t.Run(tc.event, func(t *testing.T) {
+			tc.setup()
+			var stdout strings.Builder
+			if code := run(nil, &stdout, io.Discard); code != 1 {
+				t.Fatalf("run exited %d, want 1", code)
+			}
+			path := strings.TrimSpace(strings.TrimPrefix(stdout.String(), "Africa 2 Ice session log: "))
+			t.Cleanup(func() { _ = os.Remove(path) })
+			contents, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read announced session log %q: %v", path, err)
+			}
+			found := false
+			for _, line := range strings.Split(strings.TrimSpace(string(contents)), "\n") {
+				var record map[string]any
+				if json.Unmarshal([]byte(line), &record) == nil && record["msg"] == tc.event && record["error"] == "boom" {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("session log has no %s record:\n%s", tc.event, contents)
+			}
+		})
 	}
 }

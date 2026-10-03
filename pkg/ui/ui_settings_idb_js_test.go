@@ -8,7 +8,7 @@ import (
 )
 
 func TestIndexedDBUISettingsStoreBrowserContract(t *testing.T) {
-	store, err := NewIndexedDBUISettingsStore()
+	store, err := NewIndexedDBUISettingsStore(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,6 +26,25 @@ func TestIndexedDBUISettingsStoreBrowserContract(t *testing.T) {
 	read := waitForIndexedDBSettings(t, store)
 	if read.Err != nil || read.Operation != UISettingsRead || read.Revision != 2 || read.Settings != want {
 		t.Fatalf("read completion = %#v, want %#v", read, want)
+	}
+}
+
+// Every IndexedDB callback runs on the JavaScript event loop, outside the
+// entrypoint's guard, so each must defer the session's panic hook.
+func TestIndexedDBUISettingsStoreCallbacksDeferThePanicGuard(t *testing.T) {
+	calls := 0
+	store, err := NewIndexedDBUISettingsStore(func() { calls++ })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BeginRead(1); err != nil {
+		t.Fatal(err)
+	}
+	if read := waitForIndexedDBSettings(t, store); read.Err != nil {
+		t.Fatalf("read completion = %#v", read)
+	}
+	if calls == 0 {
+		t.Fatal("no IndexedDB callback ran the panic guard")
 	}
 }
 

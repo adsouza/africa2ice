@@ -33,7 +33,9 @@ func main() {
 	}()
 	defer logging.GuardPanic(session)
 	game, err := app.NewGame(0x9e3779b97f4a7c15, session)
-	if err == nil {
+	if err != nil {
+		session.LogInitError(err)
+	} else {
 		// Same ownership contract as the desktop entry point, including the
 		// joined close error. The browser normally ends the session before the
 		// loop returns -- RunGame yields only on ebiten.Termination, which the
@@ -51,6 +53,7 @@ func main() {
 			ebiten.SetScreenClearedEveryFrame(false)
 			return ebiten.RunGameWithOptions(game, &ebiten.RunGameOptions{DisableHiDPI: false})
 		})
+		session.LogRunError(err)
 	}
 	if err != nil {
 		reportBootError(err)

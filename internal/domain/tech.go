@@ -35,10 +35,10 @@ func TechnologyPrerequisiteMask(technology Technology) uint16 {
 }
 
 type TechnologyState struct {
-	Acquired  uint16
-	Target    Technology
-	HasTarget bool
-	Progress  [TechCount]float64
+	Acquired uint16
+	// Target is the technology toolcraft is researching, if any.
+	Target   Option[Technology]
+	Progress [TechCount]float64
 }
 
 func (state TechnologyState) Validate() error {
@@ -57,7 +57,7 @@ func (state TechnologyState) Validate() error {
 			}
 		}
 	}
-	if state.HasTarget && (state.Target >= TechCount || state.Has(state.Target) || !state.PrerequisitesMet(state.Target)) {
+	if target, ok := state.Target.Get(); ok && (target >= TechCount || state.Has(target) || !state.PrerequisitesMet(target)) {
 		return fmt.Errorf("%w: research target", ErrInvalidValue)
 	}
 	return nil
@@ -85,7 +85,7 @@ func (state *TechnologyState) Select(technology Technology) error {
 	if !state.PrerequisitesMet(technology) {
 		return ErrMissingTechnologyPrerequisite
 	}
-	state.Target, state.HasTarget = technology, true
+	state.Target = Some(technology)
 	return nil
 }
 
@@ -105,11 +105,11 @@ func ResearchGain(workers float64) float64 {
 // entries and skipping acquired or locked technologies. Existing progress is
 // preserved, and a completed tree remains without a target.
 func (state *TechnologyState) selectNextResearch(after Technology) {
-	state.HasTarget = false
+	state.Target = Option[Technology]{}
 	for offset := Technology(1); offset <= TechCount; offset++ {
 		technology := (after + offset) % TechCount
 		if !state.Has(technology) && state.PrerequisitesMet(technology) {
-			state.Target, state.HasTarget = technology, true
+			state.Target = Some(technology)
 			return
 		}
 	}
@@ -123,10 +123,11 @@ func (state *TechnologyState) selectNextResearch(after Technology) {
 // applyKnowledgeAndGenetics, where it lands alongside whatever the same
 // technology gained from contact with neighbouring bands.
 func (state TechnologyState) PlannedResearchGain(workers float64) float64 {
-	if !state.HasTarget || state.Target >= TechCount || state.Has(state.Target) || !state.PrerequisitesMet(state.Target) {
+	target, ok := state.Target.Get()
+	if !ok || target >= TechCount || state.Has(target) || !state.PrerequisitesMet(target) {
 		return 0
 	}
-	remaining := ResearchCost[state.Target] - state.Progress[state.Target]
+	remaining := ResearchCost[target] - state.Progress[target]
 	gain := ResearchGain(workers)
 	if gain > remaining {
 		gain = remaining
@@ -146,8 +147,8 @@ func (state *TechnologyState) AdvanceResearch(technology Technology, gain float6
 	if progress >= ResearchCost[technology] {
 		progress = ResearchCost[technology]
 		state.Acquired |= 1 << technology
-		if state.HasTarget && state.Target == technology {
-			state.HasTarget = false
+		if target, ok := state.Target.Get(); ok && target == technology {
+			state.Target = Option[Technology]{}
 		}
 	}
 	state.Progress[technology] = progress

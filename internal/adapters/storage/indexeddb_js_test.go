@@ -12,13 +12,13 @@ import (
 )
 
 func TestIndexedDBRepositoryBrowserContract(t *testing.T) {
-	repository := NewIndexedDBRepository()
+	repository := NewIndexedDBRepository(nil)
 	defer func() { _ = repository.Close() }()
 	<-repository.ready
 	if !repository.Writable() {
 		t.Fatal("first browser repository did not acquire the writer lease")
 	}
-	secondary := NewIndexedDBRepository()
+	secondary := NewIndexedDBRepository(nil)
 	defer func() { _ = secondary.Close() }()
 	<-secondary.ready
 	if secondary.Writable() {
@@ -180,7 +180,7 @@ func waitForWritableIndexedDBRepository(t *testing.T) *IndexedDBRepository {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		repository := NewIndexedDBRepository()
+		repository := NewIndexedDBRepository(nil)
 		<-repository.ready
 		if repository.Writable() {
 			return repository
@@ -299,4 +299,22 @@ func waitForCompletion(t *testing.T, repository *IndexedDBRepository, operation 
 	}
 	t.Fatalf("operation %d timed out", operation)
 	return application.RepositoryCompletion{}
+}
+
+// funcOf is the only way this repository creates a JavaScript callback, and
+// each invocation must run the session's panic hook on the way out.
+func TestIndexedDBRepositoryCallbacksDeferThePanicGuard(t *testing.T) {
+	calls := 0
+	repository := NewIndexedDBRepository(func() { calls++ })
+	defer func() { _ = repository.Close() }()
+	<-repository.ready
+	before := calls
+	callback := repository.funcOf(func(js.Value, []js.Value) any { return "handled" })
+	defer callback.Release()
+	if result := callback.Invoke(); result.String() != "handled" {
+		t.Fatalf("callback returned %v, want its handler's result", result)
+	}
+	if calls != before+1 {
+		t.Fatalf("one callback invocation ran the panic guard %d times, want once", calls-before)
+	}
 }

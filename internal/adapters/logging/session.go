@@ -21,6 +21,11 @@ type Session struct {
 	started   time.Time
 	operation atomic.Uint64
 	closed    atomic.Bool
+	// panicked suppresses session.end, which would otherwise follow the panic
+	// record and read as a normal shutdown; failed makes session.end report an
+	// entry-point error.
+	panicked atomic.Bool
+	failed   atomic.Bool
 }
 
 const maxPanicStackBytes = 16 * 1024
@@ -29,10 +34,28 @@ const maxPanicStackBytes = 16 * 1024
 // original value. Install it after the session Close defer so the panic record
 // is flushed before the sink closes during stack unwinding.
 func GuardPanic(session *Session) {
-	value := recover()
-	if value == nil {
-		return
+	if value := recover(); value != nil {
+		session.recordAndRepanic(value)
 	}
+}
+
+// PanicGuard is GuardPanic for a goroutine or JavaScript callback the
+// entrypoint's guard cannot see. Composition passes the method value to each
+// owner as a plain func(), and every owned goroutine and callback begins with
+// `defer panicGuard()`, so owners never import this package. It must call
+// recover itself: recover only stops a panic when called directly by the
+// deferred function, so delegating to GuardPanic would let the panic through
+// unrecorded.
+func (session *Session) PanicGuard() {
+	if value := recover(); value != nil {
+		session.recordAndRepanic(value)
+	}
+}
+
+// recordAndRepanic writes session.panic with this goroutine's bounded stack
+// and raises the original value again; a crash is never converted into a
+// normal return.
+func (session *Session) recordAndRepanic(value any) {
 	if session != nil {
 		stack := debug.Stack()
 		clipped := false
@@ -40,7 +63,8 @@ func GuardPanic(session *Session) {
 			stack = stack[:maxPanicStackBytes]
 			clipped = true
 		}
-		session.logger.Error("panic", "value", value, "stack", string(stack), "stack_clipped", clipped)
+		session.panicked.Store(true)
+		session.logger.Error("session.panic", "value", value, "stack", string(stack), "stack_clipped", clipped)
 	}
 	panic(value)
 }
@@ -102,7 +126,13 @@ func (session *Session) Close() error {
 	if session == nil || !session.closed.CompareAndSwap(false, true) {
 		return nil
 	}
-	session.logger.Info("session.end", "duration_ms", float64(time.Since(session.started))/float64(time.Millisecond))
+	if !session.panicked.Load() {
+		outcome := "success"
+		if session.failed.Load() {
+			outcome = "error"
+		}
+		session.logger.Info("session.end", "outcome", outcome, "duration_ms", float64(time.Since(session.started))/float64(time.Millisecond))
+	}
 	return session.closer.Close()
 }
 
@@ -230,4 +260,18 @@ func fmtCommandKind(command gameapi.Command) string {
 	default:
 		return "unknown"
 	}
+}
+
+// LogInitError records a failure that prevented the game from being built.
+func (session *Session) LogInitError(err error) { session.logEntryError("init.error", err) }
+
+// LogRunError records a failure that ended the game loop.
+func (session *Session) LogRunError(err error) { session.logEntryError("run.error", err) }
+
+func (session *Session) logEntryError(event string, err error) {
+	if session == nil || err == nil {
+		return
+	}
+	session.failed.Store(true)
+	session.logger.Error(event, "error", err.Error())
 }

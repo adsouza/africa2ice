@@ -40,26 +40,21 @@ type OutcomeReport struct {
 }
 
 type Band struct {
-	ID                  BandID
-	Species             Species
-	TileID              TileID
-	Population          Population
-	Health              Health
-	StoredFood          FU
-	Allocation          [AssignmentCount]AssignmentBP
-	Technology          TechnologyState
-	Heritable           HeritableState
-	LastFoodReport      FoodTurnReport
-	LastMortality       MortalityReport
-	LastOutcomeReport   OutcomeReport
-	SpatialActionUsed   bool
-	QueuedMigration     TileID
-	QueuedOrigin        TileID
-	QueuedPassage       PassageID
-	QueueUsesPassage    bool
-	HasQueuedMigration  bool
-	InterbreedTarget    BandID
-	HasInterbreedTarget bool
+	ID                BandID
+	Species           Species
+	TileID            TileID
+	Population        Population
+	Health            Health
+	StoredFood        FU
+	Allocation        [AssignmentCount]AssignmentBP
+	Technology        TechnologyState
+	Heritable         HeritableState
+	LastFoodReport    FoodTurnReport
+	LastMortality     MortalityReport
+	LastOutcomeReport OutcomeReport
+	SpatialActionUsed bool
+	QueuedMigration   Option[MigrationOrder]
+	InterbreedTarget  Option[BandID]
 }
 
 func (band Band) Workers(role WorkforceRole) float64 {
@@ -115,7 +110,7 @@ func splitBandWithMinimum(parent Band, childID BandID, minimum Population) (Band
 	left.LastMortality, right.LastMortality = MortalityReport{}, MortalityReport{}
 	left.LastOutcomeReport, right.LastOutcomeReport = OutcomeReport{}, OutcomeReport{}
 	left.SpatialActionUsed, right.SpatialActionUsed = true, true
-	left.HasQueuedMigration, right.HasQueuedMigration = false, false
-	left.HasInterbreedTarget, right.HasInterbreedTarget = false, false
+	left.QueuedMigration, right.QueuedMigration = Option[MigrationOrder]{}, Option[MigrationOrder]{}
+	left.InterbreedTarget, right.InterbreedTarget = Option[BandID]{}, Option[BandID]{}
 	return left, right, nil
 }

@@ -125,3 +125,38 @@ func TestFrameCarriesNoCandidateOnAnUnexploredTile(t *testing.T) {
 	}
 	t.Logf("%d sapiens bands retain candidates", sapiensWithCandidates)
 }
+
+// The UI reads arrival crowding from the frame instead of recomputing it, so
+// each projected candidate must carry exactly the domain's ArrivalStress.
+func TestFrameCandidatesCarryDomainArrivalStress(t *testing.T) {
+	service, err := NewGameService(0x5eed)
+	if err != nil {
+		t.Fatalf("NewGameService: %v", err)
+	}
+	want := map[[2]uint32]float64{}
+	for _, entry := range service.world.MigrationCandidatesByBand() {
+		for _, candidate := range entry.Candidates {
+			want[[2]uint32{uint32(entry.BandID), uint32(candidate.TileID)}] = candidate.ArrivalStress
+		}
+	}
+	frame, err := service.Snapshot()
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	checked := 0
+	for _, band := range frame.Bands {
+		for _, candidate := range band.MigrationCandidates {
+			expected := want[[2]uint32{uint32(band.ID), uint32(candidate.TileID)}]
+			if expected <= 0 {
+				t.Fatalf("band %d candidate %d: domain ArrivalStress %v is not positive", band.ID, candidate.TileID, expected)
+			}
+			if candidate.ArrivalStress != expected {
+				t.Fatalf("band %d candidate %d: frame ArrivalStress %v, domain %v", band.ID, candidate.TileID, candidate.ArrivalStress, expected)
+			}
+			checked++
+		}
+	}
+	if checked == 0 {
+		t.Fatal("frame has no candidates, so this test would prove nothing")
+	}
+}

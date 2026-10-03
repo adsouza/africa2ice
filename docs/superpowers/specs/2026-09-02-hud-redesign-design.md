@@ -184,10 +184,10 @@ next one. Only show and hide transitions move the flag, so a tooltip left on scr
 a repaint every frame.
 
 Split eligibility reads `Band.Stress`, the projected `domain.World.BandStress` value, and never
-recomputes it. `BandStress` divides by `BaselineK` times the band's technology capacity multiplier,
-which is deliberately absent from the public frame; the Capacity row's occupancy (§5.4) divides by
-`EcologicalK` instead, so the two disagree on a degraded tile and occupancy must not stand in for
-stress — doing so would disable the button for a split the command would have allowed.
+recomputes it. `BandStress` divides the tile's whole population by `EcologicalK` times the band's
+technology capacity multiplier, which is deliberately absent from the public frame. The Capacity
+row's HERE occupancy (§5.4) is this same `Band.Stress`, so the row and the split gate cannot
+disagree.
 
 Three visible states: idle, cursor (white border, "Enter to move"), set (green, one-line summary,
 row collapses).
@@ -244,10 +244,13 @@ turn anyway. Campaign not `Ongoing` hides the button.
 | Shelter | natural shelter < 0.3 | — |
 | Others | — | — |
 
-Projected occupancy is `(residents other than this band + this band's population) / EcologicalK` —
-the presentation twin of `domain.World.BandStress`, over `EcologicalK` so the ratio matches the
-capacity shown beside it. Excluding the band from the resident count lets one formula serve both
-columns: HERE adds it back to a tile it already occupies, TARGET to a tile it has yet to reach.
+Projected occupancy is the domain's Stress, read from the frame and never recomputed: HERE is
+`Band.Stress`, and a reachable TARGET is its `MigrationCandidate.ArrivalStress` — the destination's
+residents plus this band over `EcologicalK · T_tech`. An unreachable target has no arrival to
+measure, so, like its route-dependent mortality, it shows capacity without an occupancy figure,
+takes no occupancy tier, and earns no ▲▼ mark. Because the denominator includes the band's
+technology multiplier, the percentage is of the capacity the band can use, which exceeds the `K`
+printed beside it once the band holds capacity technology.
 
 Capacity is tiered this way, rather than on degradation alone, because a lower capacity the band
 fits several times over is not a warning (playtest report). Occupancy is also what its ▲▼ mark
