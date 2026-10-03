@@ -2,7 +2,8 @@ package gameapi
 
 // EscarpmentBlocks reports whether an explored escarpment prevents an
 // ordinary one-tile move. Diagonal moves require all four sides of the
-// enclosing square to be clear, matching the authoritative domain rule.
+// enclosing square to be clear, matching the authoritative domain rule;
+// internal/application/escarpment_agreement_test.go holds the two together.
 func EscarpmentBlocks(frame *Frame, from, to TileID) bool {
 	if frame == nil || int(from) >= len(frame.Tiles) || int(to) >= len(frame.Tiles) {
 		return false
