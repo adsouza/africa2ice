@@ -43,16 +43,22 @@ jobs:
         # seconds. apt has no default that bounds that, so set one: an
         # unresponsive connection now fails over after 30s instead of minutes.
         run: |
-          sudo tee /etc/apt/apt.conf.d/99-ci-fetch-timeouts >/dev/null <<'EOF'
+          sudo tee /etc/apt/apt.conf.d/zz-ci-fetch-timeouts >/dev/null <<'EOF'
           Acquire::http::Timeout "30";
           Acquire::https::Timeout "30";
           Acquire::Retries "3";
           EOF
           # Prove apt actually reads it; a config that silently fails to apply
           # would leave the job exposed while looking fixed.
-          apt-config dump | grep -q 'Acquire::http::Timeout "30"'
-          apt-config dump | grep -q 'Acquire::https::Timeout "30"'
-          apt-config dump | grep -q 'Acquire::Retries "3"'
+          # zz- sorts after every file the runner image ships in apt.conf.d,
+          # so no image-provided setting can override these. Show the
+          # effective values before checking, so a failure names its cause.
+          ls /etc/apt/apt.conf.d
+          dump="$(apt-config dump)"
+          grep -E '^Acquire::(http::Timeout|https::Timeout|Retries) ' <<<"$dump" || true
+          grep -q 'Acquire::http::Timeout "30"' <<<"$dump"
+          grep -q 'Acquire::https::Timeout "30"' <<<"$dump"
+          grep -q 'Acquire::Retries "3"' <<<"$dump"
       - name: Install Linux graphics and audio headers
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libgl1-mesa-dev libgl1-mesa-dri libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev xvfb
@@ -105,12 +111,20 @@ jobs:
         shell: bash
         # Same bound as the native job: a stalled mirror fails over after 30s.
         run: |
-          sudo tee /etc/apt/apt.conf.d/99-ci-fetch-timeouts >/dev/null <<'EOF'
+          sudo tee /etc/apt/apt.conf.d/zz-ci-fetch-timeouts >/dev/null <<'EOF'
           Acquire::http::Timeout "30";
           Acquire::https::Timeout "30";
           Acquire::Retries "3";
           EOF
-          apt-config dump | grep -q 'Acquire::http::Timeout "30"'
+          # zz- sorts after every file the runner image ships in apt.conf.d,
+          # so no image-provided setting can override these. Show the
+          # effective values before checking, so a failure names its cause.
+          ls /etc/apt/apt.conf.d
+          dump="$(apt-config dump)"
+          grep -E '^Acquire::(http::Timeout|https::Timeout|Retries) ' <<<"$dump" || true
+          grep -q 'Acquire::http::Timeout "30"' <<<"$dump"
+          grep -q 'Acquire::https::Timeout "30"' <<<"$dump"
+          grep -q 'Acquire::Retries "3"' <<<"$dump"
       - name: Install Linux graphics and audio headers
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libgl1-mesa-dev libgl1-mesa-dri libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev xvfb
       - name: Start Linux virtual display
@@ -161,16 +175,22 @@ jobs:
         # seconds. apt has no default that bounds that, so set one: an
         # unresponsive connection now fails over after 30s instead of minutes.
         run: |
-          sudo tee /etc/apt/apt.conf.d/99-ci-fetch-timeouts >/dev/null <<'EOF'
+          sudo tee /etc/apt/apt.conf.d/zz-ci-fetch-timeouts >/dev/null <<'EOF'
           Acquire::http::Timeout "30";
           Acquire::https::Timeout "30";
           Acquire::Retries "3";
           EOF
           # Prove apt actually reads it; a config that silently fails to apply
           # would leave the job exposed while looking fixed.
-          apt-config dump | grep -q 'Acquire::http::Timeout "30"'
-          apt-config dump | grep -q 'Acquire::https::Timeout "30"'
-          apt-config dump | grep -q 'Acquire::Retries "3"'
+          # zz- sorts after every file the runner image ships in apt.conf.d,
+          # so no image-provided setting can override these. Show the
+          # effective values before checking, so a failure names its cause.
+          ls /etc/apt/apt.conf.d
+          dump="$(apt-config dump)"
+          grep -E '^Acquire::(http::Timeout|https::Timeout|Retries) ' <<<"$dump" || true
+          grep -q 'Acquire::http::Timeout "30"' <<<"$dump"
+          grep -q 'Acquire::https::Timeout "30"' <<<"$dump"
+          grep -q 'Acquire::Retries "3"' <<<"$dump"
       - name: Install pinned Binaryen and Brotli
         shell: bash
         run: |
@@ -289,16 +309,22 @@ jobs:
         # seconds. apt has no default that bounds that, so set one: an
         # unresponsive connection now fails over after 30s instead of minutes.
         run: |
-          sudo tee /etc/apt/apt.conf.d/99-ci-fetch-timeouts >/dev/null <<'EOF'
+          sudo tee /etc/apt/apt.conf.d/zz-ci-fetch-timeouts >/dev/null <<'EOF'
           Acquire::http::Timeout "30";
           Acquire::https::Timeout "30";
           Acquire::Retries "3";
           EOF
           # Prove apt actually reads it; a config that silently fails to apply
           # would leave the job exposed while looking fixed.
-          apt-config dump | grep -q 'Acquire::http::Timeout "30"'
-          apt-config dump | grep -q 'Acquire::https::Timeout "30"'
-          apt-config dump | grep -q 'Acquire::Retries "3"'
+          # zz- sorts after every file the runner image ships in apt.conf.d,
+          # so no image-provided setting can override these. Show the
+          # effective values before checking, so a failure names its cause.
+          ls /etc/apt/apt.conf.d
+          dump="$(apt-config dump)"
+          grep -E '^Acquire::(http::Timeout|https::Timeout|Retries) ' <<<"$dump" || true
+          grep -q 'Acquire::http::Timeout "30"' <<<"$dump"
+          grep -q 'Acquire::https::Timeout "30"' <<<"$dump"
+          grep -q 'Acquire::Retries "3"' <<<"$dump"
       - name: Install graphics, audio, and browser dependencies
         run: sudo apt-get update && sudo apt-get install -y brotli libasound2-dev libgl1-mesa-dev libgl1-mesa-dri libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev xvfb
       - name: Start Linux virtual display
