@@ -352,3 +352,19 @@ func TestUnreachableTargetShowsCapacityWithoutOccupancy(t *testing.T) {
 		t.Fatalf("unreachable capacity delta = %d, want 0", capacity.Delta)
 	}
 }
+
+// An unreachable target has no mortality rate; "unavailable" is not a zero
+// rate, so it must not earn a ▲ against a dangerous current tile.
+func TestUnreachableTargetEarnsNoMortalityMark(t *testing.T) {
+	frame := liveabilityFrame()
+	band := &frame.Bands[0]
+	band.SeasonalMortalityRate, band.ChronicMortalityRate = 0.003, 0.003 // HERE amber
+	band.MigrationCandidates = nil
+	mortality := rowsByLabel(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1))["Mortality"]
+	if mortality.HereTier != TierAmber || mortality.Target != "unavailable" {
+		t.Fatalf("fixture drifted: here tier %v, target %q", mortality.HereTier, mortality.Target)
+	}
+	if mortality.Delta != 0 || mortality.DeltaMaterial {
+		t.Fatalf("unreachable mortality delta = %d material %v, want no mark", mortality.Delta, mortality.DeltaMaterial)
+	}
+}

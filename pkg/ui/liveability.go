@@ -265,6 +265,11 @@ func LiveabilityRows(band *gameapi.Band, here, target TileLiveability) []Liveabi
 	if here.HasOccupancy && target.HasOccupancy {
 		occupancy = func(s TileLiveability) float64 { return s.Occupancy }
 	}
+	// Likewise an unreachable tile's "unavailable" mortality is not a zero rate.
+	var mortality func(TileLiveability) float64
+	if here.HasRisk && target.HasRisk {
+		mortality = func(s TileLiveability) float64 { return s.SeasonalRisk + s.ChronicRisk }
+	}
 	capacityTier := func(s TileLiveability) LiveabilityTier {
 		switch {
 		case s.Degradation >= degradationRed, s.HasOccupancy && s.Occupancy >= capacityOccupancyRed:
@@ -366,7 +371,7 @@ func LiveabilityRows(band *gameapi.Band, here, target TileLiveability) []Liveabi
 		row("Capacity", capacityValue, capacityTier, false, occupancy),
 		row("Water", func(s TileLiveability) string { return fmt.Sprintf("%.0f / %.0f", s.WaterStock, s.WaterCap) }, waterTier, true, func(s TileLiveability) float64 { return s.WaterStock }),
 		row("Shelter", func(s TileLiveability) string { return fmt.Sprintf("%.0f%%", s.NaturalShelter*100) }, shelterTier, true, func(s TileLiveability) float64 { return s.NaturalShelter }),
-		row("Mortality", mortalityValue, mortalityTier, false, func(s TileLiveability) float64 { return s.SeasonalRisk + s.ChronicRisk }),
+		row("Mortality", mortalityValue, mortalityTier, false, mortality),
 		row("Route", routeValue, normal, true, nil),
 		row("Others", othersValue, normal, true, nil),
 	}
