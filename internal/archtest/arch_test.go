@@ -276,3 +276,54 @@ func TestDomainStandardLibraryPurityBoundary(t *testing.T) {
 		t.Fatalf("test clocks must remain available: %s", reason)
 	}
 }
+
+// DESIGN.md step 1's logging rejection fixtures: log and log/slog anywhere
+// but the logging adapter, a logging-adapter import of the domain, and any
+// logging-adapter dependency off its allowlist. The acceptance rows keep the
+// table honest, since a rule that rejected everything would pass every
+// rejection row.
+func TestLoggingBoundaryRejectionFixtures(t *testing.T) {
+	const adapter = "internal/adapters/logging/session.go"
+	tests := []struct {
+		name     string
+		file     string
+		imported string
+		allowed  bool
+	}{
+		{name: "adapter may use slog", file: adapter, imported: "log/slog", allowed: true},
+		{name: "adapter may use log", file: adapter, imported: "log", allowed: true},
+		{name: "adapter may use other standard library", file: adapter, imported: "encoding/json", allowed: true},
+		{name: "adapter may decorate application ports", file: adapter, imported: module + "/internal/application", allowed: true},
+		{name: "adapter may name gameapi values", file: adapter, imported: module + "/pkg/gameapi", allowed: true},
+		{name: "adapter may decorate the UI settings store", file: adapter, imported: module + "/pkg/ui", allowed: true},
+
+		{name: "adapter may not import the domain", file: adapter, imported: module + "/internal/domain"},
+		{name: "adapter may not import storage", file: adapter, imported: module + "/internal/adapters/storage"},
+		{name: "adapter may not import render", file: adapter, imported: module + "/pkg/render"},
+		{name: "adapter may not import ebiten", file: adapter, imported: "github.com/hajimehoshi/ebiten/v2"},
+
+		{name: "domain may not log", file: "internal/domain/turn.go", imported: "log/slog"},
+		{name: "domain may not use log", file: "internal/domain/turn.go", imported: "log"},
+		{name: "application may not log", file: "internal/application/service.go", imported: "log/slog"},
+		{name: "storage may not log", file: "internal/adapters/storage/file.go", imported: "log/slog"},
+		{name: "verification may not log", file: "internal/verification/run.go", imported: "log/slog"},
+		{name: "gameapi may not log", file: "pkg/gameapi/frame.go", imported: "log/slog"},
+		{name: "render may not log", file: "pkg/render/map.go", imported: "log/slog"},
+		{name: "ui may not log", file: "pkg/ui/liveability.go", imported: "log/slog"},
+		{name: "hud may not log", file: "pkg/hud/panel.go", imported: "log/slog"},
+		{name: "audio may not log", file: "pkg/audio/manager.go", imported: "log/slog"},
+		{name: "app may not log", file: "pkg/app/game.go", imported: "log/slog"},
+		{name: "entry point may not log", file: "main.go", imported: "log"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			violation := importViolation(test.file, test.imported)
+			if test.allowed && violation != "" {
+				t.Fatalf("%s importing %q rejected: %s", test.file, test.imported, violation)
+			}
+			if !test.allowed && violation == "" {
+				t.Fatalf("%s importing %q accepted", test.file, test.imported)
+			}
+		})
+	}
+}
