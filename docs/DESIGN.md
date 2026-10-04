@@ -8580,7 +8580,8 @@ stock-unit and conversion values are already selected; step 5 implements and ver
 
    Three calibration assertions also belong here, because each needs the whole map over the whole
    campaign. Turn 0 must classify East Africa as habitable savanna and woodland while turn 400 pushes
-   the tundra boundary strictly south of its turn-0 latitude. The Saharan and Arabian corridor must
+   the tundra boundary strictly south of its turn-0 latitude. The Saharan and Arabian corridor (all of
+   Arabia plus African land between `15°N` and `35°N`) must
    show net desert expansion at turn 400 relative to turn 0, with at least one interval where the
    habitable-tile count rises above the preceding local minimum — proving the precession term is
    visible rather than swamped by the trend. And a threshold table must be rejected when its own
