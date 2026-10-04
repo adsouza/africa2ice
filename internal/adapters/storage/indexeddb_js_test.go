@@ -318,3 +318,16 @@ func TestIndexedDBRepositoryCallbacksDeferThePanicGuard(t *testing.T) {
 		t.Fatalf("one callback invocation ran the panic guard %d times, want once", calls-before)
 	}
 }
+
+func TestIndexedDBRepositoryContract(t *testing.T) {
+	runRepositoryContract(t, repositoryBackend{
+		fresh: func(t *testing.T) application.CampaignRepository {
+			repository := waitForWritableIndexedDBRepository(t)
+			clearIndexedStores(t, repository)
+			return repository
+		},
+		reopen: func(t *testing.T) application.CampaignRepository {
+			return waitForWritableIndexedDBRepository(t)
+		},
+	})
+}

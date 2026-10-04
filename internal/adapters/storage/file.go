@@ -272,7 +272,7 @@ func (repository *FileRepository) latestMetadata(slot application.SlotID) (*appl
 		}
 	}
 	if latest == nil {
-		return nil, os.ErrNotExist
+		return nil, errSlotEmpty
 	}
 	return latest, nil
 }
@@ -283,7 +283,7 @@ func (repository *FileRepository) read(slot application.SlotID) (*application.Sa
 		return nil, nil, err
 	}
 	if metadata.Deleted {
-		return nil, metadata, os.ErrNotExist
+		return nil, metadata, errSlotEmpty
 	}
 	path := filepath.Join(repository.directory, fmt.Sprintf("slot_%d_world_%s.json", slot, metadata.Generation))
 	data, err := repository.fs.ReadFile(path)

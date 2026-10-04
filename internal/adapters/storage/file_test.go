@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -87,7 +88,7 @@ func TestFileRepositoryWriteReadListDelete(t *testing.T) {
 	if err := repository.BeginRead(5, application.Manual1); err != nil {
 		t.Fatal(err)
 	}
-	if readDeleted := waitCompletion(t, repository); !os.IsNotExist(readDeleted.Err) {
+	if readDeleted := waitCompletion(t, repository); !errors.Is(readDeleted.Err, os.ErrNotExist) {
 		t.Fatalf("deleted read = %#v", readDeleted)
 	}
 }
@@ -317,4 +318,25 @@ func TestFileRepositoryWorkerDefersThePanicGuard(t *testing.T) {
 	if got := calls.Load(); got != 1 {
 		t.Fatalf("worker ran its panic guard %d times, want once on exit", got)
 	}
+}
+
+func TestFileRepositoryContract(t *testing.T) {
+	var directory string
+	runRepositoryContract(t, repositoryBackend{
+		fresh: func(t *testing.T) application.CampaignRepository {
+			directory = t.TempDir()
+			repository, err := NewFileRepository(directory, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return repository
+		},
+		reopen: func(t *testing.T) application.CampaignRepository {
+			repository, err := NewFileRepository(directory, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return repository
+		},
+	})
 }
