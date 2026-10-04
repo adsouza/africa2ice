@@ -26,6 +26,7 @@ type fileRequest struct {
 
 type FileRepository struct {
 	directory   string
+	fs          fileSystem
 	lease       repositoryLease
 	writable    bool
 	requests    chan fileRequest
@@ -47,6 +48,10 @@ type FileRepository struct {
 // NewFileRepository opens the save directory. panicGuard is the session's
 // panic hook for the worker goroutine; nil means none.
 func NewFileRepository(directory string, panicGuard func()) (*FileRepository, error) {
+	return newFileRepository(directory, panicGuard, osFileSystem{})
+}
+
+func newFileRepository(directory string, panicGuard func(), fs fileSystem) (*FileRepository, error) {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return nil, err
 	}
@@ -54,7 +59,12 @@ func NewFileRepository(directory string, panicGuard func()) (*FileRepository, er
 	if err != nil {
 		return nil, err
 	}
-	repository := &FileRepository{directory: directory, lease: lease, writable: writable, requests: make(chan fileRequest, 2), completions: make(chan application.RepositoryCompletion, 8), done: make(chan struct{}), panicGuard: orNoGuard(panicGuard)}
+	repository := &FileRepository{directory: directory, fs: fs, lease: lease, writable: writable, requests: make(chan fileRequest, 2), completions: make(chan application.RepositoryCompletion, 8), done: make(chan struct{}), panicGuard: orNoGuard(panicGuard)}
+	if writable {
+		// The lease makes this process the only writer, so any temporary
+		// record still present was left by an interrupted earlier write.
+		repository.removeAbandonedTemporaries()
+	}
 	repository.workerWG.Add(1)
 	go repository.worker()
 	return repository, nil
@@ -158,7 +168,7 @@ func (repository *FileRepository) write(slot application.SlotID, state applicati
 	hash := sha256.Sum256(worldBytes)
 	generation := hex.EncodeToString(hash[:])
 	worldPath := filepath.Join(repository.directory, fmt.Sprintf("slot_%d_world_%s.json", slot, generation))
-	if err := writeImmutable(worldPath, worldBytes); err != nil {
+	if err := repository.writeImmutable(worldPath, worldBytes); err != nil {
 		return nil, err
 	}
 	sequence, err := repository.nextSequence()
@@ -171,7 +181,7 @@ func (repository *FileRepository) write(slot application.SlotID, state applicati
 		return nil, err
 	}
 	metaPath := filepath.Join(repository.directory, fmt.Sprintf("slot_%d_meta_%020d.json", slot, sequence))
-	if err := writeImmutable(metaPath, metadataBytes); err != nil {
+	if err := repository.writeImmutable(metaPath, metadataBytes); err != nil {
 		return nil, err
 	}
 	repository.pruneSupersededRecords(slot, sequence, generation)
@@ -184,8 +194,16 @@ func metadataFor(slot application.SlotID, sequence uint64, generation string, st
 	return metadata
 }
 
-func writeImmutable(path string, data []byte) error {
-	if existing, err := os.ReadFile(path); err == nil {
+// temporaryPattern names in-flight records; recovery never reads them.
+const temporaryPattern = ".africa2ice-*.tmp"
+
+// writeImmutable publishes data under path: write a temporary record in the
+// same directory, sync it, rename it into place, then sync the directory so
+// the new name is as durable as its bytes. A crash at any step leaves either
+// no record or the complete one, never a torn record under the final name.
+func (repository *FileRepository) writeImmutable(path string, data []byte) error {
+	fs := repository.fs
+	if existing, err := fs.ReadFile(path); err == nil {
 		if !bytes.Equal(existing, data) {
 			return errors.New("immutable record collision")
 		}
@@ -194,12 +212,12 @@ func writeImmutable(path string, data []byte) error {
 		return err
 	}
 	directory := filepath.Dir(path)
-	temporary, err := os.CreateTemp(directory, ".africa2ice-*.tmp")
+	temporary, err := fs.CreateTemp(directory, temporaryPattern)
 	if err != nil {
 		return err
 	}
 	temporaryPath := temporary.Name()
-	cleanup := func() { _ = temporary.Close(); _ = os.Remove(temporaryPath) }
+	cleanup := func() { _ = temporary.Close(); _ = fs.Remove(temporaryPath) }
 	if _, err := temporary.Write(data); err != nil {
 		cleanup()
 		return err
@@ -209,24 +227,36 @@ func writeImmutable(path string, data []byte) error {
 		return err
 	}
 	if err := temporary.Close(); err != nil {
-		_ = os.Remove(temporaryPath)
+		_ = fs.Remove(temporaryPath)
 		return err
 	}
-	if err := os.Rename(temporaryPath, path); err != nil {
-		_ = os.Remove(temporaryPath)
+	if err := fs.Rename(temporaryPath, path); err != nil {
+		_ = fs.Remove(temporaryPath)
 		return err
 	}
-	return nil
+	return fs.SyncDir(directory)
+}
+
+// removeAbandonedTemporaries deletes temporary records an interrupted write
+// left behind. Recovery ignores them, but nothing else ever reclaimed them.
+func (repository *FileRepository) removeAbandonedTemporaries() {
+	entries, err := repository.fs.Glob(filepath.Join(repository.directory, temporaryPattern))
+	if err != nil {
+		return
+	}
+	for _, path := range entries {
+		_ = repository.fs.Remove(path)
+	}
 }
 
 func (repository *FileRepository) latestMetadata(slot application.SlotID) (*application.SaveMetadata, error) {
-	entries, err := filepath.Glob(filepath.Join(repository.directory, fmt.Sprintf("slot_%d_meta_*.json", slot)))
+	entries, err := repository.fs.Glob(filepath.Join(repository.directory, fmt.Sprintf("slot_%d_meta_*.json", slot)))
 	if err != nil {
 		return nil, err
 	}
 	var latest *application.SaveMetadata
 	for _, path := range entries {
-		data, err := os.ReadFile(path)
+		data, err := repository.fs.ReadFile(path)
 		if err != nil {
 			continue
 		}
@@ -256,7 +286,7 @@ func (repository *FileRepository) read(slot application.SlotID) (*application.Sa
 		return nil, metadata, os.ErrNotExist
 	}
 	path := filepath.Join(repository.directory, fmt.Sprintf("slot_%d_world_%s.json", slot, metadata.Generation))
-	data, err := os.ReadFile(path)
+	data, err := repository.fs.ReadFile(path)
 	if err != nil {
 		return nil, metadata, err
 	}
@@ -282,7 +312,7 @@ func (repository *FileRepository) delete(slot application.SlotID) (*application.
 		return nil, err
 	}
 	path := filepath.Join(repository.directory, fmt.Sprintf("slot_%d_meta_%020d.json", slot, sequence))
-	if err := writeImmutable(path, data); err != nil {
+	if err := repository.writeImmutable(path, data); err != nil {
 		return nil, err
 	}
 	// The delete marker names no generation, so every world payload for this
@@ -321,13 +351,13 @@ func (repository *FileRepository) nextSequence() (uint64, error) {
 // are global across slots because autosave rotation compares them between
 // slots to pick the oldest.
 func (repository *FileRepository) highestRecordedSequence() (uint64, error) {
-	entries, err := filepath.Glob(filepath.Join(repository.directory, "slot_*_meta_*.json"))
+	entries, err := repository.fs.Glob(filepath.Join(repository.directory, "slot_*_meta_*.json"))
 	if err != nil {
 		return 0, err
 	}
 	maximum := uint64(0)
 	for _, path := range entries {
-		data, err := os.ReadFile(path)
+		data, err := repository.fs.ReadFile(path)
 		if err != nil {
 			continue
 		}
@@ -352,7 +382,7 @@ func (repository *FileRepository) pruneSupersededRecords(slot application.SlotID
 		keepWorld = fmt.Sprintf("slot_%d_world_%s.json", slot, keepGeneration)
 	}
 	for _, pattern := range []string{metaPrefix + "*.json", fmt.Sprintf("slot_%d_world_*.json", slot)} {
-		entries, err := filepath.Glob(filepath.Join(repository.directory, pattern))
+		entries, err := repository.fs.Glob(filepath.Join(repository.directory, pattern))
 		if err != nil {
 			continue
 		}
@@ -361,7 +391,7 @@ func (repository *FileRepository) pruneSupersededRecords(slot application.SlotID
 			case keepMeta, keepWorld:
 				continue
 			}
-			_ = os.Remove(path)
+			_ = repository.fs.Remove(path)
 		}
 	}
 }
