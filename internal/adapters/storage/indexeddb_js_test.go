@@ -4,6 +4,8 @@ package storage
 
 import (
 	"bytes"
+	"errors"
+	"os"
 	"syscall/js"
 	"testing"
 	"time"
@@ -330,4 +332,119 @@ func TestIndexedDBRepositoryContract(t *testing.T) {
 			return waitForWritableIndexedDBRepository(t)
 		},
 	})
+}
+
+// idbFaultScript wraps every IDBObjectStore request method. While armed it
+// counts requests and, on the failAt-th, aborts that request's transaction in
+// a microtask: after the adapter has queued the rest of its synchronous
+// requests, the way a quota failure or request error arrives as a later event.
+// An abort that lands after the transaction finished is recorded as late.
+const idbFaultScript = `(() => {
+  if (globalThis.__idbFaults) return;
+  const proto = IDBObjectStore.prototype;
+  const methods = ["get", "put", "delete", "getAll", "getAllKeys"];
+  const state = { armed: false, failAt: 0, count: 0, fired: false, late: false };
+  for (const name of methods) {
+    const original = proto[name];
+    proto[name] = function (...args) {
+      const request = original.apply(this, args);
+      if (state.armed && ++state.count === state.failAt) {
+        const transaction = this.transaction;
+        state.fired = true;
+        queueMicrotask(() => { try { transaction.abort(); } catch (error) { state.late = true; } });
+      }
+      return request;
+    };
+  }
+  globalThis.__idbFaults = state;
+})();`
+
+func idbFaults(t *testing.T) js.Value {
+	t.Helper()
+	js.Global().Call("eval", idbFaultScript)
+	state := js.Global().Get("__idbFaults")
+	if state.IsUndefined() {
+		t.Fatal("IndexedDB fault shim did not install")
+	}
+	return state
+}
+
+func armIDBFaults(state js.Value, failAt int) {
+	state.Set("armed", failAt > 0)
+	state.Set("failAt", failAt)
+	state.Set("count", 0)
+	state.Set("fired", false)
+	state.Set("late", false)
+}
+
+// DESIGN.md §9: failure injection stops at every IndexedDB request and
+// transaction event; the slot must then resolve to the complete old save, the
+// complete new save, or a committed deletion, never a mixture. A failed
+// transaction must not consume a commit sequence. Each case commits a save,
+// arms an abort at request k, runs one operation, and reads the slot back. k
+// grows until the operation completes without the abort firing, so every
+// request is covered, including the post-commit orphan collection.
+func TestIndexedDBProtocolSurvivesAnAbortAtEveryRequest(t *testing.T) {
+	faults := idbFaults(t)
+	defer armIDBFaults(faults, 0)
+	const slot = application.QuickSave
+	operations := map[string]struct {
+		run      func(*IndexedDBRepository, application.RepositoryOpID) error
+		newTurn  int
+		deletion bool
+	}{
+		"overwrite": {run: func(repository *IndexedDBRepository, op application.RepositoryOpID) error {
+			return repository.BeginWrite(op, slot, contractState(t, 8))
+		}, newTurn: 8},
+		"delete": {run: func(repository *IndexedDBRepository, op application.RepositoryOpID) error {
+			return repository.BeginDelete(op, slot)
+		}, deletion: true},
+	}
+	for name, operation := range operations {
+		sawFailure, sawSuccess := false, false
+		for failAt := 1; ; failAt++ {
+			repository := waitForWritableIndexedDBRepository(t)
+			clearIndexedStores(t, repository)
+			committed := mustWrite(t, repository, 1, slot, contractState(t, 7))
+
+			armIDBFaults(faults, failAt)
+			if err := operation.run(repository, 2); err != nil {
+				t.Fatal(err)
+			}
+			completion := awaitOne(t, repository)
+			fired := faults.Get("fired").Bool() && !faults.Get("late").Bool()
+			armIDBFaults(faults, 0)
+
+			read := readSlot(t, repository, 3, slot)
+			switch {
+			case completion.Err != nil:
+				sawFailure = true
+				if read.Err != nil || read.State == nil || read.State.Turn != 7 || read.Metadata.CommitSequence != committed.CommitSequence {
+					t.Fatalf("%s aborted at request %d (%v) but the slot is not the complete old save: %+v", name, failAt, completion.Err, read)
+				}
+				// The aborted transaction must have rolled the counter back.
+				next := mustWrite(t, repository, 4, application.Manual1, contractState(t, 1))
+				if next.CommitSequence != committed.CommitSequence+1 {
+					t.Fatalf("%s aborted at request %d consumed a sequence: next commit is %d, want %d", name, failAt, next.CommitSequence, committed.CommitSequence+1)
+				}
+			case operation.deletion:
+				sawSuccess = true
+				if !errors.Is(read.Err, os.ErrNotExist) {
+					t.Fatalf("delete reported success at request %d but the slot reads %+v", failAt, read)
+				}
+			default:
+				sawSuccess = true
+				if read.Err != nil || read.State == nil || read.State.Turn != operation.newTurn {
+					t.Fatalf("overwrite reported success at request %d but the slot reads %+v", failAt, read)
+				}
+			}
+			_ = repository.Close()
+			if !fired {
+				break // no abort landed: every request of the operation is covered
+			}
+		}
+		if !sawFailure || !sawSuccess {
+			t.Fatalf("%s: the abort sweep saw failure %t, success %t; it did not cross the commit", name, sawFailure, sawSuccess)
+		}
+	}
 }
