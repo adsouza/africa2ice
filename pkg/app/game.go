@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/adsouza/africa2ice/internal/adapters/logging"
+	"github.com/adsouza/africa2ice/internal/adapters/storage"
 	"github.com/adsouza/africa2ice/internal/application"
 	gameaudio "github.com/adsouza/africa2ice/pkg/audio"
 	"github.com/adsouza/africa2ice/pkg/gameapi"
@@ -69,6 +70,11 @@ type Game struct {
 	researchCursor         gameapi.Tech
 	camera                 render.Camera
 	cameraFocused          bool
+
+	// storageAvailability reads the save store's standing condition; nil
+	// for stores that are always ready (DESIGN.md §9).
+	storageAvailability     func() storage.Availability
+	lastStorageAvailability storage.Availability
 }
 
 const (
@@ -149,6 +155,11 @@ func composeHostedGame(seed uint64, session *logging.Session, enableSound bool,
 	if err != nil {
 		return nil, err
 	}
+	// Read before the logging decorator hides the concrete store.
+	var storageAvailability func() storage.Availability
+	if reporter, ok := repository.(interface{ Availability() storage.Availability }); ok {
+		storageAvailability = reporter.Availability
+	}
 	// Keep ownership here until construction succeeds, including panic unwinding.
 	transferred := false
 	defer func() {
@@ -173,6 +184,7 @@ func composeHostedGame(seed uint64, session *logging.Session, enableSound bool,
 	settingsStore = logging.DecorateUISettingsStore(session, settingsStore)
 	game = newGameWithPresentation(logging.DecorateGame(session, service), sound, settingsStore)
 	game.logSession = session
+	game.storageAvailability = storageAvailability
 	game.openExternalURL = func(url string) error { return openExternalURL(url, panicGuard) }
 	game.scenes.Push(ui.SceneTitle)
 	if settingsErr != nil {
@@ -196,6 +208,7 @@ func (g *Game) Update() error {
 		g.breakthroughFrames--
 	}
 	g.pollStorage()
+	g.pollStorageAvailability()
 	if ebiten.IsWindowBeingClosed() {
 		g.windowClosingRequested = true
 	}
