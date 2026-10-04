@@ -82,11 +82,12 @@ func runCheckpointMode() bool {
 		errorText = err.Error()
 	}
 	callback := js.Global().Get("africa2iceCheckpointReady")
-	if callback.Type() == js.TypeFunction {
+	switch {
+	case callback.Type() == js.TypeFunction:
 		callback.Invoke(payload, errorText)
-	} else if err != nil {
+	case err != nil:
 		js.Global().Get("console").Call("error", errorText)
-	} else {
+	default:
 		js.Global().Get("console").Call("log", payload)
 	}
 	return true

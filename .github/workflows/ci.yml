@@ -59,6 +59,12 @@ jobs:
           echo "$RUNNER_TEMP/golangci-lint" >> "$GITHUB_PATH"
       - run: golangci-lint config verify
       - run: golangci-lint run
+      - name: Lint the js/wasm build
+        if: runner.os == 'Linux'
+        env:
+          GOOS: js
+          GOARCH: wasm
+        run: golangci-lint run
       - run: go vet ./...
       - run: go test ./...
       - run: go build ./...
