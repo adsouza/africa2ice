@@ -84,20 +84,30 @@ try {
       failures.push(`pageerror: ${error.message}`);
     });
     await page.goto(`http://127.0.0.1:${server.address().port}/`, { waitUntil: "load" });
-    await page.evaluate(async ({ file, tests }) => {
+    // The run is started, not awaited, inside the page: go.run never settles
+    // when a test deadlocks on a JavaScript event that will not come, and an
+    // awaited evaluate has no deadline of its own. The wait below does.
+    await page.evaluate(({ file, tests }) => {
       const go = new Go();
       go.argv = [file, "-test.run", `^(${tests.join("|")})$`, "-test.v=true"];
       go.exit = code => { document.documentElement.dataset.exitCode = String(code); };
-      try {
-        const result = await WebAssembly.instantiateStreaming(fetch(file), go.importObject);
-        await go.run(result.instance);
-        document.documentElement.dataset.done = "true";
-      } catch (error) {
-        console.error(error);
-        document.documentElement.dataset.failed = "true";
-      }
+      (async () => {
+        try {
+          const result = await WebAssembly.instantiateStreaming(fetch(file), go.importObject);
+          await go.run(result.instance);
+          document.documentElement.dataset.done = "true";
+        } catch (error) {
+          console.error(error);
+          document.documentElement.dataset.failed = "true";
+        }
+      })();
     }, suite);
-    await page.waitForFunction(() => document.documentElement.dataset.done === "true" || document.documentElement.dataset.failed === "true", null, { timeout: 30_000 });
+    try {
+      await page.waitForFunction(() => document.documentElement.dataset.done === "true" || document.documentElement.dataset.failed === "true", null, { timeout: 30_000 });
+    } catch (error) {
+      const unfinished = suite.tests.filter(test => !ran.has(test));
+      throw new Error(`${suite.packagePath} did not finish within 30s; last test started: ${[...ran].at(-1) ?? "none"}; never started: ${unfinished.join(", ") || "none"}\n${error.message}`);
+    }
     const exitCode = await page.locator("html").getAttribute("data-exit-code");
     if (exitCode !== "0") failures.push(`Go test exit code for ${suite.packagePath}: ${exitCode || "missing"}`);
     for (const test of suite.tests) {

@@ -265,3 +265,37 @@ func TestHostCompositionHandsOwnersTheSessionPanicGuard(t *testing.T) {
 		}
 	}
 }
+
+type reportingRepository struct {
+	application.CampaignRepository
+	availability storage.Availability
+}
+
+func (r *reportingRepository) Availability() storage.Availability { return r.availability }
+
+// The logging decorator wraps the repository before the service sees it, and
+// it does not forward Availability. Composition must read the reporter from
+// the concrete store first, or the browser's blocked and lost-connection
+// notices never reach the game.
+func TestHostCompositionReadsAvailabilityBeforeDecorating(t *testing.T) {
+	files, err := storage.NewFileRepository(t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := &reportingRepository{CampaignRepository: files}
+	defer repository.Close()
+	session, _ := openLoggedSession(t)
+	game, err := composeHostedGame(17, session, false,
+		func(func()) (application.CampaignRepository, error) { return repository, nil },
+		func(func()) (ui.UISettingsStore, error) { return &settingsStoreStub{}, nil }, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if game.storageAvailability == nil {
+		t.Fatal("composed host dropped the repository's availability reporter")
+	}
+	repository.availability = storage.AvailabilityReloadRequired
+	if got := game.storageAvailability(); got != storage.AvailabilityReloadRequired {
+		t.Fatalf("composed availability = %v, want the repository's own", got)
+	}
+}
