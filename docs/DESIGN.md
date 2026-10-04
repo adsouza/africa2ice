@@ -9292,7 +9292,9 @@ stock-unit and conversion values are already selected; step 5 implements and ver
     must load the oldest supported save fixture, complete a turn, save again, and reload on desktop
     and web. The release record names the SemVer tag, VCS revision, Go/Binaryen/browser versions,
     clean/modified status, save schema and algorithm versions, raw/Brotli/gzip WASM sizes, and performance
-    results. `runtime/debug.ReadBuildInfo` remains the runtime source for module/VCS identity; release
+    results. It is published as a release asset, `release-record.txt`, beside the archives together
+    with the `performance-profile.json` it names by SHA-256, so it outlives the workflow run's
+    artifact retention; `SHA256SUMS` continues to cover only the archives. `runtime/debug.ReadBuildInfo` remains the runtime source for module/VCS identity; release
     builds must retain build-VCS metadata rather than replacing it with an unrelated hand-maintained
     version string.
 
