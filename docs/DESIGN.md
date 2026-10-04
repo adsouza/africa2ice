@@ -6691,9 +6691,13 @@ and reload.
   inputs and committed simultaneously for the next turn. Contact construction emits each automatic
   same-species edge and accepted interbreeding edge once. Saving, loading, snapshots, Field Notes,
   candidate display, and rejected interbreeding commands consume no draw and cannot change a trait.
-- Tiles and bands are iterated in stable order at every sequential phase of the pipeline. Shared
-  resource allocation is additionally tested for permutation invariance, so stable iteration cannot
-  conceal first-band advantage. Go's randomized map iteration order would otherwise silently
+- Tiles and bands are iterated in stable order at every sequential phase of the pipeline. Band
+  storage is ascending by ID by construction: `RestoreWorld` rejects any other order, and lookups
+  binary-search it. Shared resource allocation is additionally tested for permutation invariance,
+  so stable iteration cannot conceal first-band advantage. That invariance holds up to float
+  rounding, not bit for bit: `ProportionalAllocate` sums in slice order and charges any overshoot of
+  the stock to the last positive demand, so a share may move by at most `n · 2⁻⁵² · available`, far
+  below one person's food. Go's randomized map iteration order would otherwise silently
   desynchronize a reloaded save from an uninterrupted run — a bug that would surface as "loading a
   save changes the future", intermittently.
 - `region-biome-v1` derives prey opportunities from fixed region and current biome. Seed, species,
@@ -6748,9 +6752,9 @@ and reload.
   except through already-persisted outcomes such as survival. Any balance tuning of the selected
   role formulas must retain these allocation, terrain, and lifetime invariants.
 - The archaic policy captures and processes IDs in ascending order, reads closed region/biome presets and
-  technology priorities, uses the already-stable migration ranking, and consumes no RNG. Tests
-  shuffle backing storage before planning and require the exact same computer command batch and
-  post-turn state. Player commands always precede that batch, so neither map iteration nor UI frame
+  technology priorities, uses the already-stable migration ranking, and consumes no RNG. Because
+  band storage cannot be reordered, tests vary what can: every ordering of a set of player commands
+  must produce the exact same computer command batch and post-turn state. Player commands always precede that batch, so neither map iteration nor UI frame
   timing can decide which species receives the last available band slot.
 - Technology contact pairs are derived in stable band-ID/edge order from one frozen post-event
   snapshot. `co-located-cross-species-v1` filters a pair solely by its snapshot species and final
