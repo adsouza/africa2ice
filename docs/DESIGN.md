@@ -8160,9 +8160,13 @@ The world/metadata split still lets the save browser preview all seven slots wit
 data. Generation addressing plus backend atomicity prevents an overwrite from producing a
 new-world/old-metadata pair. Failure-injection tests stop after every file-protocol step and every
 IndexedDB request/transaction event; after each failure, a slot must resolve to the complete old
-save, the complete new save, or a committed deletion—never a mixture. The IndexedDB fake covers
-request error, transaction abort, quota failure, `blocked`, `versionchange`, and completion arriving
-on a later game update. Shared tests cover missing world data, truncated/newer metadata, sequence
+save, the complete new save, or a committed deletion—never a mixture. The desktop sweep crashes a
+`fileSystem` seam at every step, with and without a torn half-write, and restarts on a healthy
+disk. The browser sweep runs against real IndexedDB in Chromium rather than a hand-written fake: a
+shim on `IDBObjectStore.prototype` aborts the k-th request's transaction in a microtask, which is
+how a request error or quota failure reaches the adapter, and an aborted save must not consume a
+sequence. `blocked`, `versionchange`, and completion arriving on a later game update are not yet
+covered by an injected-failure test. Shared tests cover missing world data, truncated/newer metadata, sequence
 ties/overflow, global-counter rollback, checksum mismatch, unknown versions, migration, invalid RNG
 state, operation FIFO ordering, and deletion interrupted between tombstone publication and cleanup.
 
