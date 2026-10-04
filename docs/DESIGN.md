@@ -8108,16 +8108,23 @@ Backends implement those same semantics:
   validation and leaves the prior commit reachable. The asynchronous facade runs file I/O on one
   worker goroutine and reports raw bytes/results back to the application completion FIFO.
 - **Web** (`//go:build js`): IndexedDB database `africa2ice`, database schema version `1`, with
-  object stores `worlds` (key: lowercase SHA-256 generation; value: JSON bytes), `slots` (key:
-  integer slot ID; value: metadata or tombstone), and `control` (key `nextCommitSequence`). Saving
+  object stores `worlds` (key: lowercase SHA-256 generation; value: the world's JSON as a string),
+  `metadata` (key: the string `slot_N` for slot ID `N`; value: the slot's metadata or tombstone as a
+  JSON string), and `control` (key `sequence`; value: the last committed global sequence as a
+  decimal string, because a JavaScript number cannot represent every `uint64`; an absent key means
+  the first commit takes sequence `1`). A numeric `sequence` value written by early development builds is still read
+  while it is an exact non-negative JavaScript integer, and the next commit rewrites it as text;
+  any other type or value fails the operation. These names are the shipped on-disk contract:
+  renaming a store or key would orphan every existing browser save, so it requires a database
+  version upgrade that migrates the old stores in `onupgradeneeded`. Saving
   uses one short-lived `readwrite` transaction spanning all three stores: read and validate the
   global sequence, then enqueue the immutable-world, new-metadata, and incremented-counter `put`
   requests synchronously from that request's success callback while the transaction is active. The
   implementation never `await`s between those requests. Only the transaction's `complete` event
   reports success; an error, quota failure, explicit abort, or failed commit rolls back every write
   and leaves the old slot and counter intact. Loading uses one `readonly` transaction spanning
-  `slots` and `worlds` so metadata and its referenced world come from one consistent snapshot.
-  Listing slots reads only `slots`.
+  `metadata` and `worlds` so metadata and its referenced world come from one consistent snapshot.
+  Listing slots reads only `metadata`.
 
 `onupgradeneeded` is the only place object stores/indexes may change; the IndexedDB database version
 is distinct from `SaveState.SchemaVersion`. A connection receiving `versionchange` closes promptly,
