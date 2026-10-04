@@ -23,6 +23,7 @@ const (
 	HumidOptimum ClimateEpoch = iota
 	AridTransition
 	GlacialMaximum
+	ClimateEpochCount
 )
 
 type ClimateState struct {

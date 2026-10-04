@@ -7,6 +7,7 @@ const (
 	CampaignVictory
 	CampaignExtinction
 	CampaignDispersalFailed
+	CampaignResultCount
 )
 
 const ExplorationWordCount = (TileCount + 63) / 64
