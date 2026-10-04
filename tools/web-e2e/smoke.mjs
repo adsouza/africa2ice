@@ -50,7 +50,8 @@ const waitForRecord = async (page, description, matches, timeout = 5_000) => {
     if (recordsOf(page).some(matches)) return;
     await page.waitForTimeout(25);
   }
-  throw new Error(`no console log record ${description}; saw ${recordsOf(page).map(record => record.msg).join(", ")}`);
+  const recent = recordsOf(page).slice(-12).map(record => record.kind ? `${record.msg}(${record.kind})` : record.msg);
+  throw new Error(`no console log record ${description}; most recent: ${recent.join(", ")}`);
 };
 const turnOf = async page => JSON.parse(await page.locator("html").getAttribute("data-africa2ice-summary")).turn;
 const waitForTurn = async (page, turn, failure) => {
@@ -70,23 +71,46 @@ const presentationPoint = ({ width, height }, point) => {
   return { x: (width - 1280 * scale) / 2 + point.x * scale, y: (height - 720 * scale) / 2 + point.y * scale };
 };
 // With bands still waiting, the first End turn click only arms a
-// confirmation; the second ends the turn. Ebiten samples input once a frame,
-// so each press is held across a few frames rather than clicked instantly.
-const clickEndTurnTwice = async (page, point, touch) => {
+// confirmation; a later one ends the turn. Ebiten samples input once a frame,
+// and a software-rendered CI browser can take longer than any fixed delay to
+// draw a high-DPR frame, so each press is held until the game logs that it
+// saw it (ui.pointer) before it is released; a touch tap, which ebitenui
+// reads without that record, is retried with a doubling hold instead. The first click also rebuilds
+// the panel to show its "click again" notice, and a press that lands just
+// before that rebuild is released onto the new button and never becomes a
+// click, so a press is retried until the turn ends. Every intent the presses
+// produce must be end-turn: anything else means the point missed the button.
+const countRecords = (page, matches) => recordsOf(page).filter(matches).length;
+const isPointer = record => record.msg === "ui.pointer";
+const isIntent = record => record.msg === "ui.intent";
+const clickEndTurnUntilTheTurnEnds = async (page, point, touch, label) => {
   const cdp = touch ? await page.context().newCDPSession(page) : null;
   if (!touch) await page.mouse.move(point.x, point.y, { steps: 4 });
-  for (let attempt = 0; attempt < 2; attempt++) {
+  const intentsBefore = countRecords(page, isIntent);
+  for (let press = 1; press <= 5 && (await turnOf(page)) === 0; press++) {
+    const pointers = countRecords(page, isPointer);
+    const intents = countRecords(page, isIntent);
     if (touch) {
+      // ebitenui reads touches itself, without the mouse-press path that
+      // logs ui.pointer, so a tap has no observable press. Its hold doubles
+      // on each retry instead, until it spans a frame however slow the
+      // browser renders.
       await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: point.x, y: point.y }] });
-      await page.waitForTimeout(150);
+      await page.waitForTimeout(150 * 2 ** (press - 1));
       await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     } else {
       await page.mouse.down();
-      await page.waitForTimeout(150);
+      await waitForRecord(page, `${label}: showing press ${press} on End turn`, () => countRecords(page, isPointer) > pointers, 10_000);
       await page.mouse.up();
     }
-    await page.waitForTimeout(300);
+    const deadline = Date.now() + 3_000;
+    while (Date.now() < deadline && countRecords(page, isIntent) === intents && (await turnOf(page)) === 0) await page.waitForTimeout(25);
   }
+  const produced = recordsOf(page).filter(isIntent).slice(intentsBefore);
+  const strays = produced.filter(record => record.kind !== "end-turn");
+  if (strays.length > 0) throw new Error(`${label}: presses on End turn produced ${strays.map(record => record.kind).join(", ")}`);
+  if (produced.length < 2) throw new Error(`${label}: presses on End turn produced ${produced.length} end-turn intents, want the arming click and the confirming one`);
+  await waitForTurn(page, 1, `${label}: presses on End turn did not end the turn`);
 };
 
 const openGame = async (context, page) => {
@@ -199,8 +223,7 @@ try {
     if (backing.length !== 1 || backing[0][0] !== expected[0] || backing[0][1] !== expected[1]) {
       throw new Error(`DPR ${deviceScaleFactor}: Ebiten canvas backing ${JSON.stringify(backing)}, want ${expected}`);
     }
-    await clickEndTurnTwice(hitPage, presentationPoint(viewport, endTurnDIP), touch);
-    await waitForTurn(hitPage, 1, `DPR ${deviceScaleFactor}${touch ? " touch" : ""}: two presses on End turn did not end the turn`);
+    await clickEndTurnUntilTheTurnEnds(hitPage, presentationPoint(viewport, endTurnDIP), touch, `DPR ${deviceScaleFactor}${touch ? " touch" : ""}`);
     await hitContext.close();
   }
 
@@ -213,8 +236,7 @@ try {
     const larger = { width: 1600, height: 900 };
     await resizePage.setViewportSize(larger);
     await resizePage.waitForTimeout(300);
-    await clickEndTurnTwice(resizePage, presentationPoint(larger, endTurnDIP), false);
-    await waitForTurn(resizePage, 1, "after resizing to 1600x900 the scaled End turn point missed");
+    await clickEndTurnUntilTheTurnEnds(resizePage, presentationPoint(larger, endTurnDIP), false, "resized to 1600x900");
     await resizeContext.close();
   }
 
