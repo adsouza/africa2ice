@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
+	"reflect"
 
 	"github.com/adsouza/africa2ice/internal/domain"
 )
@@ -263,12 +265,33 @@ func SaveStateFromWorld(world *domain.World, revision uint64) (SaveState, error)
 	return save, nil
 }
 
-func (save SaveState) RestoreWorld() (*domain.World, error) {
-	if save.SchemaVersion < OldestSupportedSaveSchemaVersion || save.SchemaVersion > SaveSchemaVersion {
-		return nil, fmt.Errorf("unsupported save schema %d", save.SchemaVersion)
+// errIncompatibleSave marks a save another build wrote: its schema is outside
+// the supported range or an algorithm identifier differs from this build's.
+// It is not damage, and the player is told which it is (DESIGN.md §2,
+// Standing conventions).
+var errIncompatibleSave = errors.New("save was written by an incompatible game version")
+
+// checkCompatibility rejects a schema outside the supported range and any
+// algorithm identifier other than this build's, naming the first that differs.
+func checkCompatibility(schema int, algorithms AlgorithmVersions) error {
+	if schema < OldestSupportedSaveSchemaVersion || schema > SaveSchemaVersion {
+		return fmt.Errorf("%w: schema %d, supported %d-%d", errIncompatibleSave, schema, OldestSupportedSaveSchemaVersion, SaveSchemaVersion)
 	}
-	if save.AlgorithmVersions != supportedAlgorithms {
-		return nil, fmt.Errorf("unsupported algorithm version")
+	if algorithms != supportedAlgorithms {
+		saved, current := reflect.ValueOf(algorithms), reflect.ValueOf(supportedAlgorithms)
+		for index := range saved.NumField() {
+			if saved.Field(index).String() != current.Field(index).String() {
+				return fmt.Errorf("%w: %s is %q, this build supports %q", errIncompatibleSave,
+					saved.Type().Field(index).Name, saved.Field(index).String(), current.Field(index).String())
+			}
+		}
+	}
+	return nil
+}
+
+func (save SaveState) RestoreWorld() (*domain.World, error) {
+	if err := checkCompatibility(save.SchemaVersion, save.AlgorithmVersions); err != nil {
+		return nil, err
 	}
 	if save.GridWidth != domain.MapWidth || save.GridHeight != domain.MapHeight {
 		return nil, fmt.Errorf("invalid grid dimensions")
@@ -337,6 +360,18 @@ func DecodeSaveState(data []byte) (SaveState, error) {
 	decoder.DisallowUnknownFields()
 	var save SaveState
 	if err := decoder.Decode(&save); err != nil {
+		// A newer build's save can carry fields this one does not know, and
+		// the strict decode stops there. Read just its identity leniently, so
+		// that save is reported as incompatible rather than as damaged.
+		var identity struct {
+			SchemaVersion int `json:"schema_version"`
+			AlgorithmVersions
+		}
+		if json.Unmarshal(data, &identity) == nil && identity.SchemaVersion != 0 {
+			if incompatible := checkCompatibility(identity.SchemaVersion, identity.AlgorithmVersions); incompatible != nil {
+				return SaveState{}, incompatible
+			}
+		}
 		return SaveState{}, err
 	}
 	if err := ensureJSONEOF(decoder); err != nil {
