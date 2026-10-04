@@ -1883,6 +1883,9 @@ func TestMoveGridValuesFitTheirColumns(t *testing.T) {
 			{TileID: 1, SeasonalMortalityRate: 0.0123, ChronicMortalityRate: 0.0456, CrowdingDecline: 120},
 		}
 		frame.Bands = append(frame.Bands, gameapi.Band{ID: 7, Species: gameapi.ArchaicHominin, Population: 95, TileID: 1})
+		// The longest eruption value: a warned direct-zone target with its
+		// zero safety factor.
+		frame.Tiles[1].VisibleMacroImpact = gameapi.MacroImpactSummary{Visible: true, Warned: true, Intensity: 1}
 
 		panel := New()
 		state := testState(frame, scale)
@@ -2207,5 +2210,32 @@ func TestRebuildForgetsAVisibleTooltip(t *testing.T) {
 	panel.Draw(screen)
 	if panel.tooltipShown {
 		t.Fatal("a rebuild kept a visible tooltip that its widgets can no longer hide")
+	}
+}
+
+// The Eruption row exists only while an episode touches HERE or TARGET, so
+// moving the hover from a clear tile to a warned one changes the row count.
+// The in-place refresh indexes handles built for the old grid; it must
+// rebuild instead of indexing past them.
+func TestMoveGridRebuildsWhenTheEruptionRowAppears(t *testing.T) {
+	frame := testFrame(1)
+	frame.Tiles[1].VisibleMacroImpact = gameapi.MacroImpactSummary{Visible: true, Warned: true, Intensity: 0.55}
+	for index := range frame.Bands[0].MigrationCandidates {
+		if frame.Bands[0].MigrationCandidates[index].TileID == 1 {
+			frame.Bands[0].MigrationCandidates[index].WarningSuitability = 0.45
+		}
+	}
+	panel := New()
+	state := testState(frame, 1)
+	state.Hover = render.TileHover{TileID: 0, Visible: true}
+	panel.Update(state)
+	before := len(panel.handles.moveTargetValues)
+	state.Hover = render.TileHover{TileID: 1, Visible: true}
+	panel.Update(state)
+	if after := len(panel.handles.moveTargetValues); after != before+1 {
+		t.Fatalf("move grid rows = %d after hovering a warned tile, want %d", after, before+1)
+	}
+	if got := panel.handles.moveTargetValues[before].Label; got != "55% next · ×0.45" {
+		t.Fatalf("eruption target value = %q", got)
 	}
 }

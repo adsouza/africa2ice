@@ -160,3 +160,52 @@ func TestFrameCandidatesCarryDomainArrivalStress(t *testing.T) {
 		t.Fatal("frame has no candidates, so this test would prove nothing")
 	}
 }
+
+// The step 9 warning contract: on the turn before the eruption an explored
+// affected tile shows the impact it is about to take, flagged as a warning;
+// while the eruption strikes it shows the current impact; an unexplored tile
+// or an unaffected one shows nothing. Before the projection only carried the
+// active impact, so the warning turn, the one a player can act on, was blank.
+func TestVisibleMacroImpactProjectsTheWarningTurn(t *testing.T) {
+	world, err := domain.NewWorld(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grid := world.Grid()
+	activeTurn := 1
+	for !domain.MacroEpisodeActive(activeTurn) {
+		activeTurn++
+	}
+	var direct, unaffected domain.TileGeography
+	for id := range domain.TileCount {
+		tile, _ := grid.Tile(domain.TileID(id))
+		switch {
+		case !tile.Land:
+		case domain.CampanianZone(tile.ID) == domain.MacroDirect:
+			direct = tile
+		case domain.CampanianZone(tile.ID) == domain.MacroUnaffected:
+			unaffected = tile
+		}
+	}
+	if !direct.Land {
+		t.Fatal("no land tile in the direct zone")
+	}
+	warned := visibleMacroImpact(direct, activeTurn-1, true)
+	if !warned.Visible || !warned.Warned || warned.Intensity != 1 || warned.HabitatFactor != 0.5 {
+		t.Fatalf("warning-turn impact = %+v, want next turn's direct impact flagged as a warning", warned)
+	}
+	active := visibleMacroImpact(direct, activeTurn, true)
+	if !active.Visible || active.Warned || active.Intensity != 1 {
+		t.Fatalf("active-turn impact = %+v, want the current impact, not a warning", active)
+	}
+	for name, got := range map[string]gameapi.MacroImpactSummary{
+		"unexplored on the warning turn": visibleMacroImpact(direct, activeTurn-1, false),
+		"unaffected on the warning turn": visibleMacroImpact(unaffected, activeTurn-1, true),
+		"two turns before":               visibleMacroImpact(direct, activeTurn-2, true),
+		"after the episode":              visibleMacroImpact(direct, activeTurn+1, true),
+	} {
+		if got.Visible {
+			t.Errorf("%s shows %+v", name, got)
+		}
+	}
+}

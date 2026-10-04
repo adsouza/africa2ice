@@ -333,6 +333,9 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 	scene.drawBiomeGlyphs(mapCanvas, geometry, frame)
 	scene.drawLakes(mapCanvas, geometry, frame)
 	scene.drawReachableTiles(mapCanvas, geometry, frame, selectedBand)
+	// Above the reachable-tile fill, so a warned destination still reads as
+	// warned while it is highlighted as a move.
+	drawMacroImpactTiles(mapCanvas, geometry, frame)
 	scene.drawGuideHighlight(mapCanvas, geometry, frame, selectedBand)
 	// The pointer's tile is tinted on the map itself now that the bottom
 	// inspector is gone; the panel reads the same hover for its detail lines.
@@ -717,6 +720,31 @@ func (scene *MapScene) drawReachableTiles(screen logicalCanvas, geometry MapGeom
 	}
 }
 
+// macroImpactColor is the timeline's eruption glyph colour, so the rail and
+// the tiles it is about name the same event.
+var macroImpactColor = color.RGBA{R: 213, G: 115, B: 80, A: 255}
+
+// drawMacroImpactTiles outlines every explored tile a macro episode reaches:
+// dashed on the one-turn warning, solid while it strikes. An outline rather
+// than a fill keeps the biome colour, whose lightness ordering carries the
+// terrain, readable underneath.
+func drawMacroImpactTiles(screen logicalCanvas, geometry MapGeometry, frame *gameapi.Frame) {
+	for _, tile := range frame.Tiles {
+		impact := tile.VisibleMacroImpact
+		if !impact.Visible || !tile.Explored {
+			continue
+		}
+		x, y := geometry.TilePoint(tile)
+		x -= geometry.Cell / 2
+		y -= geometry.Cell / 2
+		if impact.Warned {
+			drawDashedRect(screen, x+1, y+1, geometry.Cell-2, geometry.Cell-2, macroImpactColor)
+		} else {
+			vector.StrokeRect(screen, x+1, y+1, geometry.Cell-2, geometry.Cell-2, 1.2, macroImpactColor, false)
+		}
+	}
+}
+
 func tileColorForRender(tile gameapi.Tile, aridity float64) color.RGBA {
 	if !tile.Explored {
 		return unexploredTileColor
@@ -890,7 +918,7 @@ func (scene *MapScene) drawTimeline(screen logicalCanvas, frame *gameapi.Frame, 
 		x := timelinePosition(left, right, timelineProgressForYear(39_850))
 		glyph := color.RGBA{R: 118, G: 126, B: 128, A: 220}
 		if episode.Warned || episode.Current {
-			glyph = color.RGBA{R: 213, G: 115, B: 80, A: 255}
+			glyph = macroImpactColor
 		}
 		vector.FillCircle(screen, x, y, 3.5, glyph, true)
 	}

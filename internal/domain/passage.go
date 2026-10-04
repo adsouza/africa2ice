@@ -19,8 +19,8 @@ type Passage struct {
 
 var passageCatalog = [PassageCount]Passage{
 	{ID: NorthWallacea, From: 3804, To: 4197, Cost: 4.00, RequiredTech: CoastalNavigation, HasRequiredTech: true},
-	{ID: SouthWallacea, From: 4284, To: 4389, Cost: 4.50, RequiredTech: CoastalNavigation, HasRequiredTech: true},
-	{ID: BeringStrait, From: 469, To: 476, Cost: 3.00, ClimateGated: true},
+	{ID: SouthWallacea, From: 3996, To: 4389, Cost: 4.50, RequiredTech: CoastalNavigation, HasRequiredTech: true},
+	{ID: BeringStrait, From: 951, To: 955, Cost: 3.00, ClimateGated: true},
 }
 
 type PassageAvailability uint8
@@ -100,6 +100,14 @@ func ValidatePassages(grid *Grid) error {
 		incident[passage.From]++
 		incident[passage.To]++
 		if incident[passage.From] > 2 || incident[passage.To] > 2 {
+			return ErrInvalidValue
+		}
+	}
+	// Non-adjacent endpoints are not separated endpoints. The named passages
+	// must be the only crossings, so no ordinary land route may join a
+	// passage's two shores however far it detours.
+	for _, passage := range passageCatalog {
+		if grid.ordinaryRouteExists(passage.From, passage.To) {
 			return ErrInvalidValue
 		}
 	}

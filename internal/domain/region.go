@@ -13,7 +13,9 @@ func (r Region) String() string {
 }
 
 func resolveRegion(x, y int, point GeoPoint) (Region, bool) {
-	if point.Longitude >= 165 && point.Latitude >= 50 {
+	// Beringia is the Alaska side of the strait only, so establishing it proves
+	// the climate-gated crossing was made. Chukotka falls through to Siberia.
+	if point.Longitude >= 185 && point.Latitude >= 50 {
 		return Beringia, true
 	}
 	if point.Longitude >= 96 && point.Longitude <= 122 && point.Latitude >= 30 && point.Latitude <= 42 {

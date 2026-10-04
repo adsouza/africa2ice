@@ -81,9 +81,7 @@ func projectFrame(world *domain.World, worldRevision, terrainRevision uint64) (*
 				publicTile.Fauna.Weights[mapFaunaGroup(group)] = profile.Weights[group]
 			}
 			publicTile.Fauna.HuntingSupported, publicTile.Fauna.MegafaunaSupported = profile.HuntingSupported, profile.MegafaunaSupported
-			if publicTile.Explored && macroImpact.Active && macroImpact.Zone != domain.MacroUnaffected {
-				publicTile.VisibleMacroImpact = gameapi.MacroImpactSummary{Visible: true, Episode: gameapi.CampanianIgnimbrite, ResourceFactor: macroImpact.FloraFactor, HabitatFactor: macroImpact.HabitatFactor}
-			}
+			publicTile.VisibleMacroImpact = visibleMacroImpact(geography, date.Turn, publicTile.Explored)
 		}
 		frame.Tiles[id] = publicTile
 	}
@@ -234,4 +232,22 @@ func projectFrame(world *domain.World, worldRevision, terrainRevision uint64) (*
 		frame.Bands = append(frame.Bands, publicBand)
 	}
 	return frame, nil
+}
+
+// visibleMacroImpact is what an explored tile shows of a macro episode: the
+// impact while it strikes and, on the one-turn warning before, the impact the
+// tile is about to take. Unexplored tiles show nothing, so no hidden
+// epicenter or archaic exposure leaks through the frame.
+func visibleMacroImpact(geography domain.TileGeography, turn int, explored bool) gameapi.MacroImpactSummary {
+	shown, warned := domain.MacroImpactAt(geography, turn), false
+	if !shown.Active && domain.MacroEpisodeWarned(turn) {
+		shown, warned = domain.MacroImpactAt(geography, turn+1), true
+	}
+	if !explored || !geography.Land || !shown.Active || shown.Zone == domain.MacroUnaffected {
+		return gameapi.MacroImpactSummary{}
+	}
+	return gameapi.MacroImpactSummary{
+		Visible: true, Episode: gameapi.CampanianIgnimbrite, Warned: warned, Intensity: shown.Intensity,
+		ResourceFactor: shown.FloraFactor, HabitatFactor: shown.HabitatFactor,
+	}
 }

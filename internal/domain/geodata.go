@@ -53,7 +53,10 @@ var landPolygons = []polygonFeature{
 }
 
 var waterPolygons = []polygonFeature{
-	{"Mediterranean", []coordinate{c(-6*10, 36*10), c(0*10, 42*10), c(10*10, 45*10), c(20*10, 44*10), c(30*10, 41*10), c(37*10, 36*10), c(32*10, 31*10), c(20*10, 31*10), c(10*10, 35*10), c(0*10, 35*10)}},
+	// The Mediterranean ring traces a game-scale Italian peninsula between
+	// (10,45) and (20,44). Without it the ring swallowed Italy whole, and the
+	// Campanian eruption's direct and proximal zones fell entirely on water.
+	{"Mediterranean", []coordinate{c(-6*10, 36*10), c(0*10, 42*10), c(10*10, 45*10), c(11*10, 44*10), c(11.8*10, 41.2*10), c(15.6*10, 40.4*10), c(16.2*10, 41.2*10), c(15.6*10, 42.3*10), c(13.6*10, 43.8*10), c(20*10, 44*10), c(30*10, 41*10), c(37*10, 36*10), c(32*10, 31*10), c(20*10, 31*10), c(10*10, 35*10), c(0*10, 35*10)}},
 	{"RedSea", []coordinate{c(32*10, 29*10), c(37*10, 30*10), c(44*10, 13*10), c(39*10, 12*10), c(34*10, 22*10)}},
 	// Keep Bab-el-Mandeb connected to the Indian Ocean at this grid scale.
 	// Without the gulf cutout, the broad Africa/Arabia land polygons join
@@ -63,8 +66,14 @@ var waterPolygons = []polygonFeature{
 	{"Caspian", []coordinate{c(46*10, 47*10), c(55*10, 47*10), c(55*10, 36*10), c(47*10, 36*10)}},
 	{"BlackSea", []coordinate{c(27*10, 47*10), c(42*10, 47*10), c(42*10, 40*10), c(28*10, 40*10)}},
 	{"NorthWallaceaGap", []coordinate{c(119*10, 4*10), c(137*10, 4*10), c(137*10, -7*10), c(119*10, -7*10)}},
-	{"SouthWallaceaGap", []coordinate{c(121*10, -7*10), c(139*10, -7*10), c(139*10, -16*10), c(121*10, -16*10)}},
-	{"BeringStrait", []coordinate{c(178*10, 68*10), c(193*10, 68*10), c(193*10, 61*10), c(178*10, 61*10)}},
+	// The southern gap reaches west to 114°E so that Sahul's coarse north-west
+	// corner cannot touch Sunda: at 121°E a strip of Sahul land sat directly
+	// under Java and the passage could be walked around.
+	{"SouthWallaceaGap", []coordinate{c(114*10, -7*10), c(139*10, -7*10), c(139*10, -16*10), c(114*10, -16*10)}},
+	// The strait's southern arm is a single continuous water column through
+	// the Bering Sea. The Siberian and Alaskan land rings otherwise overlap
+	// south of 61°N and join into an ordinary land route around the strait.
+	{"BeringStrait", []coordinate{c(178*10, 68*10), c(193*10, 68*10), c(193*10, 61*10), c(189*10, 61*10), c(189*10, 50*10), c(185*10, 50*10), c(185*10, 61*10), c(178*10, 61*10)}},
 }
 
 var highlands = []highlandFeature{

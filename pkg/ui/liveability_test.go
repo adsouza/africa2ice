@@ -368,3 +368,87 @@ func TestUnreachableTargetEarnsNoMortalityMark(t *testing.T) {
 		t.Fatalf("unreachable mortality delta = %d material %v, want no mark", mortality.Delta, mortality.DeltaMaterial)
 	}
 }
+
+// Step 9: during a warning each explored candidate shows its warned impact and
+// the multiplicative safety factor. The direct zone's safety factor is exactly
+// zero, and that destination must still read as reachable rather than as an
+// illegal move. Outside any episode the grid keeps its ten rows.
+func TestEruptionRowShowsWarnedImpactAndSafetyFactor(t *testing.T) {
+	frame := liveabilityFrame()
+	band := &frame.Bands[0]
+	if rows := LiveabilityRows(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1)); len(rows) != 10 {
+		t.Fatalf("row count without an episode = %d, want 10", len(rows))
+	}
+
+	frame.Tiles[0].VisibleMacroImpact = gameapi.MacroImpactSummary{Visible: true, Warned: true, Intensity: 0.20}
+	frame.Tiles[1].VisibleMacroImpact = gameapi.MacroImpactSummary{Visible: true, Warned: true, Intensity: 1}
+	band.MigrationCandidates[0].WarningSuitability = 0
+	target := TargetTileLiveability(frame, band, 1)
+	if !target.Reachable || target.Status != "reachable" {
+		t.Fatalf("warned direct-zone target = %q reachable %t, want a legal move", target.Status, target.Reachable)
+	}
+	eruption, ok := rowsByLabel(band, CurrentTileLiveability(frame, band), target)["Eruption"]
+	if !ok {
+		t.Fatal("no Eruption row during a warning")
+	}
+	if eruption.Here != "20% next" || eruption.Target != "100% next · ×0.00" {
+		t.Fatalf("eruption row = here %q target %q", eruption.Here, eruption.Target)
+	}
+	if eruption.HereTier != TierAmber || eruption.TargetTier != TierRed || eruption.Delta != -1 {
+		t.Fatalf("eruption tiers = %v/%v delta %d, want amber, red, target worse", eruption.HereTier, eruption.TargetTier, eruption.Delta)
+	}
+
+	// An unreachable warned tile has no candidate, so no safety factor.
+	frame.Tiles[1].VisibleMacroImpact.Warned = false
+	struck := rowsByLabel(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1))["Eruption"]
+	if struck.Target != "100% now" {
+		t.Fatalf("active impact = %q, want the current intensity without a safety factor", struck.Target)
+	}
+	band.MigrationCandidates = nil
+	frame.Tiles[1].VisibleMacroImpact.Warned = true
+	if unreachable := rowsByLabel(band, CurrentTileLiveability(frame, band), TargetTileLiveability(frame, band, 1))["Eruption"]; unreachable.Target != "100% next" {
+		t.Fatalf("unreachable warned target = %q, want the impact without a safety factor", unreachable.Target)
+	}
+}
+
+func TestEruptionRowSurvivesUninhabitableExploredLand(t *testing.T) {
+	for _, warned := range []bool{true, false} {
+		frame := liveabilityFrame()
+		band := &frame.Bands[0]
+		band.MigrationCandidates = nil
+		frame.Tiles[1].BaselineK = 0
+		frame.Tiles[1].VisibleMacroImpact = gameapi.MacroImpactSummary{Visible: true, Warned: warned, Intensity: 0.55}
+		want := "55% now"
+		if warned {
+			want = "55% next"
+		}
+		here := CurrentTileLiveability(frame, band)
+		target := TargetTileLiveability(frame, band, 1)
+		if target.Available || target.Reachable || target.HasSafetyFactor {
+			t.Fatalf("uninhabitable target gained movement affordances: %+v", target)
+		}
+		rows := rowsByLabel(band, here, target)
+		if eruption := rows["Eruption"]; eruption.Here != "clear" || eruption.Target != want || eruption.TargetTier != TierRed || eruption.Delta != -1 || !eruption.DeltaMaterial {
+			t.Fatalf("uninhabitable target eruption = %+v", eruption)
+		}
+		if rows["Food"].Target != "—" || rows["Route"].Target != "—" {
+			t.Fatal("uninhabitable target exposed habitability metrics")
+		}
+
+		// A living band can occupy land after its capacity collapses. HERE
+		// must retain the warning too, even without a target to compare.
+		band.TileID = 1
+		here = CurrentTileLiveability(frame, band)
+		if eruption := rowsByLabel(band, here, TileLiveability{})["Eruption"]; eruption.Here != want || eruption.HereTier != TierRed || eruption.Target != "—" || eruption.Delta != 0 {
+			t.Fatalf("uninhabitable current tile eruption = %+v", eruption)
+		}
+
+		// Even a stale projected impact must not expose a hidden tile.
+		frame.Tiles[1].Explored = false
+		band.TileID = 0
+		target = TargetTileLiveability(frame, band, 1)
+		if _, exists := rowsByLabel(band, CurrentTileLiveability(frame, band), target)["Eruption"]; exists {
+			t.Fatal("eruption row exposed an unexplored target")
+		}
+	}
+}

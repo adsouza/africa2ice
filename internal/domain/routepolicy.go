@@ -84,6 +84,10 @@ type CampaignOutcome struct {
 	// cannot distinguish a dispersal from a handful of founding bands that grew
 	// fat in place, so the gate needs the count as well as the sum.
 	FinalEstablishedBands int
+	// FinalLivingBands is how many sapiens bands are alive at all when the
+	// campaign ends. The turn-400 survival margin counts living bands, not
+	// established ones, and needs them in the same campaign as FinalSapiens.
+	FinalLivingBands int
 }
 
 func destinationMask() uint16 {
@@ -429,6 +433,9 @@ func RunPolicyCampaign(seed uint64, policy RoutePolicy) (CampaignOutcome, error)
 			continue
 		}
 		outcome.FinalSapiens += uint64(band.Population)
+		if band.Population > 0 {
+			outcome.FinalLivingBands++
+		}
 		if band.Population >= MinEstablishedBand {
 			outcome.FinalEstablishedBands++
 		}

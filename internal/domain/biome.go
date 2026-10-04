@@ -70,6 +70,30 @@ func BaselineK(v float64, biome Biome) float64 {
 	return float64(BaselineKCurve(v) * biomeCapacityFactor[biome])
 }
 
+// BeringianRefugiumK is the capacity floor of historical Beringia. Through
+// the glacial maximum the land bridge and its shores stayed habitable mammoth
+// steppe while the cold cutoff closed the rest of the far north, so a band
+// could wait there for the bridge and cross it. The floor is two established
+// bands' worth of people, so the refugium can always carry one band at the
+// establishing margin.
+const BeringianRefugiumK = 2 * float64(MinEstablishedBand)
+
+// InBeringianRefugium reports whether a tile is land in historical Beringia:
+// both shores of the strait, Chukotka as well as Alaska. It is a capacity
+// zone, not a region; only the Alaska side counts as the Beringia destination.
+func InBeringianRefugium(geography TileGeography) bool {
+	return geography.Land && geography.Longitude >= 165 && geography.Latitude >= 50
+}
+
+// tileBaselineK is BaselineK for one tile, with the Beringian refugium floor.
+func tileBaselineK(geography TileGeography, v float64, biome Biome) float64 {
+	capacity := BaselineK(v, biome)
+	if InBeringianRefugium(geography) {
+		return max(capacity, BeringianRefugiumK)
+	}
+	return capacity
+}
+
 func MovementCurve(v float64) float64 {
 	v = clamp01(v)
 	switch {

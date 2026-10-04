@@ -26,6 +26,10 @@ const (
 	// tile is crowded.
 	capacityOccupancyAmber = gameapi.SplitStressThreshold // 0.67
 	capacityOccupancyRed   = 1.0
+	// Any eruption impact is amber; at half intensity or more it is red. The
+	// split falls between the episode's tiers, so the wide zone (0.20) reads
+	// amber and the proximal (0.55) and direct (1.00) zones read red.
+	eruptionRedIntensity = 0.5
 )
 
 type TargetSource uint8
@@ -85,7 +89,14 @@ type TileLiveability struct {
 	// the species while every neighbour is archaic. The matching population is
 	// not kept: the row reports ResidentPopulation, and an archaic-only
 	// headcount had no reader left.
-	ArchaicBands    int
+	ArchaicBands int
+	// MacroImpact is the tile's projected macro-episode impact, current or,
+	// on the warning turn, next turn's. SafetyFactor is the candidate's
+	// multiplicative attraction factor 1 − warned impact; HasSafetyFactor is
+	// false off a warning and wherever the band cannot arrive.
+	MacroImpact     gameapi.MacroImpactSummary
+	SafetyFactor    float64
+	HasSafetyFactor bool
 	RequiresPassage bool
 	Passage         gameapi.PassageID
 	Reachable       bool
@@ -143,6 +154,9 @@ func TargetTileLiveability(frame *gameapi.Frame, band *gameapi.Band, tile gameap
 		summary.SeasonalRisk, summary.ChronicRisk, summary.HasRisk = candidate.SeasonalMortalityRate, candidate.ChronicMortalityRate, true
 		summary.CrowdingDecline = candidate.CrowdingDecline
 		summary.Occupancy, summary.HasOccupancy = candidate.ArrivalStress, true
+		if summary.MacroImpact.Warned {
+			summary.SafetyFactor, summary.HasSafetyFactor = candidate.WarningSuitability, true
+		}
 		return summary
 	}
 	if gameapi.EscarpmentBlocks(frame, band.TileID, tile) {
@@ -165,6 +179,11 @@ func summarizeTile(frame *gameapi.Frame, tileID gameapi.TileID, self *gameapi.Ba
 	}
 	summary.Biome, summary.Region = tile.Biome.String(), tile.Region.String()
 	summary.NearbyLake = tile.NearbyLake
+	if tile.Land {
+		// An explored land tile can carry an eruption warning even when its
+		// current climate cannot support a band.
+		summary.MacroImpact = tile.VisibleMacroImpact
+	}
 	switch {
 	case !tile.Land:
 		summary.Biome, summary.Region = "Open water", tile.WaterBody
@@ -363,7 +382,7 @@ func LiveabilityRows(band *gameapi.Band, here, target TileLiveability) []Liveabi
 		}
 		return LiveabilityRow{Label: label, Here: hereValue, Target: targetValue}
 	}
-	return []LiveabilityRow{
+	rows := []LiveabilityRow{
 		geographyRow("Biome", here.Biome, target.Biome),
 		geographyRow("Region", here.Region, target.Region),
 		geographyRow("Nearby lake", here.NearbyLake, target.NearbyLake),
@@ -375,4 +394,61 @@ func LiveabilityRows(band *gameapi.Band, here, target TileLiveability) []Liveabi
 		row("Route", routeValue, normal, true, nil),
 		row("Others", othersValue, normal, true, nil),
 	}
+	// The eruption row exists only while an episode touches either tile, so
+	// the grid does not spend a line on "clear" for the rest of the campaign.
+	// During the warning it shows the impact the tile is about to take and,
+	// for a reachable target, the safety factor that multiplies its
+	// attraction: a warned destination ranks lower but stays a legal move.
+	if here.MacroImpact.Visible || target.MacroImpact.Visible {
+		rows = append(rows, eruptionRow(here, target))
+	}
+	return rows
+}
+
+// Eruption information remains visible on affected land even if its capacity
+// is zero. Other unavailable tiles keep an em dash, including hidden targets.
+func eruptionRow(here, target TileLiveability) LiveabilityRow {
+	result := LiveabilityRow{Label: "Eruption", Here: "—", Target: "—"}
+	hereKnown := here.Available || here.MacroImpact.Visible
+	targetKnown := target.Available || target.MacroImpact.Visible
+	if hereKnown {
+		result.Here, result.HereTier = eruptionValue(here), eruptionTier(here)
+	}
+	if targetKnown {
+		result.Target, result.TargetTier = eruptionValue(target), eruptionTier(target)
+	}
+	if hereKnown && targetKnown && result.Here != result.Target {
+		switch {
+		case target.MacroImpact.Intensity < here.MacroImpact.Intensity:
+			result.Delta = 1
+		case target.MacroImpact.Intensity > here.MacroImpact.Intensity:
+			result.Delta = -1
+		}
+		result.DeltaMaterial = result.Delta != 0 && (result.HereTier != TierNormal || result.TargetTier != TierNormal)
+	}
+	return result
+}
+
+func eruptionValue(s TileLiveability) string {
+	impact := s.MacroImpact
+	switch {
+	case !impact.Visible:
+		return "clear"
+	case !impact.Warned:
+		return fmt.Sprintf("%.0f%% now", impact.Intensity*100)
+	case s.HasSafetyFactor:
+		return fmt.Sprintf("%.0f%% next · ×%.2f", impact.Intensity*100, s.SafetyFactor)
+	default:
+		return fmt.Sprintf("%.0f%% next", impact.Intensity*100)
+	}
+}
+
+func eruptionTier(s TileLiveability) LiveabilityTier {
+	switch {
+	case !s.MacroImpact.Visible || s.MacroImpact.Intensity <= 0:
+		return TierNormal
+	case s.MacroImpact.Intensity >= eruptionRedIntensity:
+		return TierRed
+	}
+	return TierAmber
 }

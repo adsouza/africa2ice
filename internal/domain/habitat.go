@@ -67,7 +67,7 @@ func (grid *Grid) deriveBiomeHistory() error {
 			}
 			grid.biomes[turn*TileCount+id] = state.current
 			// The published biome, not the raw class, is what BaselineK uses.
-			if BaselineK(vegetation, state.current) > 0 {
+			if tileBaselineK(geography, vegetation, state.current) > 0 {
 				grid.lastHabitableTurn[id] = int16(turn)
 			}
 		}
@@ -108,7 +108,7 @@ func BuildHabitat(grid *Grid, seed uint64, turn int) (*Habitat, ClimateState, er
 		tile.VegetationIndex = vegetation
 		tile.HabitatTemperatureC = habitatTemperature
 		tile.LocalTemperatureC = localTemperature
-		tile.BaselineK = BaselineK(vegetation, biome)
+		tile.BaselineK = tileBaselineK(geography, vegetation, biome)
 		tile.MovementCost = ComposedMovementCost(vegetation, biome)
 		result[id] = tile
 	}
