@@ -147,13 +147,20 @@ either flagging a case that is easy to get wrong or is redundant.
 
 - **Versioning and migration.** Every simulation rule, table, or constant that can change the future
   behavior or interpretation of a saved campaign belongs to one of the algorithm contracts §9
-  enumerates. Changing any such input after release requires that contract's version identifier to
-  change and an explicit save migration, and a change to the serialized shape additionally requires
-  a `SaveState.SchemaVersion` bump. Presentation, platform, observability, and verification policies
-  in Appendix C.13 do not inherit this obligation merely because they appear in this document;
-  serialized UI preferences use `UISettings.SchemaVersion`, while policies that consume no saved
-  state require no campaign migration. V1 is unreleased throughout, so no migration from a
-  provisional identifier exists anywhere. A rule repeats this only where one edit must move two
+  enumerates. Changing any such input requires that contract's version identifier to change and an
+  explicit decision about existing saves, and a change to the serialized shape additionally requires
+  a `SaveState.SchemaVersion` bump. Throughout this document, an "explicit migration" after a
+  version change means exactly that decision: either a supported migration from the old identifier,
+  or declaring it unsupported so that a save carrying it is rejected without replacing the running
+  world — never silent reinterpretation under the new rules. No contract currently declares a
+  supported older identifier, so each supports exactly its current one, and a save from an earlier
+  release that differs in any identifier does not load. Schema changes are different:
+  `RestoreWorld` accepts every schema from `OldestSupportedSaveSchemaVersion` to
+  `SaveSchemaVersion`, upgrading older ones, and the frozen oldest-supported-save fixture proves it
+  on both backends. Presentation, platform,
+  observability, and verification policies in Appendix C.13 do not inherit this obligation merely
+  because they appear in this document; serialized UI preferences use `UISettings.SchemaVersion`,
+  while policies that consume no saved state require no campaign migration. A rule repeats this only where one edit must move two
   identifiers at once, or where the owning contract is not the one a reader would guess —
   `TemperatureAlgorithm` versioning absolute °C separately from `ClimateAlgorithm`, or
   `GeneticSelectionAlgorithm` reading a table `TemperatureAlgorithm` owns.
@@ -1635,7 +1642,7 @@ controls behind `BaseMoisture` are effectively unchanged across the campaign's 6
 resolution, so one fixed field plus a time-varying offset is the correct decomposition.
 
 ```text
-BaseMoisture(tile) = clamp01( ZonalMoisture[Row(tile)]
+BaseMoisture(tile) = clamp01( ZonalMoisture(Latitude(tile))
                             + RiverProximityBonus(tile)
                             - ContinentalityPenalty(tile)
                             + OrographicBonus(tile) )
@@ -1648,14 +1655,17 @@ RiverProximityBonus(tile) = RiverCorridorBonus  if a river polyline crosses the 
 `geodata.go` supplies every geographic input to this formula; no additional sourced layer is
 required.
 
-**Zonal component.** `ZonalMoisture` is a 64-entry table, one value per map row, checked in as exact
-`float64` bit patterns under a SHA-256 checksum and used verbatim at run time, exactly as
-`TemperatureAlgorithm`'s `LatitudeSinSquared` table is. The two share a row key — map row `y` — but
-not an owning contract, so they stay separate tables: `LatitudeSinSquared` belongs to
-`TemperatureAlgorithm` and `ZonalMoisture` to `GeographyAlgorithm`, and §9's versioning split exists
-precisely so that changing temperature coefficients need not re-checksum unrelated geographic data.
-The table is generated from a profile symmetric in absolute latitude, piecewise-linear between these
-anchors:
+**Zonal component.** `ZonalMoisture` is computed at world creation from the tile's latitude, by
+piecewise-linear interpolation between the anchors below; there is no checked-in per-row table.
+`TemperatureAlgorithm`'s `LatitudeSinSquared` needs one because `sin` is not reproducible across
+targets. Interpolation needs only addition, subtraction, multiplication, and division, with the
+product written inside an explicit `float64` conversion as §5's arithmetic rules require, so every
+target computes the same bits. What freezes the result is the checked 6,144-value `BaseMoisture`
+checksum (step 3), which the native test suite verifies on every CI target: changing an anchor, the
+interpolation, or the projection's row latitudes fails it. `ZonalMoisture` belongs to
+`GeographyAlgorithm` and `LatitudeSinSquared` to `TemperatureAlgorithm`; §9's versioning split
+exists precisely so that changing temperature coefficients need not re-checksum unrelated
+geographic data. The profile reads absolute latitude, so it is symmetric by construction:
 
 | Absolute latitude | `ZonalMoisture` | Circulation feature     |
 | ----------------: | --------------: | ----------------------- |
@@ -1705,10 +1715,10 @@ excluded: expressing it needs a prevailing-wind field, a second geographic layer
 effect.
 
 `BaseMoisture` is fixed geography. The new-game seed does not perturb it, any more than it perturbs
-landmasses. Validation requires exactly 64 finite `ZonalMoisture` entries in `[0, 1]`, a profile
-symmetric in absolute latitude within the table's stated tolerance, finite non-negative bonus
-constants, `ContinentalityRange` a positive tile count, and a finite `BaseMoisture` in `[0, 1]` for
-all 6,144 tiles. Because `ClassifyBiome` reads it, changing the table, its anchors, or any bonus
+landmasses. Validation requires eight finite anchor values in `[0, 1]` at strictly increasing
+latitudes starting from `0°`, finite non-negative bonus constants, `ContinentalityRange` a positive
+tile count, and a finite `BaseMoisture` in `[0, 1]` for all 6,144 tiles. Because `ClassifyBiome`
+reads it, changing an anchor, the interpolation, or any bonus
 constant reclassifies every tile in an existing save and therefore requires a `GeographyAlgorithm`
 version bump with explicit migration — the same obligation §9 places on the temperature
 coefficients. Derived `BaseMoisture` is never serialized; the grid regenerates from `geodata.go` and
@@ -2353,7 +2363,8 @@ requirement. `LocalTemperatureC`, the requirement, and the multiplier are derive
 `ResourceAlgorithm: "toward-cap-v2"` owns these water units and demand rules, including the initial
 20°C/35°C anchors, `0.02` slope, multiplier bounds, and current-climate input, alongside
 allocation/extraction; `HazardAlgorithm` owns shortage-related health damage. Use the existing
-unreleased contracts, with affected version updates and explicit save migration after release.
+contracts; changing them requires the affected version updates and the explicit save decision of
+§2's Standing conventions.
 
 Fixtures lock the one-WU baseline, population scaling, inclusive pre-adaptation `1.0`/`1.3` bounds,
 the exact `0.40` heritable reduction of only the heat increment, and the selected linear ramp.
@@ -2541,7 +2552,7 @@ for the stats layout in §8.
 The simulation uses this transient scalar in its existing per-band food-accounting record, not a
 saved hunger meter or food stock. A display-only copy is retained in `LastFoodReport`; it never
 feeds a later health, starvation, or food calculation. The computation consumes no RNG, is bounded
-by `MaxBands`, and is versioned with the existing unreleased `FoodStorageAlgorithm` contract.
+by `MaxBands`, and is versioned with the existing `FoodStorageAlgorithm` contract.
 Save/load and planning cannot re-evaluate consumption or accumulate hunger.
 
 Fixtures cover full feeding, no food, the zero-requirement boundary, fractional requirements, and
@@ -2979,7 +2990,7 @@ change too if the wire shape changes.
 `GeneticSelectionAlgorithm` separately owns each heritable factor/burden function and its coverage
 table; `HazardAlgorithm` owns where those named factors compose with health and mortality. Changing
 either side after release updates both identifiers when their shared integration contract changes.
-The health representation remains part of the unreleased hazard v1; heritable behavior uses the
+The health representation remains part of the hazard contract; heritable behavior uses the
 separate genetics identifiers specified below.
 
 Persist and snapshot the existing single `Health float64` value per band, at most `MaxBands = 256`
@@ -3144,8 +3155,8 @@ The calculation consumes no RNG and adds only bounded transient work per band, n
 meter or additional history. `HazardAlgorithm: "split-v1"` owns the direct response, its absence
 of health gating/scaling, and `StarvationCoefficient` as registered in Appendix C; `FoodStorageAlgorithm`
 still owns the deficit fraction. No starvation clock, eligibility flag, or extra save field is introduced.
-After release, changes require the affected version update and explicit migration; no new
-algorithm identifier is introduced in this unreleased design.
+Changes require the affected version update and explicit migration; this rule introduces no new
+algorithm identifier of its own.
 
 Formula fixtures cover fractions `0`, `0.10`, `0.20`, `0.50`, and `1`, the ratios above,
 linear scaling with population/coefficient, both species, zero population, and invalid/non-finite
@@ -4820,9 +4831,8 @@ exactly one edge in one turn; there is no hidden multi-edge pathfinding inside `
 `MovementCostAlgorithm: "destination-vegetation-v1"` versions the six curve knots including shared
 `CanopyClosureV`, biome factors, destination-only composition, clamp, and step-length multiplication.
 `ResourceAlgorithm` also owns that shared knot for `BaselineKCurve`; changing it moves both
-identifiers. The identifier is selected now,
-while v1 is unreleased; it is the only supported movement-cost identifier, and no migration from a
-provisional identifier exists.
+identifiers. It is the only supported movement-cost identifier, and no migration from an earlier
+one exists.
 
 `MovementAlgorithm: "eight-way-escarpment-corners-v2"` versions the stable eight-direction order,
 land and water-corner tests, symmetric escarpment blocking, and four-side diagonal rule. Candidate
@@ -6948,10 +6958,13 @@ Performance is a measured release property, not an impression from one developer
 adds deterministic maximum-workload benchmarks for `World.AdvanceTurn` and frame projection; their
 workloads use 6,144 tiles and 256 bands and report `ns/op`, bytes, and allocations. The same process
 runs a fixed pure-Go calibration benchmark with no game imports. `tools/check_benchmarks.sh` takes five
-samples, compares the median target/calibration time ratio plus bytes/op to the checked-in step-8
-baselines, and records the raw measurements for diagnosis. On the pinned Go toolchain and runner
-image, a greater-than-25% normalized-time regression or bytes/op increase fails the release lane
-unless the baseline change is reviewed together with the responsible code and this contract.
+samples of each and compares three medians per gated benchmark — its time divided by the
+calibration's median time, its bytes/op, and its allocs/op — to the absolute ceilings checked into
+`testdata/performance_baseline.json`, printing the measured values for diagnosis. The ceilings are
+the margin: each is set above the reviewed measurement on `NativeBenchmarkReference`, so no
+percentage is applied at check time. On the pinned Go toolchain and runner image, any median above
+its ceiling fails `release-readiness`, and raising a ceiling is reviewed together with the
+responsible code and this contract.
 Unnormalized wall-clock time remains telemetry, avoiding a gate that mistakes GitHub-host hardware
 variation for a game regression.
 
@@ -7935,11 +7948,10 @@ both reports' full value shapes and §7 validity/turn/accounting invariants on e
 including canonical unavailable reports at new game or after a split. A valid food report's
 requirement is historical, so do not validate it against current population or storage capacity.
 Both reports round-trip unchanged in planning, completed-turn, and terminal saves on both backends;
-no UI-local cache or metadata record substitutes for either. They are included in this
-still-unreleased schema v1; the decoder maps an absent `LastOutcomeReport` from an earlier
-development save only to its canonical unavailable zero value and never fabricates causes or
-endpoints. After release, wire changes require a schema-version update and explicit supported
-migration. A migration lacking historical actuals may explicitly produce the applicable canonical
+no UI-local cache or metadata record substitutes for either. Both are part of every supported
+schema: the frozen schema-1 oldest-supported-save fixture already carries them, so no
+compatibility path has to invent a missing one. Wire changes require a schema-version update and
+an explicit supported migration. A migration lacking historical actuals may explicitly produce the applicable canonical
 unavailable report, never fabricated zero-shortfall or zero-loss actuals. Absent or malformed data
 without such a supported migration is rejected; loading does not infer missing history from current
 state.
@@ -8537,8 +8549,8 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    two features, not one: the gap between its massifs is the Colchis corridor that §6's dispersal
    corridor invariant requires, so `TestCaucasusPassCarriesTheEasternCorridor` belongs to this
    step's fixtures too. For moisture, implement
-   the 64-entry `ZonalMoisture` table under the same bit-pattern, tolerance-assertion, and checksum
-   discipline as `LatitudeSinSquared`, plus river, continentality, and orographic terms. Assert a
+   §6's piecewise-linear `ZonalMoisture` profile plus river, continentality, and orographic terms,
+   and check in the 6,144-value `BaseMoisture` checksum that freezes their combined result. Assert a
    finite `BaseMoisture` in `[0, 1]` for all 6,144 tiles, a profile symmetric in absolute latitude,
    both zonal minima falling within the Saharan/Arabian and Kalahari latitude bands and the maximum
    within the equatorial band, that river-corridor tiles suppress continentality along their length, and that
@@ -8884,8 +8896,10 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    the exact field-name set with the table and rejects a missing, extra, or duplicate case. The shared
    suite proves that every current identifier round-trips, every unsupported identifier is rejected
    without replacing the running world, and every **declared** older identifier follows its explicit
-   migration and reconstruction case. All older-identifier lists are empty while v1 remains
-   unreleased; the suite must not invent a migration from a provisional identifier. A separate
+   migration and reconstruction case. All older-identifier lists are currently empty, because every
+   superseded identifier has been declared unsupported (§2, Standing conventions); the suite must
+   not invent a migration no build declares, and a superseded identifier belongs in the unsupported
+   case. A separate
    `SchemaVersion` case rejects a schema newer than the executable without conflating ordered schema
    versions with opaque supported-or-unsupported algorithm strings.
 
@@ -8930,8 +8944,8 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    completed-turn, and terminal saves on both backends. Reject wrong-turn, non-finite, negative, and
    over-required food records, unavailable records carrying nonzero fields, mismatched outcome
    endpoints, and invalid signed or loss components, without mutating the running world, replaying a
-   meal, or rerunning demographics. The explicit unreleased-development compatibility fixture maps a
-   missing outcome report to unavailable; no other missing history is invented. A failed load
+   meal, or rerunning demographics. The schema-1 oldest-supported-save fixture already carries both
+   reports, so no compatibility path invents missing history. A failed load
    preserves the current reports while a successful one replaces them with that world's. The
    exploration bitset round-trips exactly, including discoveries no longer near any band, and rejects
    a wrong-length mask or missing required initial and current-frontier bits; save and load must
@@ -8975,8 +8989,8 @@ stock-unit and conversion values are already selected; step 5 implements and ver
    Screenshot fixtures inject `1×` or `2×` explicitly and record both logical and render dimensions.
    Finish the step by adding the maximum-workload `World.AdvanceTurn` and frame-projection
    benchmarks plus calibration benchmark named in §8, running them repeatedly on
-   `NativeBenchmarkReference` (`ubuntu-24.04`, `linux/amd64`), and checking the reviewed normalized
-   medians plus allocation counts into
+   `NativeBenchmarkReference` (`ubuntu-24.04`, `linux/amd64`), and checking reviewed ceilings for
+   the normalized time, bytes/op, and allocs/op medians into
    `testdata/performance_baseline.json`. The baseline
    is recorded only after the benchmark workloads themselves are reviewed for exactly 6,144 tiles,
    256 bands, deterministic inputs, and complete turn/projection work; a fast benchmark that silently
@@ -9299,9 +9313,12 @@ stock-unit and conversion values are already selected; step 5 implements and ver
     suite are green from a clean checkout. Add the final `release-readiness` CI job: it reruns the
     `linux/amd64` reference campaign on `NativeBenchmarkReference`, all five route policies, the
     checked-in native benchmark
-    regression comparison, the optimized browser smoke, the compressed-size gate, and a manifest
+    regression comparison, the optimized browser smoke, and a manifest
     check that no Appendix C configuration data row has status **Open** (the status legend and prose
-    necessarily contain the word). It depends on the native matrix and `web-release`.
+    necessarily contain the word). It depends on the native matrix and `web-release`. It does not
+    rerun the compressed-size gate: `web-release` runs that gate before uploading the bundle this job
+    downloads, so a second Brotli pass over identical bytes against the same budget could only agree,
+    at a cost of minutes.
     It also depends on the successful `cross-target-determinism` checkpoint comparison.
     A failure in any prerequisite or readiness check must leave publication jobs unstarted.
 
@@ -10037,7 +10054,7 @@ Earlier fixtures use explicit values that are never release data.
 | Latitude span                               | `72°N` at `y=0` to `48°S` at `y=63`                                            | Locked  | `GeographyAlgorithm`          |
 | `PolygonCoordinateScale`                    | `10` signed integer units per degree                                             | Locked  | `GeographyAlgorithm` + `MacroEventAlgorithm` |
 | Land/water/region/highland/river catalogs   | §6 exact coordinate tables and raster rules; checked-in independent checksums     | Locked  | `GeographyAlgorithm`          |
-| `ZonalMoisture` table                       | `64` checked-in exact values from §6's eight anchors                           | Step 3  | `GeographyAlgorithm`          |
+| `ZonalMoisture` profile                     | §6's eight anchors, piecewise-linear; frozen by the `BaseMoisture` checksum    | Step 3  | `GeographyAlgorithm`          |
 | `RiverCorridorBonus` / `RiverAdjacentBonus` | `0.35` / `0.20`                                                                | Initial | `GeographyAlgorithm`          |
 | `ContinentalityMax` / `ContinentalityRange` | `0.20` / `8` tiles                                                             | Initial | `GeographyAlgorithm`          |
 | `OrographicBonus`                           | `0.10`                                                                         | Initial | `GeographyAlgorithm`          |
@@ -10301,7 +10318,7 @@ one that may rise on demand is a number that records whatever the build happens 
 | `CompressedWasmHeadroom`                   | `500_000` bytes above the step-11 measured release build       | Policy (tighten only: smaller headroom)         | §10   |
 | Automated browser ready timeout            | `10` seconds on the optimized loopback-served bundle           | Policy                                          | §8/§10 |
 | Automated browser scripted checkpoint timeout | `5` seconds each                                             | Policy                                          | §8/§10 |
-| Native benchmark regression gate           | no more than `25%` normalized-time regression or bytes/op increase from reviewed calibrated baseline | Policy              | §8/§13 |
+| Native benchmark regression gate           | five-sample medians of normalized time, bytes/op, and allocs/op at or below the reviewed ceilings in `testdata/performance_baseline.json` | Policy              | §8/§13 |
 | `NativeBenchmarkReference`                 | GitHub-hosted `ubuntu-24.04`, `linux/amd64`; record reported image version | Policy                                  | §8/§13 |
 | `ReferenceSeed`                            | `0x9e3779b97f4a7c15`                                          | Locked                                          | §7/§13 |
 | `BalanceSeedCorpus`                        | `{0, 1, 2, 3, 0x9e3779b97f4a7c15, 0xd1b54a32d192ed03, 0x94d049bb133111eb, 0xffffffffffffffff}` | Locked | §7/§12 |
