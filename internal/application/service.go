@@ -221,6 +221,16 @@ func (service *GameService) PollStorage() []gameapi.StorageResult {
 	return results
 }
 
+// storageErrorCode names a save another build wrote as incompatible, whether
+// the adapter's strict decode or RestoreWorld rejected it; anything else
+// keeps the caller's code.
+func storageErrorCode(err error, otherwise gameapi.ErrorCode) gameapi.ErrorCode {
+	if errors.Is(err, errIncompatibleSave) {
+		return gameapi.ErrIncompatibleSave
+	}
+	return otherwise
+}
+
 func (service *GameService) acceptStorageCompletion(completion RepositoryCompletion) {
 	request := service.activeStorage
 	if request == nil || RepositoryOpID(request.id) != completion.OperationID {
@@ -239,12 +249,12 @@ func (service *GameService) acceptStorageCompletion(completion RepositoryComplet
 		service.observeAutosaveMetadata(*completion.Metadata)
 	}
 	if completion.Err != nil {
-		result.Err = &gameapi.GameError{Code: gameapi.ErrStorageFailure, Message: completion.Err.Error()}
+		result.Err = &gameapi.GameError{Code: storageErrorCode(completion.Err, gameapi.ErrStorageFailure), Message: completion.Err.Error()}
 	} else if request.operation == gameapi.StorageLoad {
 		if completion.State == nil {
 			result.Err = &gameapi.GameError{Code: gameapi.ErrInvalidSave, Message: "repository returned no save state"}
 		} else if world, err := completion.State.RestoreWorld(); err != nil {
-			result.Err = &gameapi.GameError{Code: gameapi.ErrInvalidSave, Message: err.Error()}
+			result.Err = &gameapi.GameError{Code: storageErrorCode(err, gameapi.ErrInvalidSave), Message: err.Error()}
 		} else {
 			service.world = world
 			service.worldRevision = completion.State.WorldRevision
