@@ -288,17 +288,139 @@ func TestFrameShapesAndAgreementAtMaximumWorkload(t *testing.T) {
 		if tile.Explored != world.IsExplored(domain.TileID(id)) {
 			t.Fatalf("tile %d explored %t, world %t", id, tile.Explored, world.IsExplored(domain.TileID(id)))
 		}
-		if geography.Land && len(tile.Fauna.Weights) != int(gameapi.FaunaGroupCount) {
-			t.Fatalf("tile %d has %d fauna weights", id, len(tile.Fauna.Weights))
+		if !geography.Land {
+			continue
+		}
+		// The summary must be the domain's regional profile, field for field.
+		habitat := world.Habitat()[id]
+		profile, ok := domain.FaunaFor(geography.Region, habitat.Biome, habitat.BaselineK > 0)
+		if !ok {
+			t.Fatalf("tile %d has no fauna profile", id)
+		}
+		want := gameapi.FaunaSummary{HuntingSupported: profile.HuntingSupported, MegafaunaSupported: profile.MegafaunaSupported}
+		for group := domain.FaunaGroup(0); group < domain.FaunaGroupCount; group++ {
+			want.Weights[mapFaunaGroup(group)] = profile.Weights[group]
+		}
+		if tile.Fauna != want {
+			t.Fatalf("tile %d fauna %+v, domain profile %+v", id, tile.Fauna, want)
 		}
 	}
+	// Each passage status is the domain predicate's verdict, coarsened: open
+	// only when available, unavailable when the band is elsewhere or the far
+	// side cannot hold it, locked for every spent-action, Beringia, or
+	// navigation reason.
 	for index, band := range world.Bands() {
 		projected := frame.Bands[index]
 		if projected.ID != gameapi.BandID(band.ID) {
 			t.Fatalf("frame band %d is %d, world band is %d", index, projected.ID, band.ID)
 		}
+		for passage := domain.PassageID(0); passage < domain.PassageCount; passage++ {
+			reason := world.PassageStatus(band.ID, passage)
+			want := gameapi.PassageLocked
+			switch reason {
+			case domain.PassageAvailable:
+				want = gameapi.PassageOpen
+			case domain.PassageNotAtEndpoint, domain.PassageDestinationUninhabitable:
+				want = gameapi.PassageUnavailable
+			}
+			if got := projected.PassageStatuses[passage]; got != want {
+				t.Fatalf("band %d passage %d status %v, domain reason %v wants %v", band.ID, passage, got, reason, want)
+			}
+		}
 		if projected.LastFoodReport.Turn != band.LastFoodReport.Turn || projected.LastFoodReport.RequiredFU != float64(band.LastFoodReport.RequiredFU) {
 			t.Fatalf("band %d food report %+v, domain %+v", band.ID, projected.LastFoodReport, band.LastFoodReport)
+		}
+	}
+}
+
+// Step 6's passage-status agreement, branch by branch. The 256-band fixture has
+// no band on a passage endpoint, so it only ever reaches "not at endpoint".
+// Here a band is placed on each endpoint of each passage, with and without
+// Coastal Navigation and a spent spatial action. The fixture's turn 300 has
+// Beringia open; a new campaign's turn 0 has it closed. Every reason the
+// domain predicate can give must turn up and project correctly.
+func TestPassageStatusesMatchTheDomainPredicateForEveryReason(t *testing.T) {
+	payload, err := os.ReadFile("../../testdata/performance_profile_save.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	late, err := DecodeSaveState(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh, _ := NewGameService(1)
+	early, err := fresh.ExportSaveState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reasons := map[domain.PassageAvailability]int{}
+	beringia := map[bool]bool{}
+	for _, base := range []SaveState{late, early} {
+		climate, err := domain.ClimateAt(base.WorldSeed, base.Turn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		beringia[domain.BeringiaOpen(climate.LongTermTempOffset)] = true
+		coastal := uint16(1) << domain.CoastalNavigation
+		withTech, withoutTech := -1, -1
+		for index, band := range base.Bands {
+			if band.AcquiredTech&coastal != 0 && withTech < 0 {
+				withTech = index
+			}
+			if band.AcquiredTech&coastal == 0 && withoutTech < 0 {
+				withoutTech = index
+			}
+		}
+		for _, index := range []int{withTech, withoutTech} {
+			if index < 0 {
+				continue
+			}
+			for _, passage := range domain.Passages() {
+				for _, endpoint := range []domain.TileID{passage.From, passage.To} {
+					for _, spent := range []bool{false, true} {
+						state := base
+						state.Bands = append([]BandSave(nil), base.Bands...)
+						state.Bands[index].TileID = uint16(endpoint)
+						state.Bands[index].SpatialActionUsed = spent
+						world, err := state.RestoreWorld()
+						if err != nil {
+							t.Fatalf("turn %d passage %d endpoint %d: %v", state.Turn, passage.ID, endpoint, err)
+						}
+						service, _ := NewGameService(1)
+						service.world = world
+						frame, err := service.Snapshot()
+						if err != nil {
+							t.Fatal(err)
+						}
+						for checked := domain.PassageID(0); checked < domain.PassageCount; checked++ {
+							reason := world.PassageStatus(world.Bands()[index].ID, checked)
+							reasons[reason]++
+							want := gameapi.PassageLocked
+							switch reason {
+							case domain.PassageAvailable:
+								want = gameapi.PassageOpen
+							case domain.PassageNotAtEndpoint, domain.PassageDestinationUninhabitable:
+								want = gameapi.PassageUnavailable
+							}
+							if got := frame.Bands[index].PassageStatuses[checked]; got != want {
+								t.Fatalf("turn %d at endpoint %d of passage %d: passage %d status %v, domain reason %v wants %v",
+									state.Turn, endpoint, passage.ID, checked, got, reason, want)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	t.Logf("Beringia states %v, reasons %v", beringia, reasons)
+	if len(beringia) != 2 {
+		t.Errorf("fixtures cover Beringia states %v, want open and closed", beringia)
+	}
+	// Every endpoint's far side is habitable on all 400 turns of the
+	// fixture's seed, so "destination uninhabitable" cannot be staged here.
+	for reason := domain.PassageNotAtEndpoint; reason <= domain.PassageAvailable; reason++ {
+		if reasons[reason] == 0 && reason != domain.PassageDestinationUninhabitable {
+			t.Errorf("no placement produced domain reason %v", reason)
 		}
 	}
 }
