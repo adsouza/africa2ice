@@ -25,9 +25,15 @@ func missingPrerequisites(option gameapi.ResearchOption, acquired uint16) string
 
 // buildResearchBody lists the nine technologies (spec §4.2); available ones
 // are buttons, the rest explain their state.
+const (
+	researchBaselineNote = "Fire, stone tools, and foraging need no research."
+	researchCostNote     = "Costs are research effort, not historical dates."
+)
+
 func (p *Panel) buildResearchBody(state State, band *gameapi.Band) widget.PreferredSizeLocateableWidget {
 	t := p.theme
 	body := t.column(3, t.insets(6, 24, 10, 8), t.solid(colorRowOpen), stretch())
+	p.handles.researchBody = body
 	for technology := gameapi.Tech(0); technology < gameapi.TechCount; technology++ {
 		option := band.ResearchOptions[technology]
 		progress := fmt.Sprintf("%.0f/%.0f", band.ResearchProgress[technology], option.Cost)
@@ -69,6 +75,10 @@ func (p *Panel) buildResearchBody(state State, band *gameapi.Band) widget.Prefer
 		p.handles.research[technology] = button
 		body.AddChild(button)
 	}
+	// Step 9: the tree is an improvement layer, not a gate on survival, and
+	// its costs are research effort rather than archaeological dates.
+	body.AddChild(t.label(researchBaselineNote, 8.5, colorDim))
+	body.AddChild(t.label(researchCostNote, 8.5, colorDim))
 	body.AddChild(t.label("Up/Down highlight · Enter chooses · keys 1–9", 8.5, colorDim))
 	return body
 }

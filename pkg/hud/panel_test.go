@@ -2239,3 +2239,41 @@ func TestMoveGridRebuildsWhenTheEruptionRowAppears(t *testing.T) {
 		t.Fatalf("eruption target value = %q", got)
 	}
 }
+
+// DESIGN.md step 9: the research panel explains that baseline survival needs
+// no DAG acquisition and that its costs are not historical dates. Both notes
+// must be on screen and fit the panel column without clipping.
+func TestResearchPanelExplainsBaselineActionsAndCosts(t *testing.T) {
+	for _, scale := range []float64{1, 2} {
+		frame := testFrame(1)
+		panel := New()
+		state := testState(frame, scale)
+		state.OpenRow = ui.RowResearch
+		panel.Update(state)
+		screen := ebiten.NewImage(int(1280*scale), int(720*scale))
+		panel.Draw(screen)
+		screen.Deallocate()
+
+		if panel.handles.researchBody == nil {
+			t.Fatalf("scale %.0f: research body handle missing", scale)
+		}
+		rightEdge := image.Rectangle(panel.rect(panelX, panelY, panelWidth, panelHeight)).Max.X
+		found := map[string]*widget.Text{}
+		walkDescendants(panel.handles.researchBody, func(w widget.PreferredSizeLocateableWidget) {
+			if text, ok := w.(*widget.Text); ok && (text.Label == researchBaselineNote || text.Label == researchCostNote) {
+				found[text.Label] = text
+			}
+		})
+		for _, note := range []string{researchBaselineNote, researchCostNote} {
+			text, ok := found[note]
+			if !ok {
+				t.Fatalf("scale %.0f: research panel lacks %q", scale, note)
+			}
+			// The label's own rect is sized from its preferred width, so the
+			// check is against the panel edge, not the label's slot.
+			if got := text.GetWidget().Rect.Max.X; got > rightEdge {
+				t.Errorf("scale %.0f: %q ends at %d, past the panel edge %d", scale, note, got, rightEdge)
+			}
+		}
+	}
+}

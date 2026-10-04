@@ -1,6 +1,9 @@
 package domain
 
-import "math"
+import (
+	"fmt"
+	"math"
+)
 
 //go:generate go run ../../tools/generate_climate_tables -output climate_tables_generated.go
 
@@ -23,6 +26,7 @@ const (
 	HumidOptimum ClimateEpoch = iota
 	AridTransition
 	GlacialMaximum
+	ClimateEpochCount
 )
 
 type ClimateState struct {
@@ -121,6 +125,31 @@ func EffectiveMoisture(base float64, region Region, climate ClimateState) float6
 func BeringiaOpen(longTermTempOffset float64) bool {
 	threshold := -float64(BeringiaOpenFraction * LGMCooling)
 	return longTermTempOffset <= threshold
+}
+
+// ValidateEpochThresholds checks the epoch classifier's threshold table. Both
+// thresholds must be finite, the hysteresis positive, and the four trip
+// points strictly ordered inside (0, 1). The strict upper bound is the point:
+// x is clamped to [0, 1], so at upper + hysteresis == 1 the GlacialMaximum
+// trip point is reachable only at exactly x = 1. That is technically
+// reachable, but leaves no entry headroom, so it is rejected.
+func ValidateEpochThresholds(lower, upper, hysteresis float64) error {
+	for _, value := range []float64{lower, upper, hysteresis} {
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return fmt.Errorf("%w: epoch threshold is not finite", ErrInvalidValue)
+		}
+	}
+	switch {
+	case hysteresis <= 0:
+		return fmt.Errorf("%w: epoch hysteresis %v must be positive", ErrInvalidValue, hysteresis)
+	case lower-hysteresis <= 0:
+		return fmt.Errorf("%w: lower epoch exit %v leaves no headroom above 0", ErrInvalidValue, lower-hysteresis)
+	case lower+hysteresis >= upper-hysteresis:
+		return fmt.Errorf("%w: epoch hysteresis bands overlap", ErrInvalidValue)
+	case upper+hysteresis >= 1:
+		return fmt.Errorf("%w: upper epoch entry %v leaves no headroom below 1", ErrInvalidValue, upper+hysteresis)
+	}
+	return nil
 }
 
 func ClimateEpochForTurn(turn int) ClimateEpoch {

@@ -23,6 +23,11 @@ func canonicalGrid() (*Grid, error) {
 		if err := ValidatePassages(canonicalGridValue); err != nil {
 			canonicalGridValue = nil
 			canonicalGridErr = fmt.Errorf("%w: passage catalog", err)
+			return
+		}
+		if err := ValidateEpochThresholds(EpochLowerThreshold, EpochUpperThreshold, EpochHysteresis); err != nil {
+			canonicalGridValue = nil
+			canonicalGridErr = err
 		}
 	})
 	return canonicalGridValue, canonicalGridErr

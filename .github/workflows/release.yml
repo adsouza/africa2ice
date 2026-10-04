@@ -201,7 +201,9 @@ jobs:
           done
 
   publish:
-    needs: [build-native, cross-target-determinism]
+    # verify is listed so its artifact can be attached; the condition below
+    # still lets a skip_verify dry run package without it.
+    needs: [verify, build-native, cross-target-determinism]
     if: ${{ !cancelled() && needs.build-native.result == 'success'
       && (needs.cross-target-determinism.result == 'success'
       || needs.cross-target-determinism.result == 'skipped') }}
@@ -215,6 +217,15 @@ jobs:
           pattern: native-*
           path: release
           merge-multiple: true
+      # The release record is the durable statement of what was verified for
+      # this tag. As a workflow artifact alone it expired with the run's
+      # retention window, so it is attached to the release beside the archives.
+      - name: Download the verified release record
+        if: needs.verify.result == 'success'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-verification
+          path: verification
       - name: Verify archive manifests and create checksums
         shell: bash
         run: |
@@ -234,7 +245,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          # The record names performance-profile.json by SHA-256, so the
+          # profile ships with it. Neither is a download, so SHA256SUMS, which
+          # covers the archives, does not list them.
+          test -s verification/release-record.txt
+          test -s verification/performance-profile.json
           gh release create "$GITHUB_REF_NAME" release/* \
+            verification/release-record.txt verification/performance-profile.json \
             --verify-tag \
             --title "Africa 2 Ice $GITHUB_REF_NAME" \
             --notes "Unsigned portable v1 archives. Verify SHA256SUMS before using your operating system's one-time unrecognized-developer override."

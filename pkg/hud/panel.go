@@ -96,7 +96,9 @@ type handles struct {
 	panelMiddle   *widget.ScrollContainer
 	bandDetail    *widget.Text
 	detailsBody   *widget.Container
-	traits        map[gameapi.HeritableTrait]*widget.Button
+	// researchBody is the open Research row's column, nil while it is closed.
+	researchBody *widget.Container
+	traits       map[gameapi.HeritableTrait]*widget.Button
 	// traitFocused is the trait cell matching state.Note.Trait when
 	// state.Note.HasTrait is true, or nil when the drawer shows no trait
 	// note (or details are collapsed). buildDetails sets it directly rather
