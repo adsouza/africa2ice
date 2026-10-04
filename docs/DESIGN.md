@@ -8260,6 +8260,8 @@ state, operation FIFO ordering, and deletion interrupted between tombstone publi
   already reported.
 - **Release CI is cross-platform and ordered.** `.github/workflows/ci.yml` runs for pull requests and
   pushes to `main`. Its native matrix runs `golangci-lint config verify` and `golangci-lint run`
+  (the Ubuntu job runs `golangci-lint run` a second time with `GOOS=js GOARCH=wasm`, so `js`-tagged
+  source is linted too)
   before `go vet`, `go test`, and the native desktop build on named runner images `ubuntu-24.04`
   (`amd64`), `macos-15` (`arm64`), and `windows-2025` (`amd64`), asserting `go env GOARCH` before
   tests and using platform-appropriate shell syntax; the Ubuntu job installs Ebitengine's required
@@ -9364,7 +9366,7 @@ These checks require no display and no sound device, and cover both targets and 
 build-tag-independent architecture gate:
 
 ```bash
-golangci-lint config verify && golangci-lint run && go vet ./... && go test ./... && go build ./... && GOOS=js GOARCH=wasm go build -o /dev/null .
+golangci-lint config verify && golangci-lint run && GOOS=js GOARCH=wasm golangci-lint run && go vet ./... && go test ./... && go build ./... && GOOS=js GOARCH=wasm go build -o /dev/null .
 ```
 
 `config verify` catches a typo'd depguard rule that would otherwise silently enforce nothing.
