@@ -410,3 +410,45 @@ func TestEruptionRowShowsWarnedImpactAndSafetyFactor(t *testing.T) {
 		t.Fatalf("unreachable warned target = %q, want the impact without a safety factor", unreachable.Target)
 	}
 }
+
+func TestEruptionRowSurvivesUninhabitableExploredLand(t *testing.T) {
+	for _, warned := range []bool{true, false} {
+		frame := liveabilityFrame()
+		band := &frame.Bands[0]
+		band.MigrationCandidates = nil
+		frame.Tiles[1].BaselineK = 0
+		frame.Tiles[1].VisibleMacroImpact = gameapi.MacroImpactSummary{Visible: true, Warned: warned, Intensity: 0.55}
+		want := "55% now"
+		if warned {
+			want = "55% next"
+		}
+		here := CurrentTileLiveability(frame, band)
+		target := TargetTileLiveability(frame, band, 1)
+		if target.Available || target.Reachable || target.HasSafetyFactor {
+			t.Fatalf("uninhabitable target gained movement affordances: %+v", target)
+		}
+		rows := rowsByLabel(band, here, target)
+		if eruption := rows["Eruption"]; eruption.Here != "clear" || eruption.Target != want || eruption.TargetTier != TierRed || eruption.Delta != -1 || !eruption.DeltaMaterial {
+			t.Fatalf("uninhabitable target eruption = %+v", eruption)
+		}
+		if rows["Food"].Target != "—" || rows["Route"].Target != "—" {
+			t.Fatal("uninhabitable target exposed habitability metrics")
+		}
+
+		// A living band can occupy land after its capacity collapses. HERE
+		// must retain the warning too, even without a target to compare.
+		band.TileID = 1
+		here = CurrentTileLiveability(frame, band)
+		if eruption := rowsByLabel(band, here, TileLiveability{})["Eruption"]; eruption.Here != want || eruption.HereTier != TierRed || eruption.Target != "—" || eruption.Delta != 0 {
+			t.Fatalf("uninhabitable current tile eruption = %+v", eruption)
+		}
+
+		// Even a stale projected impact must not expose a hidden tile.
+		frame.Tiles[1].Explored = false
+		band.TileID = 0
+		target = TargetTileLiveability(frame, band, 1)
+		if _, exists := rowsByLabel(band, CurrentTileLiveability(frame, band), target)["Eruption"]; exists {
+			t.Fatal("eruption row exposed an unexplored target")
+		}
+	}
+}

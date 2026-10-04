@@ -179,6 +179,11 @@ func summarizeTile(frame *gameapi.Frame, tileID gameapi.TileID, self *gameapi.Ba
 	}
 	summary.Biome, summary.Region = tile.Biome.String(), tile.Region.String()
 	summary.NearbyLake = tile.NearbyLake
+	if tile.Land {
+		// An explored land tile can carry an eruption warning even when its
+		// current climate cannot support a band.
+		summary.MacroImpact = tile.VisibleMacroImpact
+	}
 	switch {
 	case !tile.Land:
 		summary.Biome, summary.Region = "Open water", tile.WaterBody
@@ -193,7 +198,6 @@ func summarizeTile(frame *gameapi.Frame, tileID gameapi.TileID, self *gameapi.Ba
 	summary.WaterStock, summary.WaterCap = tile.WaterStock, tile.WaterCap
 	summary.EcologicalK, summary.BaselineK, summary.Degradation = tile.EcologicalK, tile.BaselineK, tile.Degradation
 	summary.NaturalShelter, summary.MovementCost = tile.NaturalShelter, tile.MovementCost
-	summary.MacroImpact = tile.VisibleMacroImpact
 	for _, resident := range frame.Bands {
 		if resident.TileID != tileID || resident.Population == 0 || (self != nil && resident.ID == self.ID) {
 			continue
@@ -396,9 +400,33 @@ func LiveabilityRows(band *gameapi.Band, here, target TileLiveability) []Liveabi
 	// for a reachable target, the safety factor that multiplies its
 	// attraction: a warned destination ranks lower but stays a legal move.
 	if here.MacroImpact.Visible || target.MacroImpact.Visible {
-		rows = append(rows, row("Eruption", eruptionValue, eruptionTier, false, func(s TileLiveability) float64 { return s.MacroImpact.Intensity }))
+		rows = append(rows, eruptionRow(here, target))
 	}
 	return rows
+}
+
+// Eruption information remains visible on affected land even if its capacity
+// is zero. Other unavailable tiles keep an em dash, including hidden targets.
+func eruptionRow(here, target TileLiveability) LiveabilityRow {
+	result := LiveabilityRow{Label: "Eruption", Here: "—", Target: "—"}
+	hereKnown := here.Available || here.MacroImpact.Visible
+	targetKnown := target.Available || target.MacroImpact.Visible
+	if hereKnown {
+		result.Here, result.HereTier = eruptionValue(here), eruptionTier(here)
+	}
+	if targetKnown {
+		result.Target, result.TargetTier = eruptionValue(target), eruptionTier(target)
+	}
+	if hereKnown && targetKnown && result.Here != result.Target {
+		switch {
+		case target.MacroImpact.Intensity < here.MacroImpact.Intensity:
+			result.Delta = 1
+		case target.MacroImpact.Intensity > here.MacroImpact.Intensity:
+			result.Delta = -1
+		}
+		result.DeltaMaterial = result.Delta != 0 && (result.HereTier != TierNormal || result.TargetTier != TierNormal)
+	}
+	return result
 }
 
 func eruptionValue(s TileLiveability) string {
