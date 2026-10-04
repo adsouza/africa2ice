@@ -415,12 +415,12 @@ func (repository *IndexedDBRepository) read(slot application.SlotID) (*applicati
 	metadataSuccess = repository.funcOf(func(this js.Value, args []js.Value) any {
 		value := metadataRequest.Get("result")
 		if value.IsUndefined() {
-			result <- errors.New("save slot not found")
+			result <- errSlotEmpty
 			return nil
 		}
 		if err := json.Unmarshal([]byte(value.String()), &metadata); err != nil || metadata.Deleted {
 			if err == nil {
-				err = errors.New("save slot deleted")
+				err = errSlotEmpty
 			}
 			result <- err
 			return nil

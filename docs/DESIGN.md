@@ -8030,8 +8030,9 @@ all live-only fields—including generation and hash—must be absent; a tombsto
 record. The lowercase hex
 SHA-256 is also the generation identifier; this makes the world object immutable and content-
 addressed without drawing from the simulation RNG. If more than one valid desktop metadata record
-survives recovery for a slot, the greatest sequence wins, with metadata-file hash as a deterministic
-tie-breaker. The desktop lock-holding process computes the next sequence under its writer mutex as
+survives recovery for a slot, the greatest sequence wins. Two records cannot share a sequence: the
+sequence is the record's filename and only the lease holder issues sequences, so no tie-breaker is
+needed. The desktop lock-holding process computes the next sequence under its writer mutex as
 `max(all valid slot metadata and tombstones) + 1`. IndexedDB reads and increments one global counter
 inside the same transaction that commits the generation and slot record. A failed transaction does
 not consume a sequence. Sequence overflow fails the operation without mutation. Because sequences
@@ -8101,12 +8102,16 @@ Backends implement those same semantics:
 
 - **Desktop** (`//go:build !js`):
   `os.UserConfigDir()/africa2ice/saves/slot_N_world_<sha256>.json` plus generation-addressed
-  `slot_N_meta_<sequence>_<metadata-sha256>.json`. Each new record is written to a unique temporary
-  file in the same directory and flushed with `File.Sync`. If the content-addressed world filename
+  `slot_N_meta_<sequence>.json`, with the sequence zero-padded to 20 digits. Each new record is
+  written to a unique temporary file (`.africa2ice-*.tmp`) in the same directory and flushed with
+  `File.Sync`. If the content-addressed world filename
   already exists, validate its exact bytes/hash, discard the duplicate temporary file, and reuse the
   immutable object; a mismatch is corruption and fails the save. Otherwise close and rename the
   world temp to that name. Metadata/tombstone final names are previously unused because their commit
-  sequence is new. Sync the directory where the platform supports it. Recovery scans the small
+  sequence is new. After each rename, sync the directory where the platform supports it (Unix; a
+  Windows directory handle cannot be flushed through the `os` package), so the record's name is as
+  durable as its bytes. Recovery never reads temporary files; the lease holder removes any it finds
+  at startup, since they can only be left by an interrupted write. Recovery scans the small
   metadata records and selects the highest valid commit rather than depending on replacement-rename
   atomicity, which is not portable across every desktop OS. A torn or incomplete new record fails
   validation and leaves the prior commit reachable. The asynchronous facade runs file I/O on one
@@ -8159,9 +8164,13 @@ The world/metadata split still lets the save browser preview all seven slots wit
 data. Generation addressing plus backend atomicity prevents an overwrite from producing a
 new-world/old-metadata pair. Failure-injection tests stop after every file-protocol step and every
 IndexedDB request/transaction event; after each failure, a slot must resolve to the complete old
-save, the complete new save, or a committed deletion—never a mixture. The IndexedDB fake covers
-request error, transaction abort, quota failure, `blocked`, `versionchange`, and completion arriving
-on a later game update. Shared tests cover missing world data, truncated/newer metadata, sequence
+save, the complete new save, or a committed deletion—never a mixture. The desktop sweep crashes a
+`fileSystem` seam at every step, with and without a torn half-write, and restarts on a healthy
+disk. The browser sweep runs against real IndexedDB in Chromium rather than a hand-written fake: a
+shim on `IDBObjectStore.prototype` aborts the k-th request's transaction in a microtask, which is
+how a request error or quota failure reaches the adapter, and an aborted save must not consume a
+sequence. `blocked`, `versionchange`, and completion arriving on a later game update are not yet
+covered by an injected-failure test. Shared tests cover missing world data, truncated/newer metadata, sequence
 ties/overflow, global-counter rollback, checksum mismatch, unknown versions, migration, invalid RNG
 state, operation FIFO ordering, and deletion interrupted between tombstone publication and cleanup.
 
