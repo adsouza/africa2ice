@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 
+	"github.com/adsouza/africa2ice/internal/adapters/storage"
 	gameaudio "github.com/adsouza/africa2ice/pkg/audio"
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/adsouza/africa2ice/pkg/ui"
@@ -16,6 +17,12 @@ const (
 )
 
 var storageBrowserSlots = [...]int{1, 2, 3, 99, 101, 102, 103}
+
+const (
+	storageUpgradeBlockedNotice = "Saving is paused: close or reload other game tabs"
+	storageReloadRequiredNotice = "Saved games changed in another tab; reload this page to keep saving"
+	storageAvailableAgainNotice = "Saving is available again"
+)
 
 func (g *Game) beginQuickSave() {
 	g.dispatchBatch([]ui.Action{ui.SaveAction(99)})
@@ -146,6 +153,31 @@ func (g *Game) pollStorage() {
 		}
 		if effect.notice != "" {
 			g.queueToast(effect.notice, effect.failed)
+		}
+	}
+}
+
+// pollStorageAvailability tells the player when another tab blocks or takes
+// away the browser save store, and when a blocked store recovers. Operations
+// fail in the meantime; this is the only notice that says why.
+func (g *Game) pollStorageAvailability() {
+	if g.storageAvailability == nil {
+		return
+	}
+	current := g.storageAvailability()
+	if current == g.lastStorageAvailability {
+		return
+	}
+	previous := g.lastStorageAvailability
+	g.lastStorageAvailability = current
+	switch current {
+	case storage.AvailabilityUpgradeBlocked:
+		g.queueToast(storageUpgradeBlockedNotice, true)
+	case storage.AvailabilityReloadRequired:
+		g.queueToast(storageReloadRequiredNotice, true)
+	case storage.AvailabilityReady:
+		if previous == storage.AvailabilityUpgradeBlocked {
+			g.queueToast(storageAvailableAgainNotice, false)
 		}
 	}
 }

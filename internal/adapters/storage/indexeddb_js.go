@@ -17,7 +17,15 @@ import (
 	"github.com/adsouza/africa2ice/internal/application"
 )
 
-const indexedDBName = "africa2ice"
+const (
+	indexedDBName    = "africa2ice"
+	indexedDBVersion = 1
+)
+
+var (
+	errUpgradeBlocked = errors.New("saved games are unavailable until other africa2ice tabs close or reload")
+	errReloadRequired = errors.New("saved games changed in another tab; reload to keep saving")
+)
 
 type indexedRequest struct {
 	op    application.RepositoryOpID
@@ -27,16 +35,20 @@ type indexedRequest struct {
 }
 
 type IndexedDBRepository struct {
-	db          js.Value
-	openErr     error
-	writable    bool
-	canCollect  bool
-	lockRelease js.Value
-	ready       chan struct{}
-	requests    chan indexedRequest
-	completions chan application.RepositoryCompletion
-	done        chan struct{}
-	closeOnce   sync.Once
+	// mu guards the connection state below, which a blocked upgrade's late
+	// success or a versionchange event can rewrite after open has returned.
+	mu           sync.Mutex
+	db           js.Value
+	openErr      error
+	writable     bool
+	availability Availability
+	canCollect   bool
+	lockRelease  js.Value
+	ready        chan struct{}
+	requests     chan indexedRequest
+	completions  chan application.RepositoryCompletion
+	done         chan struct{}
+	closeOnce    sync.Once
 	// panicGuard is deferred by both goroutines and, through funcOf, by every
 	// IndexedDB callback; never nil.
 	panicGuard func()
@@ -46,13 +58,74 @@ type IndexedDBRepository struct {
 // session's panic hook for the repository's goroutines and JavaScript
 // callbacks, which run where the entrypoint guard cannot see; nil means none.
 func NewIndexedDBRepository(panicGuard func()) *IndexedDBRepository {
+	return newIndexedDBRepository(panicGuard, indexedDBVersion)
+}
+
+// newIndexedDBRepository opens at a chosen database version, so a test can
+// stage the upgrade a future release will make.
+func newIndexedDBRepository(panicGuard func(), version int) *IndexedDBRepository {
 	repository := &IndexedDBRepository{ready: make(chan struct{}), requests: make(chan indexedRequest, 2), completions: make(chan application.RepositoryCompletion, 8), done: make(chan struct{}), panicGuard: orNoGuard(panicGuard)}
-	go repository.open()
+	go repository.open(version)
 	go repository.worker()
 	return repository
 }
 
-func (repository *IndexedDBRepository) open() {
+// Availability reports whether another tab is blocking this one's upgrade or
+// has taken the database away. It never blocks.
+func (repository *IndexedDBRepository) Availability() Availability {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	return repository.availability
+}
+
+// connection returns the state an operation needs, read once under the lock.
+func (repository *IndexedDBRepository) connection() (js.Value, error, bool) {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	return repository.db, repository.openErr, repository.writable
+}
+
+// transaction starts one on the current connection, or fails if versionchange
+// has closed it. An operation can yield between transactions, so each checks
+// afresh rather than trusting the check the worker made before it began.
+func (repository *IndexedDBRepository) transaction(stores any, mode string) (js.Value, error) {
+	database, openErr, _ := repository.connection()
+	if openErr != nil {
+		return js.Value{}, openErr
+	}
+	return database.Call("transaction", js.ValueOf(stores), mode), nil
+}
+
+func (repository *IndexedDBRepository) collecting() bool {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	return repository.canCollect
+}
+
+// connectionLost handles versionchange: another tab is upgrading or deleting
+// the database, and it waits until every older connection closes. This one
+// closes at once, stops writing, and hands the writer lease to whichever tab
+// asks next. Operations from then on fail rather than reach a closed database,
+// whose transaction() would throw.
+func (repository *IndexedDBRepository) connectionLost() {
+	repository.mu.Lock()
+	database, release := repository.db, repository.lockRelease
+	repository.db = js.Undefined()
+	repository.openErr = errReloadRequired
+	repository.writable = false
+	repository.canCollect = false
+	repository.availability = AvailabilityReloadRequired
+	repository.lockRelease = js.Undefined()
+	repository.mu.Unlock()
+	if !database.IsUndefined() {
+		database.Call("close")
+	}
+	if release.Type() == js.TypeFunction {
+		release.Invoke()
+	}
+}
+
+func (repository *IndexedDBRepository) open(version int) {
 	defer close(repository.ready)
 	defer repository.panicGuard()
 	if err := repository.acquireWriterLease(); err != nil {
@@ -64,10 +137,16 @@ func (repository *IndexedDBRepository) open() {
 		repository.openErr = errors.New("IndexedDB unavailable")
 		return
 	}
-	request := indexedDB.Call("open", indexedDBName, 1)
+	request := indexedDB.Call("open", indexedDBName, version)
 	result := make(chan error, 1)
-	var upgrade, success, failure js.Func
-	upgrade = repository.funcOf(func(this js.Value, args []js.Value) any {
+	var settleOnce sync.Once
+	settle := func(err error) { settleOnce.Do(func() { result <- err }) }
+	// A blocked upgrade settles open with an error so startup is not held
+	// hostage by another tab, but the request stays live and can still upgrade
+	// and succeed once that tab lets go. Its callbacks are therefore retained
+	// for the page's lifetime: releasing them here would make that late call
+	// panic on a released function.
+	upgrade := repository.funcOf(func(this js.Value, args []js.Value) any {
 		database := request.Get("result")
 		for _, name := range []string{"worlds", "metadata", "control"} {
 			if !database.Get("objectStoreNames").Call("contains", name).Bool() {
@@ -76,30 +155,53 @@ func (repository *IndexedDBRepository) open() {
 		}
 		return nil
 	})
-	success = repository.funcOf(func(this js.Value, args []js.Value) any {
-		repository.db = request.Get("result")
-		versionChange := repository.funcOf(func(this js.Value, args []js.Value) any {
-			repository.writable = false
-			repository.db.Call("close")
+	success := repository.funcOf(func(this js.Value, args []js.Value) any {
+		database := request.Get("result")
+		select {
+		case <-repository.done:
+			// Closed while blocked; nobody will use or close this connection.
+			database.Call("close")
 			return nil
-		})
-		repository.db.Set("onversionchange", versionChange)
-		result <- nil
+		default:
+		}
+		database.Set("onversionchange", repository.funcOf(func(this js.Value, args []js.Value) any {
+			repository.connectionLost()
+			return nil
+		}))
+		repository.mu.Lock()
+		repository.db = database
+		repository.openErr = nil
+		repository.availability = AvailabilityReady
+		repository.mu.Unlock()
+		settle(nil)
 		return nil
 	})
-	failure = repository.funcOf(func(this js.Value, args []js.Value) any {
-		result <- jsError(request, "open IndexedDB")
+	failure := repository.funcOf(func(this js.Value, args []js.Value) any {
+		err := jsError(request, "open IndexedDB")
+		repository.mu.Lock()
+		repository.openErr = err
+		if repository.availability == AvailabilityUpgradeBlocked {
+			// Startup already finished on the blocked error; this is final.
+			repository.openErr = errReloadRequired
+			repository.availability = AvailabilityReloadRequired
+		}
+		repository.mu.Unlock()
+		settle(err)
+		return nil
+	})
+	blocked := repository.funcOf(func(this js.Value, args []js.Value) any {
+		repository.mu.Lock()
+		repository.openErr = errUpgradeBlocked
+		repository.availability = AvailabilityUpgradeBlocked
+		repository.mu.Unlock()
+		settle(errUpgradeBlocked)
 		return nil
 	})
 	request.Set("onupgradeneeded", upgrade)
 	request.Set("onsuccess", success)
 	request.Set("onerror", failure)
-	request.Set("onblocked", failure)
-	repository.openErr = <-result
-	upgrade.Release()
-	success.Release()
-	failure.Release()
-	if repository.openErr == nil && repository.canCollect {
+	request.Set("onblocked", blocked)
+	if err := <-result; err == nil && repository.collecting() {
 		_ = repository.collectUnreferencedWorlds()
 	}
 }
@@ -191,7 +293,8 @@ func (repository *IndexedDBRepository) enqueue(request indexedRequest) error {
 func (repository *IndexedDBRepository) Writable() bool {
 	select {
 	case <-repository.ready:
-		return repository.openErr == nil && repository.writable
+		_, openErr, writable := repository.connection()
+		return openErr == nil && writable
 	default:
 		// Composition asks before the asynchronous open completes. The eventual
 		// operation still checks the authoritative capability after readiness.
@@ -215,11 +318,15 @@ func (repository *IndexedDBRepository) Close() error {
 	repository.closeOnce.Do(func() {
 		close(repository.done)
 		<-repository.ready
-		if repository.openErr == nil && !repository.db.IsUndefined() {
-			repository.db.Call("close")
+		repository.mu.Lock()
+		database, release := repository.db, repository.lockRelease
+		repository.lockRelease = js.Undefined()
+		repository.mu.Unlock()
+		if !database.IsUndefined() {
+			database.Call("close")
 		}
-		if repository.lockRelease.Type() == js.TypeFunction {
-			repository.lockRelease.Invoke()
+		if release.Type() == js.TypeFunction {
+			release.Invoke()
 		}
 	})
 	return nil
@@ -231,22 +338,21 @@ func (repository *IndexedDBRepository) worker() {
 	for {
 		select {
 		case request := <-repository.requests:
-			completion := application.RepositoryCompletion{OperationID: request.op, Operation: request.kind, SlotID: request.slot, Writable: repository.writable}
-			if repository.openErr != nil {
-				completion.Err = repository.openErr
-			} else if (request.kind == application.RepositoryWrite || request.kind == application.RepositoryDelete) && !repository.writable {
+			_, openErr, writable := repository.connection()
+			completion := application.RepositoryCompletion{OperationID: request.op, Operation: request.kind, SlotID: request.slot, Writable: writable}
+			switch {
+			case openErr != nil:
+				completion.Err = openErr
+			case (request.kind == application.RepositoryWrite || request.kind == application.RepositoryDelete) && !writable:
 				completion.Err = errors.New("repository is read-only")
-			} else {
-				switch request.kind {
-				case application.RepositoryWrite:
-					completion.Metadata, completion.Err = repository.write(request.slot, *request.state)
-				case application.RepositoryRead:
-					completion.State, completion.Metadata, completion.Err = repository.read(request.slot)
-				case application.RepositoryDelete:
-					completion.Metadata, completion.Err = repository.delete(request.slot)
-				case application.RepositoryList:
-					completion.Slots, completion.Err = repository.list()
-				}
+			case request.kind == application.RepositoryWrite:
+				completion.Metadata, completion.Err = repository.write(request.slot, *request.state)
+			case request.kind == application.RepositoryRead:
+				completion.State, completion.Metadata, completion.Err = repository.read(request.slot)
+			case request.kind == application.RepositoryDelete:
+				completion.Metadata, completion.Err = repository.delete(request.slot)
+			case request.kind == application.RepositoryList:
+				completion.Slots, completion.Err = repository.list()
 			}
 			repository.completions <- completion
 		case <-repository.done:
@@ -269,7 +375,7 @@ func (repository *IndexedDBRepository) write(slot application.SlotID, state appl
 		transaction.Call("objectStore", "metadata").Call("put", string(metadataBytes), slotKey(slot))
 		return metadata
 	})
-	if err == nil && repository.canCollect {
+	if err == nil && repository.collecting() {
 		_ = repository.collectUnreferencedWorlds()
 	}
 	return metadata, err
@@ -282,14 +388,17 @@ func (repository *IndexedDBRepository) delete(slot application.SlotID) (*applica
 		transaction.Call("objectStore", "metadata").Call("put", string(metadataBytes), slotKey(slot))
 		return metadata
 	})
-	if err == nil && repository.canCollect {
+	if err == nil && repository.collecting() {
 		_ = repository.collectUnreferencedWorlds()
 	}
 	return metadata, err
 }
 
 func (repository *IndexedDBRepository) collectUnreferencedWorlds() error {
-	transaction := repository.db.Call("transaction", js.ValueOf([]any{"worlds", "metadata"}), "readwrite")
+	transaction, err := repository.transaction([]any{"worlds", "metadata"}, "readwrite")
+	if err != nil {
+		return err
+	}
 	metadataRequest := transaction.Call("objectStore", "metadata").Call("getAll")
 	result := make(chan error, 1)
 	var finishOnce sync.Once
@@ -340,7 +449,7 @@ func (repository *IndexedDBRepository) collectUnreferencedWorlds() error {
 	metadataRequest.Set("onsuccess", metadataSuccess)
 	transaction.Set("oncomplete", complete)
 	transaction.Set("onabort", failure)
-	err := <-result
+	err = <-result
 	metadataRequest.Set("onsuccess", js.Null())
 	if worldKeysRequest.Type() == js.TypeObject {
 		worldKeysRequest.Set("onsuccess", js.Null())
@@ -355,7 +464,10 @@ func (repository *IndexedDBRepository) collectUnreferencedWorlds() error {
 }
 
 func (repository *IndexedDBRepository) commit(slot application.SlotID, prepare func(uint64, js.Value) application.SaveMetadata) (*application.SaveMetadata, error) {
-	transaction := repository.db.Call("transaction", js.ValueOf([]any{"worlds", "metadata", "control"}), "readwrite")
+	transaction, err := repository.transaction([]any{"worlds", "metadata", "control"}, "readwrite")
+	if err != nil {
+		return nil, err
+	}
 	result := make(chan error, 1)
 	var metadata application.SaveMetadata
 	var abortErr error
@@ -394,7 +506,7 @@ func (repository *IndexedDBRepository) commit(slot application.SlotID, prepare f
 	counterRequest.Set("onsuccess", counterSuccess)
 	transaction.Set("oncomplete", complete)
 	transaction.Set("onabort", failure)
-	err := <-result
+	err = <-result
 	counterSuccess.Release()
 	complete.Release()
 	failure.Release()
@@ -405,7 +517,10 @@ func (repository *IndexedDBRepository) commit(slot application.SlotID, prepare f
 }
 
 func (repository *IndexedDBRepository) read(slot application.SlotID) (*application.SaveState, *application.SaveMetadata, error) {
-	transaction := repository.db.Call("transaction", js.ValueOf([]any{"metadata", "worlds"}), "readonly")
+	transaction, err := repository.transaction([]any{"metadata", "worlds"}, "readonly")
+	if err != nil {
+		return nil, nil, err
+	}
 	result := make(chan error, 1)
 	var metadata application.SaveMetadata
 	var state application.SaveState
@@ -456,7 +571,7 @@ func (repository *IndexedDBRepository) read(slot application.SlotID) (*applicati
 	})
 	metadataRequest.Set("onsuccess", metadataSuccess)
 	metadataRequest.Set("onerror", failure)
-	err := <-result
+	err = <-result
 	metadataSuccess.Release()
 	worldSuccess.Release()
 	failure.Release()
@@ -467,7 +582,10 @@ func (repository *IndexedDBRepository) read(slot application.SlotID) (*applicati
 }
 
 func (repository *IndexedDBRepository) list() ([]application.SaveMetadata, error) {
-	transaction := repository.db.Call("transaction", "metadata", "readonly")
+	transaction, err := repository.transaction("metadata", "readonly")
+	if err != nil {
+		return nil, err
+	}
 	result := make(chan error, 1)
 	slots := []application.SlotID{application.Manual1, application.Manual2, application.Manual3, application.QuickSave, application.Auto1, application.Auto2, application.Auto3}
 	metadata := make([]application.SaveMetadata, len(slots))
@@ -513,7 +631,7 @@ func (repository *IndexedDBRepository) list() ([]application.SaveMetadata, error
 		request.Set("onsuccess", callback)
 		request.Set("onerror", requestFailure)
 	}
-	err := <-result
+	err = <-result
 	transaction.Set("oncomplete", js.Null())
 	transaction.Set("onabort", js.Null())
 	transaction.Set("onerror", js.Null())

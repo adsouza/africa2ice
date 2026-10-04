@@ -448,3 +448,201 @@ func TestIndexedDBProtocolSurvivesAnAbortAtEveryRequest(t *testing.T) {
 		}
 	}
 }
+
+// idbRequestOutcome waits for an IndexedDB request to settle and names the
+// event that settled it: "success", "error", or "blocked" when that fires
+// first. A request still pending at the deadline reports "timeout".
+func idbRequestOutcome(request js.Value, within time.Duration) string {
+	outcome := make(chan string, 3)
+	handlers := make([]js.Func, 0, 3)
+	for _, event := range []string{"success", "error", "blocked"} {
+		handler := js.FuncOf(func(js.Value, []js.Value) any { outcome <- event; return nil })
+		handlers = append(handlers, handler)
+		request.Set("on"+event, handler)
+	}
+	defer func() {
+		for _, handler := range handlers {
+			handler.Release()
+		}
+	}()
+	select {
+	case event := <-outcome:
+		return event
+	case <-time.After(within):
+		return "timeout"
+	}
+}
+
+// deleteIndexedDatabase removes the save database, so a test that bumped its
+// version leaves the next one a fresh version-1 store.
+func deleteIndexedDatabase(t *testing.T) {
+	t.Helper()
+	request := js.Global().Get("indexedDB").Call("deleteDatabase", indexedDBName)
+	if outcome := idbRequestOutcome(request, 5*time.Second); outcome != "success" {
+		t.Fatalf("deleting the save database: %s", outcome)
+	}
+}
+
+// openRawIndexedConnection opens the save database at version 1 the way an
+// older release's tab would, with no versionchange handler, so it holds any
+// upgrade until it closes.
+func openRawIndexedConnection(t *testing.T) js.Value {
+	t.Helper()
+	request := js.Global().Get("indexedDB").Call("open", indexedDBName, 1)
+	upgrade := js.FuncOf(func(this js.Value, args []js.Value) any {
+		database := request.Get("result")
+		for _, name := range []string{"worlds", "metadata", "control"} {
+			if !database.Get("objectStoreNames").Call("contains", name).Bool() {
+				database.Call("createObjectStore", name)
+			}
+		}
+		return nil
+	})
+	defer upgrade.Release()
+	request.Set("onupgradeneeded", upgrade)
+	if outcome := idbRequestOutcome(request, 5*time.Second); outcome != "success" {
+		t.Fatalf("opening a version-1 connection: %s", outcome)
+	}
+	return request.Get("result")
+}
+
+func waitForAvailability(t *testing.T, repository *IndexedDBRepository, want Availability) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for repository.Availability() != want {
+		if time.Now().After(deadline) {
+			t.Fatalf("availability = %d, want %d", repository.Availability(), want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// §9: a connection receiving versionchange closes promptly, releases its Web
+// Lock lease, and marks storage unavailable. Deleting the database from
+// another connection is the event a player causes by clearing site data, and
+// a newer release's upgrade causes the same one.
+func TestIndexedDBRepositoryYieldsToVersionChange(t *testing.T) {
+	repository := waitForWritableIndexedDBRepository(t)
+	defer func() { _ = repository.Close() }()
+	clearIndexedStores(t, repository)
+	service, err := application.NewGameService(7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := service.ExportSaveState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.BeginWrite(1, application.QuickSave, state); err != nil {
+		t.Fatal(err)
+	}
+	if write := waitForCompletion(t, repository, 1); write.Err != nil {
+		t.Fatalf("write before versionchange = %v", write.Err)
+	}
+
+	// The delete only proceeds once every open connection has closed, so its
+	// success is the proof this one closed rather than holding it blocked.
+	request := js.Global().Get("indexedDB").Call("deleteDatabase", indexedDBName)
+	if outcome := idbRequestOutcome(request, 5*time.Second); outcome != "success" {
+		t.Fatalf("deleting the database under an open repository: %s", outcome)
+	}
+	if got := repository.Availability(); got != AvailabilityReloadRequired {
+		t.Fatalf("availability after versionchange = %d, want reload required", got)
+	}
+	if repository.Writable() {
+		t.Fatal("repository stayed writable after its connection closed")
+	}
+	// A read now must fail cleanly, not call transaction() on a closed
+	// connection, which throws and would take the page down.
+	if err := repository.BeginRead(2, application.QuickSave); err != nil {
+		t.Fatal(err)
+	}
+	if read := waitForCompletion(t, repository, 2); !errors.Is(read.Err, errReloadRequired) {
+		t.Fatalf("read after versionchange = %v, want the reload-required error", read.Err)
+	}
+	if err := repository.BeginWrite(3, application.QuickSave, state); err == nil {
+		t.Fatal("repository accepted a write after its connection closed")
+	}
+
+	// The writer lease went with the connection: the next tab can take it
+	// at once, without waiting for this one to close.
+	successor := NewIndexedDBRepository(nil)
+	defer func() { _ = successor.Close() }()
+	<-successor.ready
+	if !successor.Writable() {
+		t.Fatal("versionchange left the writer lease held")
+	}
+}
+
+// §9: a client whose upgrade is blocked by an older tab must not hang the
+// loading screen. Open settles at once with the blocked error, operations fail
+// rather than wait, and when the older tab lets go the upgrade completes and
+// the same repository becomes ready.
+func TestIndexedDBRepositoryRecoversFromABlockedUpgrade(t *testing.T) {
+	defer deleteIndexedDatabase(t)
+	older := openRawIndexedConnection(t)
+	defer older.Call("close")
+	repository := newIndexedDBRepository(nil, indexedDBVersion+1)
+	defer func() { _ = repository.Close() }()
+	select {
+	case <-repository.ready:
+	case <-time.After(5 * time.Second):
+		t.Fatal("blocked upgrade held open, which holds the loading screen")
+	}
+	if got := repository.Availability(); got != AvailabilityUpgradeBlocked {
+		t.Fatalf("availability while blocked = %d, want upgrade blocked", got)
+	}
+	if err := repository.BeginList(1); err != nil {
+		t.Fatal(err)
+	}
+	if list := waitForCompletion(t, repository, 1); !errors.Is(list.Err, errUpgradeBlocked) {
+		t.Fatalf("list while blocked = %v, want the upgrade-blocked error", list.Err)
+	}
+
+	// The older tab closes. The pending request upgrades and succeeds through
+	// callbacks open() returned from long ago; a released one would panic.
+	older.Call("close")
+	waitForAvailability(t, repository, AvailabilityReady)
+	if !repository.Writable() {
+		t.Fatal("recovered repository is not writable though it holds the lease")
+	}
+	service, err := application.NewGameService(8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := service.ExportSaveState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.BeginWrite(2, application.Manual1, state); err != nil {
+		t.Fatal(err)
+	}
+	if write := waitForCompletion(t, repository, 2); write.Err != nil {
+		t.Fatalf("write after recovery = %v", write.Err)
+	}
+	if err := repository.BeginList(3); err != nil {
+		t.Fatal(err)
+	}
+	if list := waitForCompletion(t, repository, 3); list.Err != nil || len(list.Slots) != 1 {
+		t.Fatalf("list after recovery = %#v", list)
+	}
+}
+
+// A tab can close while its upgrade is still blocked. The late success then
+// belongs to nobody and must close at once: a leaked connection has no
+// versionchange handler and would block every later upgrade or delete.
+func TestIndexedDBRepositoryClosesALateConnectionAfterClose(t *testing.T) {
+	older := openRawIndexedConnection(t)
+	repository := newIndexedDBRepository(nil, indexedDBVersion+1)
+	<-repository.ready
+	if got := repository.Availability(); got != AvailabilityUpgradeBlocked {
+		older.Call("close")
+		t.Fatalf("availability while blocked = %d, want upgrade blocked", got)
+	}
+	_ = repository.Close()
+	older.Call("close")
+	// The delete queues behind the pending upgrade, whose success finds the
+	// repository closed. Had it left that connection open, the delete would
+	// report "blocked".
+	deleteIndexedDatabase(t)
+}
