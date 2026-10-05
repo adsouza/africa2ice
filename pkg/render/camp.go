@@ -16,11 +16,13 @@ import (
 // holds one reproducible pose. Motion repaints only the illustration's moving
 // region; the host repaints its HUD when Draw requests a full repaint.
 type CampScene struct {
-	tick       int
-	background *ebiten.Image
-	image      *ebiten.Image
-	key        campKey
-	cached     bool
+	tick        int
+	background  *ebiten.Image
+	image       *ebiten.Image
+	key         campKey
+	cached      bool
+	imageKey    campKey
+	imageCached bool
 }
 
 type campKey struct {
@@ -48,7 +50,9 @@ func (scene *CampScene) Update(reducedMotion bool) {
 
 // Invalidate ensures re-entering a frozen camp paints over the map even
 // when its frame, viewport and caption are identical to the previous visit.
-func (scene *CampScene) Invalidate() { scene.cached = false }
+func (scene *CampScene) Invalidate() {
+	scene.cached, scene.imageCached = false, false
+}
 
 func (scene *CampScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected gameapi.BandID, reducedMotion bool, chrome uint64) CampPaint {
 	width, height := screen.Bounds().Dx(), screen.Bounds().Dy()
@@ -63,38 +67,9 @@ func (scene *CampScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selecte
 	staticKey, previousStaticKey := key, scene.key
 	staticKey.phase, previousStaticKey.phase = 0, 0
 	full := !scene.cached || staticKey != previousStaticKey
-	var band gameapi.Band
-	var tile gameapi.Tile
-	if frame != nil {
-		for _, candidate := range frame.Bands {
-			if candidate.ID == selected {
-				band = candidate
-				break
-			}
-		}
-		if int(band.TileID) < len(frame.Tiles) {
-			tile = frame.Tiles[band.TileID]
-		}
-	}
 	transform := FitPresentation(width, height)
-	// Treat the illustration as a 1280×720 asset and scale its composite once.
-	// Rendering every shape at DPR 2 quadruples software-GPU work; the HUD
-	// still rasterizes its text and controls at the native presentation scale.
-	w, h := int(PresentationWidth), int(PresentationHeight)
-	resize := scene.image == nil || scene.image.Bounds().Dx() != w || scene.image.Bounds().Dy() != h
-	if resize {
-		if scene.image != nil {
-			scene.image.Deallocate()
-			scene.background.Deallocate()
-		}
-		scene.image, scene.background = ebiten.NewImage(w, h), ebiten.NewImage(w, h)
-	}
-	if resize || !scene.cached || scene.key.frame != frame || scene.key.band != selected {
-		drawCampLandscape(newLogicalCanvas(scene.background, 1), tile, selected)
-	}
-	scene.image.Clear()
-	scene.image.DrawImage(scene.background, nil)
-	drawCampCompany(newLogicalCanvas(scene.image, 1), band, tile, float64(phase)/20)
+	// Scale the illustration once; HUD text remains at native presentation scale.
+	scene.Illustration(frame, selected, reducedMotion, int(PresentationWidth))
 	op := &ebiten.DrawImageOptions{Filter: ebiten.FilterLinear}
 	op.GeoM.Scale(transform.Scale, transform.Scale)
 	op.GeoM.Translate(transform.OffsetX, transform.OffsetY)
@@ -113,6 +88,51 @@ func (scene *CampScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selecte
 		return CampFull
 	}
 	return CampMotion
+}
+
+// Illustration returns cached, caption-free camp artwork at the requested width.
+// The image belongs to the scene and is updated in place at 20 Hz. The boolean
+// reports whether its pixels changed, allowing a host to repaint only this image.
+func (scene *CampScene) Illustration(frame *gameapi.Frame, selected gameapi.BandID, reducedMotion bool, width int) (*ebiten.Image, bool) {
+	width = max(1, width)
+	height := max(1, int(math.Round(float64(width)*PresentationHeight/PresentationWidth)))
+	phase := 0
+	if !reducedMotion {
+		phase = scene.tick / 3
+	}
+	key := campKey{frame: frame, band: selected, phase: phase, width: width, height: height}
+	if scene.imageCached && scene.imageKey == key {
+		return scene.image, false
+	}
+	var band gameapi.Band
+	var tile gameapi.Tile
+	if frame != nil {
+		for _, candidate := range frame.Bands {
+			if candidate.ID == selected {
+				band = candidate
+				break
+			}
+		}
+		if int(band.TileID) < len(frame.Tiles) {
+			tile = frame.Tiles[band.TileID]
+		}
+	}
+	resize := scene.image == nil || scene.image.Bounds().Dx() != width || scene.image.Bounds().Dy() != height
+	if resize {
+		if scene.image != nil {
+			scene.image.Deallocate()
+			scene.background.Deallocate()
+		}
+		scene.image, scene.background = ebiten.NewImage(width, height), ebiten.NewImage(width, height)
+	}
+	if resize || !scene.imageCached || scene.imageKey.frame != frame || scene.imageKey.band != selected {
+		drawCampLandscape(newLogicalCanvas(scene.background, float64(width)/PresentationWidth), tile, selected)
+	}
+	scene.image.Clear()
+	scene.image.DrawImage(scene.background, nil)
+	drawCampCompany(newLogicalCanvas(scene.image, float64(width)/PresentationWidth), band, tile, float64(phase)/20)
+	scene.imageKey, scene.imageCached = key, true
+	return scene.image, true
 }
 
 func drawCampLandscape(c logicalCanvas, tile gameapi.Tile, band gameapi.BandID) {

@@ -34,6 +34,8 @@ Current controls:
 - C, or View camp in the band details, opens an animated campfire gathering for the selected band.
   Esc/C or Return to the map closes it. Visiting camp preserves workforce edits and does not advance
   the turn; Settings' Reduced motion freezes both camp animation and fog shimmer;
+- opening Workforce also shows a small, caption-free animated camp beneath its controls;
+  scroll the panel to see it when the controls extend below the fold;
 - the Field Notes drawer sits over the lower edge of the map in three states — hidden (a full-width
   one-line bar that still carries the newest campaign event), compact, and expanded. F hides or
   shows it, Shift+F switches compact and expanded, the drawer tab and its ▲ more control do the

@@ -5,6 +5,7 @@ import (
 
 	"github.com/adsouza/africa2ice/pkg/gameapi"
 	"github.com/adsouza/africa2ice/pkg/hud"
+	"github.com/adsouza/africa2ice/pkg/render"
 	"github.com/adsouza/africa2ice/pkg/ui"
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -50,5 +51,34 @@ func TestCampRequiresASelectedBandAndAnOngoingCampaign(t *testing.T) {
 	game.openCamp()
 	if game.scenes.Current() != ui.SceneGameplay {
 		t.Fatal("camp hid the campaign ending")
+	}
+}
+
+func TestWorkforceCampKeepsTheMapCacheAndDirtyDraft(t *testing.T) {
+	stub := &gameStub{frame: migrationPreviewFrame()}
+	game := New(stub)
+	game.disclosure.openRow = ui.RowWorkforce
+	game.editAssignmentDraft(100)
+	allocation, frame := game.workforce.Allocation(), game.frame
+	// Freeze map shimmer independently, so only the miniature's clock advances.
+	game.scene.SetReducedMotion(true)
+	for range render.CameraTransitionTicks + 2 {
+		game.Update()
+	}
+	screen := ebiten.NewImage(1280, 720)
+	defer screen.Deallocate()
+	game.Draw(screen)
+	game.Update()
+	game.Draw(screen)
+	paints := game.scene.Paints
+	for range 12 {
+		game.Update()
+		game.Draw(screen)
+	}
+	if game.scene.Paints != paints {
+		t.Fatal("miniature animation invalidated the map cache")
+	}
+	if game.workforce.Allocation() != allocation || !game.workforce.Dirty() || game.frame != frame || len(stub.appliedCommands) != 0 {
+		t.Fatal("miniature changed the workforce draft or campaign")
 	}
 }

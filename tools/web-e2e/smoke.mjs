@@ -153,6 +153,21 @@ try {
     const campFailures = await openGame(campContext, campPage);
     const summary = await campPage.locator("html").getAttribute("data-africa2ice-summary");
     const canvas = campPage.locator("canvas:not([id])");
+    // The miniature lives at the bottom of the scrollable panel. Isolate its
+    // pixels from map shimmer, then edit/discard without changing the frame.
+    await pressGameKey(campPage, "PageDown");
+    await pressGameKey(campPage, "PageDown");
+    await campPage.mouse.move(1100, 550);
+    await campPage.mouse.wheel(0, 600);
+    await campPage.waitForTimeout(250);
+    await campPage.mouse.move(50, 600);
+    const miniatureClip = { x: 926, y: 452, width: 316, height: 178 };
+    const miniature = await campPage.screenshot({ clip: miniatureClip });
+    await campPage.waitForTimeout(600);
+    if (miniature.equals(await campPage.screenshot({ clip: miniatureClip }))) throw new Error(`DPR ${deviceScaleFactor}: Workforce miniature did not animate`);
+    await pressGameKey(campPage, "ArrowRight");
+    await pressGameKey(campPage, "d");
+    if (await campPage.locator("html").getAttribute("data-africa2ice-summary") !== summary) throw new Error("Workforce miniature or draft edit changed the campaign");
     await pressGameKey(campPage, "c");
     await campPage.waitForTimeout(250);
     const first = await canvas.screenshot();
@@ -175,6 +190,15 @@ try {
     const frozen = await canvas.screenshot();
     await campPage.waitForTimeout(600);
     if (!frozen.equals(await canvas.screenshot())) throw new Error(`DPR ${deviceScaleFactor}: reduced motion camp kept moving`);
+    await pressGameKey(campPage, "Escape");
+    await campPage.mouse.move(1100, 550);
+    await campPage.mouse.wheel(0, 600);
+    await campPage.waitForTimeout(250);
+    await campPage.mouse.move(50, 600);
+    const frozenMiniature = await campPage.screenshot({ clip: miniatureClip });
+    await campPage.waitForTimeout(600);
+    if (!frozenMiniature.equals(await campPage.screenshot({ clip: miniatureClip }))) throw new Error(`DPR ${deviceScaleFactor}: reduced motion Workforce miniature kept moving`);
+    await pressGameKey(campPage, "c");
     const larger = { width: 1600, height: 1000 };
     await campPage.setViewportSize(larger);
     await campPage.waitForTimeout(200);

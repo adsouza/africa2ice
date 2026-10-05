@@ -7675,6 +7675,13 @@ frames update at 20 Hz. The procedural illustration is composited at 1280×720 a
 captions and controls retain native high-DPI text. Motion repaints only the gathering's bounded
 region; scene, viewport, or chrome changes repaint the complete view using the map's aspect fit.
 
+An open **Workforce** row also shows the selected band's camp beneath its controls, without
+captions or navigation buttons. The same procedural artwork is rasterized at the miniature's
+native panel width, with a cached landscape and 20 Hz animation. It participates in the panel's
+vertical scrolling and is clipped to that viewport. On map cache hits, animation repaints only
+the visible, opaque miniature, preserving the map cache and the existing slider widgets. Offscreen
+miniatures, modals, and tooltips pause its animation; **Reduced motion** holds the fixed pose.
+
 ### Grid picking
 
 After the viewport's exact inverse presentation transform, map picking uses the same constants as

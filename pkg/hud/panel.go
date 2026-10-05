@@ -66,8 +66,9 @@ type Panel struct {
 	// hover explanation. Maintained by watchTooltip from ebitenui's
 	// ToolTipEvent, which fires only on the show and hide transitions, so a
 	// visible tooltip does not force a repaint on every frame it stays up.
-	tooltipShown bool
-	handles      handles
+	tooltipShown  bool
+	handles       handles
+	workforceCamp render.CampScene
 }
 
 // handles keeps pointers to widgets tests and refreshes need to reach. Later
@@ -86,6 +87,7 @@ type handles struct {
 	bandListScroll *widget.ScrollContainer
 	details        *widget.Button
 	campButton     *widget.Button
+	workforceCamp  *widget.Graphic
 	// headerContent, macroWarning and panelMiddle let TestHeaderRegionFitsItsContent
 	// measure the header region against its own content instead of the old
 	// fixed constant: headerContent is buildHeader's returned column (its
@@ -200,6 +202,9 @@ func New() *Panel {
 func (p *Panel) Update(state State) []Intent {
 	p.Sync(state)
 	p.ui.Update()
+	if p.workforceCampVisible() {
+		p.workforceCamp.Update(state.Overlay.ReducedMotion)
+	}
 	intents := p.intents
 	p.intents = nil
 	return intents
@@ -238,7 +243,10 @@ func (p *Panel) Sync(state State) {
 	}
 }
 
-func (p *Panel) Draw(screen *ebiten.Image) { p.ui.Draw(screen) }
+func (p *Panel) Draw(screen *ebiten.Image) {
+	p.refreshWorkforceCamp()
+	p.ui.Draw(screen)
+}
 
 // Hovered reports whether the pointer is over any chrome widget, so map input
 // can yield. Valid after Update.
@@ -290,10 +298,8 @@ type PresentationKey struct {
 //     chrome. (Opening or closing the band list window, or switching the
 //     drawer's mode, is itself a rebuild, already covered by p.builds.)
 //
-// A widget added later with animation of its own that none of these fields
-// already track (a spinner, a blinking caret, a hover-delayed tooltip) must
-// extend this key too, or that animation will not repaint on an otherwise-
-// idle frame.
+// Other animated chrome must extend this key or supply a bounded repaint in
+// DrawAnimations, as the opaque Workforce camp does, to appear on idle frames.
 func (p *Panel) PresentationKey() PresentationKey {
 	x, y := ebiten.CursorPosition()
 	var focused *widget.Widget
@@ -555,6 +561,7 @@ func (p *Panel) buildChecklistRows(state State, band *gameapi.Band) widget.Prefe
 			} else {
 				column.AddChild(t.label("Computer controlled · allocation read only", 9.5, colorDim))
 			}
+			column.AddChild(p.buildWorkforceCamp(state))
 		}
 	}
 	return column

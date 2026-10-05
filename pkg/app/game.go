@@ -327,12 +327,17 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	displayFrame := g.displayFrame()
 	painted := g.scene.Draw(screen, displayFrame, g.selectedBand, g.preview, g.notice, g.endScene(displayFrame), g.viewportInitialized && !g.viewport.SupportsGameplay())
 	// The chrome draws over the map image rather than into it, so the two
-	// layers must always paint together and never separately: painting the
+	// layers must paint together for structural changes: painting the
 	// panel alone over a stale map (or vice versa) leaves stale pixels
 	// exactly like the bug this replaces. The too-small overlay can only
-	// stay the topmost thing if the panel yields.
+	// stay the topmost thing if the panel yields. The bounded, opaque camp
+	// animation below can replace its own pixels independently on cache hits.
 	if painted && (!g.viewportInitialized || g.viewport.SupportsGameplay()) {
 		g.panel.Draw(screen)
+	} else if !g.viewportInitialized || g.viewport.SupportsGameplay() {
+		// Decorative animation replaces only its own opaque, clipped image;
+		// it does not invalidate the map or redraw chrome over stale pixels.
+		g.panel.DrawAnimations(screen)
 	}
 	// Browser readiness means the first frame is visible and input is accepted.
 	// IndexedDB discovery may still be resolving on earlier draws; announcing
