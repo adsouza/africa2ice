@@ -49,6 +49,7 @@ const (
 	IntentToggleBandList
 	IntentToggleShortcuts
 	IntentOpenPublication
+	IntentViewCamp
 	IntentKindCount
 )
 
@@ -135,6 +136,8 @@ func (kind IntentKind) String() string {
 		return "toggle-shortcuts"
 	case IntentOpenPublication:
 		return "open-publication"
+	case IntentViewCamp:
+		return "view-camp"
 	default:
 		return "unknown"
 	}

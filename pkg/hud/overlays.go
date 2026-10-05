@@ -183,9 +183,9 @@ func (p *Panel) settingsPanel(state State) *widget.Container {
 	if state.Overlay.Muted {
 		mute = "Muted: on · M"
 	}
-	motion := "Disable fog shimmer: off"
+	motion := "Reduced motion: off"
 	if state.Overlay.ReducedMotion {
-		motion = "Disable fog shimmer: on"
+		motion = "Reduced motion: on"
 	}
 	for _, entry := range []menuEntry{
 		{mute, Intent{Kind: IntentToggleMute}},
@@ -237,7 +237,7 @@ var shortcutSheetLines = []string{
 	"N split · I interbreed · J cycle partner · G cycle trait note · B best tile",
 	"D toggle band details · F notes · Shift+F expand notes · wheel scrolls notes",
 	"Z camera · Ctrl/Cmd+S quick-save · F1–F3 save · Shift+F1–F3 load",
-	"M mute · Esc menu",
+	"C view camp · M mute · Esc menu",
 }
 
 func (p *Panel) shortcutSheet() *widget.Container {

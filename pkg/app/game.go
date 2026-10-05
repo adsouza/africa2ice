@@ -36,6 +36,7 @@ type Game struct {
 	sound                  gameaudio.SoundManager
 	frame                  *gameapi.Frame
 	scene                  *render.MapScene
+	camp                   render.CampScene
 	onFirstDraw            func()
 	onFramePublished       func(string)
 	firstDrawDone          bool
@@ -201,6 +202,9 @@ func composeHostedGame(seed uint64, session *logging.Session, enableSound bool,
 
 func (g *Game) Update() error {
 	g.scene.Update()
+	if g.scenes.Current() == ui.SceneCamp {
+		g.camp.Update(g.preferences.value.ReducedMotion)
+	}
 	g.pollAudio()
 	g.pollUISettings()
 	g.advanceToasts()
@@ -249,7 +253,11 @@ func (g *Game) Update() error {
 	// settings, or the shortcut sheet) blocks pointer input to whatever sits
 	// beneath it, so the widgets that can actually emit an intent while a
 	// non-gameplay scene is showing are exactly the overlay's own.
+	campWasOpen := g.scenes.Current() == ui.SceneCamp
 	g.handleIntents(intents)
+	if campWasOpen && g.scenes.Current() != ui.SceneCamp {
+		return nil
+	}
 	modifier := ebiten.IsKeyPressed(ebiten.KeyControl) || ebiten.IsKeyPressed(ebiten.KeyMeta)
 	if modifier && inpututil.IsKeyJustPressed(ebiten.KeyS) && g.scenes.Current() == ui.SceneGameplay {
 		g.beginQuickSave()
@@ -297,6 +305,12 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
+	if g.scenes.Current() == ui.SceneCamp && (!g.viewportInitialized || g.viewport.SupportsGameplay()) {
+		if g.camp.Draw(screen, g.displayFrame(), g.selectedBand, g.preferences.value.ReducedMotion, maphash.Comparable(chromeRevisionSeed, g.panel.PresentationKey())) == render.CampFull {
+			g.panel.Draw(screen)
+		}
+		return
+	}
 	g.scene.SetTileHover(g.hover)
 	g.scene.SetCamera(g.camera, g.mapVisibleHeight())
 	g.scene.SetGuideHighlight(g.guide.Step == ui.GuideMove && g.frame != nil && g.frame.CampaignResult == gameapi.Ongoing)
@@ -1068,6 +1082,7 @@ func (g *Game) dispatchBatch(actions []ui.Action) (actionBatchResult, bool) {
 		case ui.ActionListSlots:
 			result.operationID, err = g.port.BeginListSlots()
 		case ui.ActionNavigate:
+			previousScene := g.scenes.Current()
 			navigation, scene := action.Navigation()
 			switch navigation {
 			case ui.NavigationPush:
@@ -1083,6 +1098,9 @@ func (g *Game) dispatchBatch(actions []ui.Action) (actionBatchResult, bool) {
 			}
 			if err == nil && navigation != ui.NavigationReset {
 				g.sound.Play(gameaudio.SFXChoiceClick)
+			}
+			if err == nil && (previousScene == ui.SceneCamp || g.scenes.Current() == ui.SceneCamp) {
+				g.panel.Sync(g.hudState())
 			}
 		}
 		if err != nil {
@@ -1228,6 +1246,11 @@ func (g *Game) handleSceneKeyState(pressed, justPressed func(ebiten.Key) bool) b
 		}
 		if justPressed(ebiten.KeyEqual) {
 			g.adjustVolume(0.1)
+		}
+		return true
+	case ui.SceneCamp:
+		if justPressed(ebiten.KeyEscape) || justPressed(ebiten.KeyC) {
+			g.dispatchBatch([]ui.Action{ui.PopSceneAction()})
 		}
 		return true
 	default:

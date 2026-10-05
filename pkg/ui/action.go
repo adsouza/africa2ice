@@ -181,7 +181,7 @@ func validActionPayload(action Action) bool {
 		}
 		switch action.navigation {
 		case NavigationPush:
-			return action.scene > SceneGameplay && action.scene <= SceneTitle
+			return action.scene > SceneGameplay && action.scene <= SceneCamp
 		case NavigationPop, NavigationReset:
 			return action.scene == SceneGameplay
 		default:

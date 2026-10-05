@@ -11,7 +11,7 @@ import (
 // gameplayKeysActive blocks commands behind the shortcut sheet. Escape is
 // handled by the scene first; Shift+/ can still close the sheet here.
 func (g *Game) gameplayKeysActive() bool {
-	return !g.shortcutsOpen
+	return !g.shortcutsOpen && g.scenes.Current() == ui.SceneGameplay
 }
 
 // handleGameplayKeys is the keyboard half of spec §8: global keys first, then
@@ -25,7 +25,7 @@ func (g *Game) handleGameplayKeys() {
 func (g *Game) handleGameplayKeyState(pressed, justPressed func(ebiten.Key) bool) {
 	shift := pressed(ebiten.KeyShift)
 	if !g.gameplayKeysActive() {
-		if justPressed(ebiten.KeySlash) && shift {
+		if g.shortcutsOpen && g.scenes.Current() == ui.SceneGameplay && justPressed(ebiten.KeySlash) && shift {
 			g.toggleShortcutSheet()
 		}
 		return
@@ -52,6 +52,8 @@ func (g *Game) handleGameplayKeyState(pressed, justPressed func(ebiten.Key) bool
 		g.toggleMute()
 	case justPressed(ebiten.KeyZ):
 		g.toggleCameraFocus()
+	case justPressed(ebiten.KeyC):
+		g.openCamp()
 	case justPressed(ebiten.KeySlash) && shift:
 		g.toggleShortcutSheet()
 	case justPressed(ebiten.KeyPageUp):

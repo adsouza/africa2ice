@@ -64,6 +64,9 @@ func (p *Panel) buildDetails(state State, band *gameapi.Band) widget.PreferredSi
 	t := p.theme
 	column := t.column(4, t.insets(6, 10, 10, 8), t.solid(colorRow), stretch())
 	p.handles.detailsBody = column
+	camp := t.button("View camp · C", 11, colorGoldDeep, colorGoldDeep, func() { p.emit(Intent{Kind: IntentViewCamp}) })
+	p.handles.campButton = camp
+	column.AddChild(camp)
 
 	foodHeading, foodLine := "FOOD LAST TURN", "unavailable"
 	if report := band.LastFoodReport; report.Turn > 0 {

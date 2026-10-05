@@ -68,6 +68,9 @@ func bandActionIntent(kind hud.IntentKind) bool {
 }
 
 func (g *Game) handleIntent(intent hud.Intent) {
+	if g.scenes.Current() == ui.SceneCamp && intent.Kind != hud.IntentBack {
+		return
+	}
 	if intent.Kind == hud.IntentOpenPublication {
 		if ui.IsPublicationURL(intent.URL) {
 			if err := g.openExternalURL(intent.URL); err != nil {
@@ -92,6 +95,8 @@ func (g *Game) handleIntent(intent hud.Intent) {
 		g.disclosure.choose(intent.Row)
 	case hud.IntentToggleDetails:
 		g.toggleDetails()
+	case hud.IntentViewCamp:
+		g.openCamp()
 	case hud.IntentSetNotesMode:
 		g.setNotesMode(intent.Notes)
 	case hud.IntentMoveTo:

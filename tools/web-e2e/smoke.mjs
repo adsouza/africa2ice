@@ -145,6 +145,48 @@ const openGame = async (context, page) => {
 };
 
 try {
+  // Camp must animate at both backing scales without publishing a campaign
+  // change, then freeze under reduced motion and return via its mouse control.
+  for (const deviceScaleFactor of [1, 2]) {
+    const campContext = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor });
+    const campPage = await campContext.newPage();
+    const campFailures = await openGame(campContext, campPage);
+    const summary = await campPage.locator("html").getAttribute("data-africa2ice-summary");
+    const canvas = campPage.locator("canvas:not([id])");
+    await pressGameKey(campPage, "c");
+    await campPage.waitForTimeout(250);
+    const first = await canvas.screenshot();
+    await campPage.waitForTimeout(600);
+    if (first.equals(await canvas.screenshot())) throw new Error(`DPR ${deviceScaleFactor}: camp did not animate`);
+    for (const key of ["Space", "Tab", "n", "ArrowRight"]) await pressGameKey(campPage, key);
+    if (await campPage.locator("html").getAttribute("data-africa2ice-summary") !== summary) throw new Error("camp keys changed the campaign");
+    await pressGameKey(campPage, "Escape");
+    await pressGameKey(campPage, "Escape");
+    await pressGameKey(campPage, "o");
+    await campPage.waitForTimeout(100);
+    // Reduced motion is the second settings button; all points are CSS DIPs.
+    await campPage.mouse.click(430, 355, { delay: 100 });
+    await waitForRecord(campPage, "reduced motion toggle", record => record.msg === "ui.intent" && record.kind === "toggle-reduced-motion");
+    await campPage.mouse.move(50, 600);
+    await pressGameKey(campPage, "Escape");
+    await pressGameKey(campPage, "Escape");
+    await pressGameKey(campPage, "c");
+    await campPage.waitForTimeout(200);
+    const frozen = await canvas.screenshot();
+    await campPage.waitForTimeout(600);
+    if (!frozen.equals(await canvas.screenshot())) throw new Error(`DPR ${deviceScaleFactor}: reduced motion camp kept moving`);
+    const larger = { width: 1600, height: 1000 };
+    await campPage.setViewportSize(larger);
+    await campPage.waitForTimeout(200);
+    const returnPoint = presentationPoint(larger, { x: 155, y: 656 });
+    await campPage.mouse.click(returnPoint.x, returnPoint.y, { delay: 100 });
+    await waitForRecord(campPage, "camp return button", record => record.msg === "ui.intent" && record.kind === "back");
+    await pressGameKey(campPage, "Space");
+    await waitForTurn(campPage, 1, "camp return button did not restore gameplay");
+    if (campFailures.length) throw new Error(campFailures.join("\n"));
+    await campContext.close();
+  }
+
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2 });
   let page = await context.newPage();
   let failures = await openGame(context, page);
@@ -259,7 +301,7 @@ try {
     await waitForTurn(gatePage, 1, `${label}: gameplay did not resume at 1280x720`);
     await gateContext.close();
   }
-  process.stdout.write("browser smoke passed: boot, migration, turn, quick-save/reload, manual save/load, console logs, DPR 1/1.25/1.5/2/3 hits and backing, touch, resize, 200% zoom and portrait gating\n");
+  process.stdout.write("browser smoke passed: camp animation, reduced motion, camp return/resize at DPR 1/2, boot, migration, turn, quick-save/reload, manual save/load, console logs, DPR 1/1.25/1.5/2/3 hits and backing, touch, resize, 200% zoom and portrait gating\n");
 } finally {
   await browser.close();
   await new Promise(resolveClose => server.close(resolveClose));

@@ -7418,6 +7418,7 @@ Every mouse action documented above has a keyboard alias; the two paths converge
 | `1`–`9` | Choose the numbered research target |
 | `M` | Mute/unmute |
 | `Z` | Toggle Overview / Focus; the choice sticks until a band that can still move is selected (Two-state camera, above) |
+| `C` | Visit the selected band's camp; `C` or `Esc` returns to the map |
 | `Shift+/` (`?`) | Toggle the shortcut sheet |
 | `PgUp`/`PgDn`, `Shift+Up`/`Shift+Down` | Change the open checklist row |
 | `Ctrl`/`Cmd+S` | Quick-save |
@@ -7656,6 +7657,23 @@ unaffected by this gate. The completion atomically installs either the
 validated stored record or the complete default record before enabling those controls. A write can
 therefore never race the initial read or overwrite stored preferences that the player had not yet
 seen.
+
+### Campfire view
+
+`C` or **View camp** in the band details opens a full-screen, illustrative gathering around a
+campfire. The caption identifies the selected band; population selects a bounded representative
+group rather than one figure per person. Biome, local temperature, natural shelter, health, and
+acquired technology inform the procedural scenery, clothing, movement, and props. The figures are
+illustrative and have no individual identities, demographic records, or gameplay actions.
+
+The presentation owns its animation tick, smoke, embers, breathing, gestures, and flickering light.
+It reads only the accepted `gameapi.Frame` and never consumes campaign randomness or advances a
+turn. The scene retains selection, migration previews, and dirty workforce drafts, blocks gameplay
+controls, and returns through **Return to the map**, `Esc`, or `C`. Settings' **Reduced motion**
+freezes a reproducible pose and suppresses animation repainting. Static scenery is cached; moving
+frames update at 20 Hz. The procedural illustration is composited at 1280×720 and scaled once;
+captions and controls retain native high-DPI text. Motion repaints only the gathering's bounded
+region; scene, viewport, or chrome changes repaint the complete view using the map's aspect fit.
 
 ### Grid picking
 

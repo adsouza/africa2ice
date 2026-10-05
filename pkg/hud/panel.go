@@ -85,6 +85,7 @@ type handles struct {
 	// any of PresentationKey's other fields.
 	bandListScroll *widget.ScrollContainer
 	details        *widget.Button
+	campButton     *widget.Button
 	// headerContent, macroWarning and panelMiddle let TestHeaderRegionFitsItsContent
 	// measure the header region against its own content instead of the old
 	// fixed constant: headerContent is buildHeader's returned column (its
@@ -197,6 +198,16 @@ func New() *Panel {
 // Update rebuilds on change, runs ebitenui, and returns the intents clicks
 // produced this tick. Call it before map input so Hovered is current.
 func (p *Panel) Update(state State) []Intent {
+	p.Sync(state)
+	p.ui.Update()
+	intents := p.intents
+	p.intents = nil
+	return intents
+}
+
+// Sync accepts presentation changes without polling input a second time.
+// Scene navigation uses it to replace camp controls before the next Draw.
+func (p *Panel) Sync(state State) {
 	structural, lastStructural := state, p.last
 	structural.Workforce, lastStructural.Workforce = WorkforceDraft{}, WorkforceDraft{}
 	structural.Overlay.MasterVolume, lastStructural.Overlay.MasterVolume = 0, 0
@@ -225,10 +236,6 @@ func (p *Panel) Update(state State) []Intent {
 		}
 		p.last = state
 	}
-	p.ui.Update()
-	intents := p.intents
-	p.intents = nil
-	return intents
 }
 
 func (p *Panel) Draw(screen *ebiten.Image) { p.ui.Draw(screen) }
@@ -245,6 +252,7 @@ func (p *Panel) Hovered() bool { return input.UIHovered }
 type PresentationKey struct {
 	builds      int
 	refreshes   int
+	focused     *widget.Widget
 	cursorX     int
 	cursorY     int
 	mouseLeft   bool
@@ -288,6 +296,10 @@ type PresentationKey struct {
 // idle frame.
 func (p *Panel) PresentationKey() PresentationKey {
 	x, y := ebiten.CursorPosition()
+	var focused *widget.Widget
+	if control := p.ui.GetFocusedWidget(); control != nil {
+		focused = control.GetWidget()
+	}
 	var panelScroll float64
 	if p.handles.panelMiddle != nil {
 		panelScroll = p.handles.panelMiddle.ScrollTop
@@ -303,6 +315,7 @@ func (p *Panel) PresentationKey() PresentationKey {
 	return PresentationKey{
 		builds:      p.builds,
 		refreshes:   p.refreshes,
+		focused:     focused,
 		cursorX:     x,
 		cursorY:     y,
 		mouseLeft:   ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft),
@@ -358,6 +371,10 @@ func (p *Panel) rebuild(state State) {
 	p.root.RemoveChildren()
 	p.handles = handles{chips: map[uint32]*widget.Button{}, traits: map[gameapi.HeritableTrait]*widget.Button{}}
 	if state.Frame == nil {
+		return
+	}
+	if state.Overlay.Scene == ui.SceneCamp {
+		p.buildCampView(state)
 		return
 	}
 	p.root.AddChild(p.buildPanel(state))
