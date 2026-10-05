@@ -18,6 +18,7 @@ import (
 type CampScene struct {
 	tick        int
 	background  *ebiten.Image
+	sky         *ebiten.Image
 	image       *ebiten.Image
 	key         campKey
 	cached      bool
@@ -26,12 +27,13 @@ type CampScene struct {
 }
 
 type campKey struct {
-	frame  *gameapi.Frame
-	band   gameapi.BandID
-	chrome uint64
-	phase  int
-	width  int
-	height int
+	frame   *gameapi.Frame
+	band    gameapi.BandID
+	chrome  uint64
+	phase   int
+	width   int
+	height  int
+	twinkle bool
 }
 
 type CampPaint uint8
@@ -69,7 +71,7 @@ func (scene *CampScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selecte
 	full := !scene.cached || staticKey != previousStaticKey
 	transform := FitPresentation(width, height)
 	// Scale the illustration once; HUD text remains at native presentation scale.
-	scene.Illustration(frame, selected, reducedMotion, int(PresentationWidth))
+	scene.illustration(frame, selected, reducedMotion, int(PresentationWidth), true)
 	op := &ebiten.DrawImageOptions{Filter: ebiten.FilterLinear}
 	op.GeoM.Scale(transform.Scale, transform.Scale)
 	op.GeoM.Translate(transform.OffsetX, transform.OffsetY)
@@ -77,11 +79,21 @@ func (scene *CampScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selecte
 		screen.Fill(color.NRGBA{R: 5, G: 9, B: 14, A: 255})
 		screen.DrawImage(scene.image, op)
 	} else {
-		// Keep the sky, captions and letterbox intact. The crop includes every
-		// smoke wisp, spark, seated figure and shadow, with padding for filtering.
-		bounds := image.Rect(260, 210, 1020, 600)
-		op.GeoM.Translate(float64(bounds.Min.X)*transform.Scale, float64(bounds.Min.Y)*transform.Scale)
-		screen.DrawImage(scene.image.SubImage(bounds).(*ebiten.Image), op)
+		// Replace the star field and gathering while preserving captions and
+		// letterbox. The composite keeps mountains, trees and moon over stars.
+		for _, bounds := range []image.Rectangle{image.Rect(32, 120, 1248, 304), image.Rect(260, 210, 1020, 600)} {
+			clip := image.Rect(
+				int(math.Floor(transform.OffsetX+float64(bounds.Min.X)*transform.Scale)),
+				int(math.Floor(transform.OffsetY+float64(bounds.Min.Y)*transform.Scale)),
+				int(math.Ceil(transform.OffsetX+float64(bounds.Max.X)*transform.Scale)),
+				int(math.Ceil(transform.OffsetY+float64(bounds.Max.Y)*transform.Scale)),
+			).Intersect(screen.Bounds())
+			if !clip.Empty() {
+				// Clip the destination, keeping neighbouring source pixels
+				// available to linear filtering at high-DPI crop boundaries.
+				screen.SubImage(clip).(*ebiten.Image).DrawImage(scene.image, op)
+			}
+		}
 	}
 	scene.key, scene.cached = key, true
 	if full {
@@ -94,13 +106,17 @@ func (scene *CampScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selecte
 // The image belongs to the scene and is updated in place at 20 Hz. The boolean
 // reports whether its pixels changed, allowing a host to repaint only this image.
 func (scene *CampScene) Illustration(frame *gameapi.Frame, selected gameapi.BandID, reducedMotion bool, width int) (*ebiten.Image, bool) {
+	return scene.illustration(frame, selected, reducedMotion, width, false)
+}
+
+func (scene *CampScene) illustration(frame *gameapi.Frame, selected gameapi.BandID, reducedMotion bool, width int, twinkle bool) (*ebiten.Image, bool) {
 	width = max(1, width)
 	height := max(1, int(math.Round(float64(width)*PresentationHeight/PresentationWidth)))
 	phase := 0
 	if !reducedMotion {
 		phase = scene.tick / 3
 	}
-	key := campKey{frame: frame, band: selected, phase: phase, width: width, height: height}
+	key := campKey{frame: frame, band: selected, phase: phase, width: width, height: height, twinkle: twinkle}
 	if scene.imageCached && scene.imageKey == key {
 		return scene.image, false
 	}
@@ -122,15 +138,28 @@ func (scene *CampScene) Illustration(frame *gameapi.Frame, selected gameapi.Band
 		if scene.image != nil {
 			scene.image.Deallocate()
 			scene.background.Deallocate()
+			scene.sky.Deallocate()
 		}
 		scene.image, scene.background = ebiten.NewImage(width, height), ebiten.NewImage(width, height)
+		scene.sky = ebiten.NewImage(width, height)
 	}
-	if resize || !scene.imageCached || scene.imageKey.frame != frame || scene.imageKey.band != selected {
-		drawCampLandscape(newLogicalCanvas(scene.background, float64(width)/PresentationWidth), tile, selected)
+	scale := float64(width) / PresentationWidth
+	if resize || !scene.imageCached || scene.imageKey.frame != frame || scene.imageKey.band != selected || scene.imageKey.twinkle != twinkle {
+		scene.sky.Clear()
+		drawCampSky(newLogicalCanvas(scene.sky, scale))
+		if !twinkle {
+			drawCampStars(newLogicalCanvas(scene.sky, scale), selected, 0, false)
+		}
+		scene.background.Clear()
+		drawCampLandscape(newLogicalCanvas(scene.background, scale), tile)
 	}
 	scene.image.Clear()
+	scene.image.DrawImage(scene.sky, nil)
+	if twinkle {
+		drawCampStars(newLogicalCanvas(scene.image, scale), selected, float64(phase)/20, true)
+	}
 	scene.image.DrawImage(scene.background, nil)
-	drawCampCompany(newLogicalCanvas(scene.image, float64(width)/PresentationWidth), band, tile, float64(phase)/20)
+	drawCampCompany(newLogicalCanvas(scene.image, scale), band, tile, float64(phase)/20)
 	scene.imageKey, scene.imageCached = key, true
 	return scene.image, true
 }

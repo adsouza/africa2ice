@@ -246,6 +246,11 @@ func (p *Panel) Sync(state State) {
 func (p *Panel) Draw(screen *ebiten.Image) {
 	p.refreshWorkforceCamp()
 	p.ui.Draw(screen)
+	if p.workforceCampVisible() {
+		// Keep the opaque illustration identical to animation-only redraws.
+		// The scroll container otherwise tints it with the panel's alpha mask.
+		p.drawWorkforceCamp(screen)
+	}
 }
 
 // Hovered reports whether the pointer is over any chrome widget, so map input

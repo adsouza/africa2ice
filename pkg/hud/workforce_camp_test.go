@@ -38,10 +38,15 @@ func TestWorkforceCampAnimationIsClippedAndPreservesControls(t *testing.T) {
 		after := make([]byte, len(before))
 		screen.ReadPixels(after)
 		changed := false
+		campRect := panel.handles.workforceCamp.GetWidget().Rect
+		staticSky := image.Rect(campRect.Min.X, campRect.Min.Y, campRect.Max.X, campRect.Min.Y+panel.theme.px(52)).Intersect(clip)
 		for y := range screen.Bounds().Dy() {
 			for x := range screen.Bounds().Dx() {
 				offset := (y*screen.Bounds().Dx() + x) * 4
 				if !bytes.Equal(before[offset:offset+4], after[offset:offset+4]) {
+					if image.Pt(x, y).In(staticSky) {
+						t.Fatalf("scale %g: animation changed the miniature's static sky at (%d,%d)", scale, x, y)
+					}
 					changed = true
 					if !image.Pt(x, y).In(clip) {
 						t.Fatalf("scale %g: animation overwrote chrome/map pixel (%d,%d)", scale, x, y)

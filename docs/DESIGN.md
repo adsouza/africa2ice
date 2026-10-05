@@ -7680,8 +7680,13 @@ turn. The scene retains selection, migration previews, and dirty workforce draft
 controls, and returns through **Return to the map**, `Esc`, or `C`. Settings' **Reduced motion**
 freezes a reproducible pose and suppresses animation repainting. Static scenery is cached; moving
 frames update at 20 Hz. The procedural illustration is composited at 1280×720 and scaled once;
-captions and controls retain native high-DPI text. Motion repaints only the gathering's bounded
-region; scene, viewport, or chrome changes repaint the complete view using the map's aspect fit.
+captions and controls retain native high-DPI text. Motion repaints only the bounded star field and
+gathering regions; scene, viewport, or chrome changes repaint the complete view using the map's aspect fit.
+
+Full-screen stars twinkle at individual phases and speeds, with a faint glint on a few brighter
+stars. Cached sky and terrain layers keep the moon, trees, and ridges in front of them. Animation
+repaints the star field as well as the gathering, leaving captions and letterbox intact. The
+Workforce miniature keeps steady stars; **Reduced motion** freezes the full-screen sky too.
 
 An open **Workforce** row also shows the selected band's camp beneath its controls, without
 captions or navigation buttons. The same procedural artwork is rasterized at the miniature's

@@ -37,6 +37,7 @@ Current controls:
 - opening Workforce also shows a small, caption-free animated camp beneath its controls;
   scroll the panel to see it when the controls extend below the fold;
 - camp scenery follows the selected tile's biome, elevation, vegetation, nearby lakes, and temperature;
+- stars twinkle independently in the full-size camp view; Reduced motion freezes them;
 - the Field Notes drawer sits over the lower edge of the map in three states — hidden (a full-width
   one-line bar that still carries the newest campaign event), compact, and expanded. F hides or
   shows it, Shift+F switches compact and expanded, the drawer tab and its ▲ more control do the

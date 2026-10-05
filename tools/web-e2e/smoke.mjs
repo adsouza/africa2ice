@@ -38,7 +38,12 @@ await new Promise(resolveListen => server.listen(0, "127.0.0.1", resolveListen))
 const { port } = server.address();
 const origin = `http://127.0.0.1:${port}`;
 const browser = await chromium.launch({ headless: true });
-const pressGameKey = (page, key) => page.keyboard.press(key, { delay: 40 });
+// Ebiten samples keys per frame. Give software-rendered high-DPI frames time
+// to observe both edges, including the release between repeated PageDown keys.
+const pressGameKey = async (page, key) => {
+  await page.keyboard.press(key, { delay: 100 });
+  await page.waitForTimeout(100);
+};
 
 // The web logging sink writes one JSON object per line to console.log.
 // Records are kept per page so a check can ask what this page has logged.
@@ -163,16 +168,22 @@ try {
     await campPage.mouse.move(50, 600);
     const miniatureClip = { x: 926, y: 452, width: 316, height: 178 };
     const miniature = await campPage.screenshot({ clip: miniatureClip });
+    const miniatureSkyClip = { ...miniatureClip, height: 50 };
+    const miniatureSky = await campPage.screenshot({ clip: miniatureSkyClip });
     await campPage.waitForTimeout(600);
     if (miniature.equals(await campPage.screenshot({ clip: miniatureClip }))) throw new Error(`DPR ${deviceScaleFactor}: Workforce miniature did not animate`);
+    if (!miniatureSky.equals(await campPage.screenshot({ clip: miniatureSkyClip }))) throw new Error(`DPR ${deviceScaleFactor}: miniature stars did not stay steady`);
     await pressGameKey(campPage, "ArrowRight");
     await pressGameKey(campPage, "d");
     if (await campPage.locator("html").getAttribute("data-africa2ice-summary") !== summary) throw new Error("Workforce miniature or draft edit changed the campaign");
     await pressGameKey(campPage, "c");
     await campPage.waitForTimeout(250);
     const first = await canvas.screenshot();
+    const starsClip = { x: 32, y: 120, width: 1216, height: 90 };
+    const stars = await campPage.screenshot({ clip: starsClip });
     await campPage.waitForTimeout(600);
     if (first.equals(await canvas.screenshot())) throw new Error(`DPR ${deviceScaleFactor}: camp did not animate`);
+    if (stars.equals(await campPage.screenshot({ clip: starsClip }))) throw new Error(`DPR ${deviceScaleFactor}: full-size stars did not twinkle`);
     for (const key of ["Space", "Tab", "n", "ArrowRight"]) await pressGameKey(campPage, key);
     if (await campPage.locator("html").getAttribute("data-africa2ice-summary") !== summary) throw new Error("camp keys changed the campaign");
     await pressGameKey(campPage, "Escape");

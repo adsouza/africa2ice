@@ -42,6 +42,10 @@ func (p *Panel) DrawAnimations(screen *ebiten.Image) {
 	if !p.workforceCampVisible() || !p.refreshWorkforceCamp() {
 		return
 	}
+	p.drawWorkforceCamp(screen)
+}
+
+func (p *Panel) drawWorkforceCamp(screen *ebiten.Image) {
 	clip := p.workforceCampClip().Intersect(screen.Bounds())
 	if !clip.Empty() {
 		p.handles.workforceCamp.Render(screen.SubImage(clip).(*ebiten.Image))

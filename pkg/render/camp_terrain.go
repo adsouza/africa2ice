@@ -46,17 +46,7 @@ func campTerrainPalette(tile gameapi.Tile) campTerrainColors {
 	return palette
 }
 
-func drawCampLandscape(c logicalCanvas, tile gameapi.Tile, band gameapi.BandID) {
-	for y := 0; y < 720; y += 6 {
-		f := float64(y) / 720
-		vector.FillRect(c, 0, float32(y), 1280, 6, color.NRGBA{R: uint8(8 + 15*f), G: uint8(16 + 10*f), B: uint8(27 + 8*f), A: 255}, false)
-	}
-	// A band-stable sky and tile-driven scenery use no campaign randomness.
-	for i := 0; i < 75; i++ {
-		x := 45 + 1190*unitNoise(hashTile(i, int(band), 1))
-		y := 130 + 165*unitNoise(hashTile(i, int(band), 2))
-		vector.FillCircle(c, float32(x), float32(y), float32(.6+unitNoise(hashTile(i, 0, 3))), color.NRGBA{R: 166, G: 185, B: 194, A: 150}, false)
-	}
+func drawCampLandscape(c logicalCanvas, tile gameapi.Tile) {
 	campEllipse(c, 1040, 190, 24, 24, color.NRGBA{R: 176, G: 187, B: 181, A: 255})
 	campEllipse(c, 1031, 183, 24, 24, color.NRGBA{R: 13, G: 19, B: 29, A: 255})
 	palette := campTerrainPalette(tile)
