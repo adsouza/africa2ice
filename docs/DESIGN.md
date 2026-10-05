@@ -7666,6 +7666,14 @@ group rather than one figure per person. Biome, local temperature, natural shelt
 acquired technology inform the procedural scenery, clothing, movement, and props. The figures are
 illustrative and have no individual identities, demographic records, or gameplay actions.
 
+The scenery follows the tile's current biome: woodland canopies and a river, sparse flat-canopy
+trees on savanna, a sea horizon and low shrubs on the coast, angular peaks and scree in highlands,
+layered dunes and sparse scrub in desert, and low vegetation on tundra. Elevation adjusts ridge
+height; vegetation controls plant density; reported nearby lakes add water beside the clearing.
+Freezing local temperatures add snowy ground patches and caps on highland/tundra ridges. These
+are illustrative settings rather than reconstructions of a tile's precise local geography, and
+both the full-screen camp and Workforce miniature use the same terrain renderer.
+
 The presentation owns its animation tick, smoke, embers, breathing, gestures, and flickering light.
 It reads only the accepted `gameapi.Frame` and never consumes campaign randomness or advances a
 turn. The scene retains selection, migration previews, and dirty workforce drafts, blocks gameplay

@@ -135,57 +135,6 @@ func (scene *CampScene) Illustration(frame *gameapi.Frame, selected gameapi.Band
 	return scene.image, true
 }
 
-func drawCampLandscape(c logicalCanvas, tile gameapi.Tile, band gameapi.BandID) {
-	cold := tile.LocalTemperatureC < 5
-	// A band-stable star field lends different camps their own sky.
-	for y := 0; y < 720; y += 6 {
-		f := float64(y) / 720
-		vector.FillRect(c, 0, float32(y), 1280, 6, color.NRGBA{R: uint8(8 + 15*f), G: uint8(16 + 10*f), B: uint8(27 + 8*f), A: 255}, false)
-	}
-	for i := 0; i < 75; i++ {
-		x := 45 + 1190*unitNoise(hashTile(i, int(band), 1))
-		y := 130 + 165*unitNoise(hashTile(i, int(band), 2))
-		vector.FillCircle(c, float32(x), float32(y), float32(.6+unitNoise(hashTile(i, 0, 3))), color.NRGBA{R: 166, G: 185, B: 194, A: 150}, false)
-	}
-	campEllipse(c, 1040, 190, 24, 24, color.NRGBA{R: 176, G: 187, B: 181, A: 255})
-	campEllipse(c, 1031, 183, 24, 24, color.NRGBA{R: 13, G: 19, B: 29, A: 255})
-	campPolygon(c, color.NRGBA{R: 28, G: 38, B: 47, A: 255}, 0, 340, 110, 278, 210, 309, 330, 235, 460, 314, 570, 269, 710, 318, 850, 263, 1000, 310, 1130, 252, 1280, 322, 1280, 500, 0, 500)
-	campPolygon(c, color.NRGBA{R: 19, G: 29, B: 34, A: 255}, 0, 370, 160, 341, 350, 380, 500, 329, 730, 362, 910, 340, 1100, 379, 1280, 344, 1280, 570, 0, 570)
-	ground := color.NRGBA{R: 33, G: 30, B: 28, A: 255}
-	if cold {
-		ground = color.NRGBA{R: 49, G: 57, B: 61, A: 255}
-	}
-	campPolygon(c, ground, 0, 450, 200, 424, 425, 446, 640, 424, 880, 450, 1120, 425, 1280, 451, 1280, 720, 0, 720)
-	// A low windbreak and discarded branches frame the gathering.
-	campPolygon(c, color.NRGBA{R: 46, G: 43, B: 39, A: 255}, 130, 432, 222, 330, 310, 424)
-	campPolygon(c, color.NRGBA{R: 12, G: 19, B: 22, A: 255}, 182, 428, 225, 353, 268, 426)
-	vector.StrokeLine(c, 225, 331, 320, 444, 4, color.NRGBA{R: 77, G: 65, B: 50, A: 255}, false)
-	if tile.NaturalShelter > 0 {
-		campEllipse(c, 1110, 400, 120, 55, color.NRGBA{R: 40, G: 44, B: 44, A: 255})
-	}
-	for i := 0; i < 9; i++ {
-		x := float32(40 + i*150)
-		y := float32(450 + i%3*14)
-		if tile.Biome == gameapi.Savanna || tile.Biome == gameapi.RiverineWoodland {
-			vector.StrokeLine(c, x, y, x+14, y-85, 7, color.NRGBA{R: 12, G: 23, B: 24, A: 255}, false)
-			campEllipse(c, float64(x+12), float64(y-90), 43, 13, color.NRGBA{R: 12, G: 23, B: 24, A: 255})
-		} else {
-			for j := 0; j < 4; j++ {
-				vector.StrokeLine(c, x, y, x+float32(j*7-12), y-float32(18+j%2*12), 2, color.NRGBA{R: 23, G: 30, B: 30, A: 255}, false)
-			}
-		}
-	}
-	for i := 0; i < 40; i++ {
-		x := 30 + 1220*unitNoise(hashTile(i, 2, 7))
-		y := 485 + 115*unitNoise(hashTile(i, 2, 8))
-		campEllipse(c, x, y, 2+4*unitNoise(hashTile(i, 2, 9)), 1.3, color.NRGBA{R: 53, G: 49, B: 43, A: 255})
-	}
-	// The foreground fades into the caption's dark ground.
-	for y := 580; y < 720; y += 4 {
-		vector.FillRect(c, 0, float32(y), 1280, 4, color.NRGBA{R: 5, G: 9, B: 14, A: uint8(min(255, (y-580)*3))}, false)
-	}
-}
-
 func drawCampCompany(c logicalCanvas, band gameapi.Band, tile gameapi.Tile, seconds float64) {
 	flicker := campFlicker(seconds)
 	spread := .92 + flicker*.16
