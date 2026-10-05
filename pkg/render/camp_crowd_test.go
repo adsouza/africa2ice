@@ -18,11 +18,23 @@ func TestCampCrowdScalesWithPopulationAndBoundsExtremeBands(t *testing.T) {
 			t.Fatalf("population %d: got %d figures, want %d", test.population, len(people), test.figures)
 		}
 		poses := map[int]bool{}
+		seated, standing := 0, 0
 		for i, person := range people {
 			if poses[person.pose] || (i > 0 && people[i-1].position[1] > person.position[1]) {
 				t.Fatal("crowd duplicated a seat or painted out of depth order")
 			}
 			poses[person.pose] = true
+			if person.standing {
+				standing++
+				if person.position[3] != 0 || person.position[1] >= 394 {
+					t.Fatal("standing figure was sideways or in front of the seated ring")
+				}
+			} else {
+				seated++
+			}
+		}
+		if seated != min(test.figures, 12) || standing != max(0, test.figures-12) {
+			t.Fatalf("population %d: got %d seated and %d standing figures", test.population, seated, standing)
 		}
 	}
 }
@@ -31,7 +43,7 @@ func TestCampPopulationChangesReplaceBothIllustrationSizes(t *testing.T) {
 	for _, width := range []int{316, 1280} {
 		var scene CampScene
 		var previous []byte
-		for _, population := range []uint32{1, 4, 8, 12, 20, 7, 0} {
+		for _, population := range []uint32{1, 4, 8, 12, 13, 20, 7, 0} {
 			frame := campTerrainFrame(gameapi.Tile{Biome: gameapi.Savanna, LocalTemperatureC: 20})
 			frame.Bands[0].Population = population
 			art, changed := scene.Illustration(frame, 7, true, width)

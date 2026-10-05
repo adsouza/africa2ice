@@ -173,13 +173,13 @@ func drawCampCompany(c logicalCanvas, band gameapi.Band, tile gameapi.Tile, seco
 	people := campCrowd(band.Population)
 	for _, person := range people {
 		if person.position[1] < 500 {
-			drawCampPerson(c, person.position, person.pose, band, tile, seconds, flicker)
+			drawCampFigure(c, person, band, tile, seconds, flicker)
 		}
 	}
 	drawCampFire(c, seconds, flicker)
 	for _, person := range people {
 		if person.position[1] >= 500 {
-			drawCampPerson(c, person.position, person.pose, band, tile, seconds, flicker)
+			drawCampFigure(c, person, band, tile, seconds, flicker)
 		}
 	}
 }
@@ -200,11 +200,7 @@ func drawCampPerson(c logicalCanvas, position [4]float64, index int, band gameap
 	x, y, size, direction := position[0], position[1], position[2], position[3]
 	breath := math.Sin(seconds*1.4+float64(index)*1.9) * (1 + band.Health) * .65
 	gesture := math.Sin(seconds*.9+float64(index)*2.3) * 5
-	skin := color.NRGBA{R: uint8(76 + flicker*65), G: uint8(44 + flicker*32), B: 32, A: 255}
-	cloak := color.NRGBA{R: uint8(41+index%3*8) + uint8(flicker*17), G: uint8(34+index%3*5) + uint8(flicker*7), B: 29, A: 255}
-	if tile.LocalTemperatureC < 5 {
-		cloak = color.NRGBA{R: 64 + uint8(flicker*17), G: 61 + uint8(flicker*7), B: 55, A: 255}
-	}
+	skin, cloak := campPersonColors(index, tile, flicker)
 	// Local points mirror the pose so every face and hand turns toward the fire.
 	point := func(dx, dy float64) (float32, float32) { return float32(x + dx*size*direction), float32(y + dy*size) }
 	line := func(ax, ay, bx, by, width float64, col color.NRGBA) {

@@ -7663,11 +7663,12 @@ seen.
 `C` or **View camp** in the band details opens a full-screen, illustrative gathering around a
 campfire. The caption identifies the selected band; bands of up to 20 people show one figure per
 member, with no figures for an empty band. Larger bands show a capped gathering of 20 figures.
-The gathering grows from paired seats around the fire to smaller seats behind them. Both the
-full-size view and Workforce miniature use the accepted band's current population. Biome, local
+The first 12 figures sit around the fire; up to eight additional figures stand behind them, facing
+the viewer, with gentle breathing and arm movement. The full-size view and Workforce miniature
+use the accepted band's current population. Biome, local
 temperature, natural shelter, health, and acquired technology inform the procedural scenery,
-clothing, movement, and props. The figures are
-illustrative and have no individual identities, demographic records, or gameplay actions.
+clothing, movement, and props. The figures are illustrative and have no individual identities,
+demographic records, or gameplay actions.
 
 The scenery follows the tile's current biome: woodland canopies and a river, sparse flat-canopy
 trees on savanna, a sea horizon and low shrubs on the coast, angular peaks and scree in highlands,
