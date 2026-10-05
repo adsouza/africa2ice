@@ -94,3 +94,24 @@ func TestCampResizesAndReplacesTheSelectedBandsLandscape(t *testing.T) {
 		t.Fatal("camp did not scale into the high DPI content area")
 	}
 }
+
+func TestCampFirelightVisiblyFlickersOnStationaryGround(t *testing.T) {
+	frame := &gameapi.Frame{Bands: []gameapi.Band{{ID: 7, Population: 40, Health: .8}}, Tiles: []gameapi.Tile{{Biome: gameapi.Savanna, LocalTemperatureC: 25}}}
+	screen := ebiten.NewImage(1280, 720)
+	var scene CampScene
+	dimmest, brightest := uint32(255), uint32(0)
+	for range 41 {
+		scene.Draw(screen, frame, 7, false, 0)
+		// This patch is below the fire and clear of stones, people and smoke.
+		// Its brightness must change even without any moving shapes crossing it.
+		red, _, _, _ := screen.At(640, 501).RGBA()
+		red >>= 8
+		dimmest, brightest = min(dimmest, red), max(brightest, red)
+		for range 3 {
+			scene.Update(false)
+		}
+	}
+	if brightest-dimmest < 25 {
+		t.Fatalf("firelight brightness barely changed: red ranged from %d to %d", dimmest, brightest)
+	}
+}

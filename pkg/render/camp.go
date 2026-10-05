@@ -167,9 +167,10 @@ func drawCampLandscape(c logicalCanvas, tile gameapi.Tile, band gameapi.BandID) 
 }
 
 func drawCampCompany(c logicalCanvas, band gameapi.Band, tile gameapi.Tile, seconds float64) {
-	flicker := .5 + .25*math.Sin(seconds*8) + .15*math.Sin(seconds*13+2)
+	flicker := campFlicker(seconds)
+	spread := .92 + flicker*.16
 	for i := 10; i > 0; i-- {
-		campEllipse(c, 640, 468, float64(70+i*19), float64(14+i*5), color.NRGBA{R: 229, G: 123, B: 43, A: uint8(3 + flicker*3)})
+		campEllipse(c, 640, 468, float64(70+i*19)*spread, float64(14+i*5)*spread, color.NRGBA{R: 229, G: 123, B: 43, A: uint8(4 + flicker*12)})
 	}
 	positions := [8][4]float64{{446, 423, .86, 1}, {545, 394, .76, 1}, {737, 397, .79, -1}, {843, 430, .90, -1}, {343, 494, 1.15, 1}, {944, 491, 1.12, -1}, {486, 551, 1.27, 1}, {795, 551, 1.30, -1}}
 	count := int(min(uint32(6), band.Population))
@@ -185,14 +186,26 @@ func drawCampCompany(c logicalCanvas, band gameapi.Band, tile gameapi.Tile, seco
 	}
 }
 
+// Blend short, irregular brightness changes without using campaign randomness.
+// The same light drives the ground, faces and stones so each flare reads as firelight.
+func campFlicker(seconds float64) float64 {
+	step := seconds * 9
+	index := int(math.Floor(step))
+	fraction := step - float64(index)
+	fraction = smoothstep(fraction)
+	from := unitNoise(hashTile(index, 17, 31))
+	to := unitNoise(hashTile(index+1, 17, 31))
+	return .12 + .76*(from+(to-from)*fraction) + .1*math.Sin(seconds*14)
+}
+
 func drawCampPerson(c logicalCanvas, position [4]float64, index int, band gameapi.Band, tile gameapi.Tile, seconds, flicker float64) {
 	x, y, size, direction := position[0], position[1], position[2], position[3]
 	breath := math.Sin(seconds*1.4+float64(index)*1.9) * (1 + band.Health) * .65
 	gesture := math.Sin(seconds*.9+float64(index)*2.3) * 5
-	skin := color.NRGBA{R: uint8(80 + flicker*30), G: uint8(47 + flicker*15), B: 32, A: 255}
-	cloak := color.NRGBA{R: uint8(41 + index%3*8), G: uint8(34 + index%3*5), B: 29, A: 255}
+	skin := color.NRGBA{R: uint8(76 + flicker*65), G: uint8(44 + flicker*32), B: 32, A: 255}
+	cloak := color.NRGBA{R: uint8(41+index%3*8) + uint8(flicker*17), G: uint8(34+index%3*5) + uint8(flicker*7), B: 29, A: 255}
 	if tile.LocalTemperatureC < 5 {
-		cloak = color.NRGBA{R: 64, G: 61, B: 55, A: 255}
+		cloak = color.NRGBA{R: 64 + uint8(flicker*17), G: 61 + uint8(flicker*7), B: 55, A: 255}
 	}
 	// Local points mirror the pose so every face and hand turns toward the fire.
 	point := func(dx, dy float64) (float32, float32) { return float32(x + dx*size*direction), float32(y + dy*size) }
@@ -221,7 +234,7 @@ func drawCampPerson(c logicalCanvas, position [4]float64, index int, band gameap
 	line(-10, -55+breath, -8, -27, 10, cloak)
 	line(-8, -27, 22, -16, 7, skin)
 	// Small rim highlights tie the figures to the fire's changing light.
-	line(17, -52+breath, 22, -35+gesture, 1.5, color.NRGBA{R: 196, G: uint8(108 + flicker*30), B: 58, A: 150})
+	line(17, -52+breath, 22, -35+gesture, 1.5, color.NRGBA{R: 196, G: uint8(108 + flicker*30), B: 58, A: uint8(80 + flicker*150)})
 	if index == 4 {
 		line(45, -27+gesture*.4, 100, -15, 2.5, color.NRGBA{R: 103, G: 76, B: 47, A: 255})
 	}
@@ -245,7 +258,7 @@ func drawCampFire(c logicalCanvas, seconds, flicker float64) {
 	}
 	for i := 0; i < 10; i++ {
 		a := float64(i) * math.Pi / 5
-		campEllipse(c, 640+math.Cos(a)*53, 465+math.Sin(a)*12, 11, 6, color.NRGBA{R: 79, G: 73, B: 62, A: 255})
+		campEllipse(c, 640+math.Cos(a)*53, 465+math.Sin(a)*12, 11, 6, color.NRGBA{R: uint8(57 + flicker*55), G: uint8(51 + flicker*32), B: uint8(42 + flicker*16), A: 255})
 	}
 	vector.StrokeLine(c, 609, 470, 670, 452, 10, color.NRGBA{R: 62, G: 36, B: 22, A: 255}, false)
 	vector.StrokeLine(c, 615, 451, 669, 471, 9, color.NRGBA{R: 82, G: 44, B: 23, A: 255}, false)
