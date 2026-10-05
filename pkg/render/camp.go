@@ -170,17 +170,17 @@ func drawCampCompany(c logicalCanvas, band gameapi.Band, tile gameapi.Tile, seco
 	for i := 10; i > 0; i-- {
 		campEllipse(c, 640, 468, float64(70+i*19)*spread, float64(14+i*5)*spread, color.NRGBA{R: 229, G: 123, B: 43, A: uint8(4 + flicker*12)})
 	}
-	positions := [8][4]float64{{446, 423, .86, 1}, {545, 394, .76, 1}, {737, 397, .79, -1}, {843, 430, .90, -1}, {343, 494, 1.15, 1}, {944, 491, 1.12, -1}, {486, 551, 1.27, 1}, {795, 551, 1.30, -1}}
-	count := int(min(uint32(6), band.Population))
-	if band.Population >= 40 {
-		count = 8
-	}
-	for i := 0; i < min(6, count); i++ {
-		drawCampPerson(c, positions[i], i, band, tile, seconds, flicker)
+	people := campCrowd(band.Population)
+	for _, person := range people {
+		if person.position[1] < 500 {
+			drawCampPerson(c, person.position, person.pose, band, tile, seconds, flicker)
+		}
 	}
 	drawCampFire(c, seconds, flicker)
-	for i := 6; i < count; i++ {
-		drawCampPerson(c, positions[i], i, band, tile, seconds, flicker)
+	for _, person := range people {
+		if person.position[1] >= 500 {
+			drawCampPerson(c, person.position, person.pose, band, tile, seconds, flicker)
+		}
 	}
 }
 
