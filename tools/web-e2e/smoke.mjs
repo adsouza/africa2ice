@@ -45,6 +45,19 @@ const pressGameKey = async (page, key) => {
   await page.waitForTimeout(100);
 };
 
+// Departure expires after 240 game updates, not a fixed wall-clock delay.
+// Software rendering can advance those updates more slowly on CI. Wait for
+// the pixels to clear while retaining a deadline for a genuinely stuck still.
+const waitForScreenshotChange = async (page, previous, clip, label) => {
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    await page.waitForTimeout(250);
+    const current = await page.screenshot({ clip });
+    if (!previous.equals(current)) return current;
+  }
+  throw new Error(`${label}: pixels did not change within 20 seconds`);
+};
+
 // The web logging sink writes one JSON object per line to console.log.
 // Records are kept per page so a check can ask what this page has logged.
 const logRecords = new WeakMap();
@@ -183,9 +196,7 @@ try {
       if (first.equals(second) !== reducedMotion) throw new Error(`DPR ${deviceScaleFactor}: departure motion did not follow Reduced motion=${reducedMotion}`);
       if (await departurePage.locator("html").getAttribute("data-africa2ice-summary") !== queued) throw new Error("departure animation published a campaign change");
       if (reducedMotion) {
-        await departurePage.waitForTimeout(3_600);
-        const expired = await departurePage.screenshot({ clip: departureClip });
-        if (second.equals(expired)) throw new Error("reduced-motion departure did not expire");
+        const expired = await waitForScreenshotChange(departurePage, second, departureClip, `DPR ${deviceScaleFactor}: reduced-motion departure did not expire`);
         await departurePage.waitForTimeout(300);
         if (!expired.equals(await departurePage.screenshot({ clip: departureClip }))) throw new Error("departure expiry left moving or stale pixels");
       } else {
