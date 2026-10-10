@@ -19,18 +19,28 @@ type score struct {
 	room      [2][4]comb
 }
 
-// Open voicings of Dm9, F6, Am7, and Cadd9 share a D-minor pentatonic melody.
-var chords = [4][4]float64{
-	{50, 57, 60, 64}, {53, 60, 62, 69},
-	{45, 55, 60, 64}, {48, 55, 62, 67},
+// Eight open voicings and moving bass roots travel around D natural minor.
+// The upper voice changes register as well as pitch to keep the bed moving.
+var chords = [8][4]float64{
+	{50, 57, 64, 65}, {53, 60, 64, 69},
+	{45, 55, 60, 76}, {48, 55, 62, 67},
+	{46, 53, 57, 74}, {43, 50, 58, 69},
+	{50, 57, 62, 77}, {45, 52, 60, 67},
 }
 
-var motifs = [4][4]float64{
-	{69, 72, 74, 65}, {69, 67, 65, 62},
-	{72, 69, 67, 65}, {67, 74, 72, 69},
+var bassNotes = [8]float64{38, 41, 33, 36, 34, 31, 38, 33}
+var suspendedNotes = [8]float64{69, 72, 65, 74, 67, 77, 72, 76}
+
+// Wide leaps alternate with nearer replies and change direction within a
+// phrase. Steps, thirds, fourths, fifths, sixths, sevenths, and octaves occur.
+var motifs = [8][5]float64{
+	{62, 69, 77, 76, 72}, {65, 72, 62, 64, 69},
+	{69, 60, 67, 76, 72}, {67, 74, 65, 72, 62},
+	{70, 62, 77, 74, 65}, {67, 58, 74, 72, 69},
+	{74, 65, 72, 62, 69}, {69, 77, 67, 74, 62},
 }
 
-var noteOffsets = [4]float64{0, 2.75, 6, 9.5}
+var noteOffsets = [5]float64{0, 2.75, 5.5, 8.5, 11}
 
 func newScore(frames int, seed uint64) *score {
 	s := &score{random: rand.NewPCG(seed, seed^0x9e3779b97f4a7c15), frames: frames, nextNote: 8 * sampleRate}
@@ -63,10 +73,10 @@ func (s *score) next() (float64, float64) {
 		s.scheduleNote()
 	}
 	var dry [2]float64
-	// Crossfade entire sustained voicings over eight seconds. Each oscillator's
+	// Crossfade entire sustained voicings over six seconds. Each oscillator's
 	// phase is a function of sample time, so chord changes never reset a phase.
-	section := int(t / 24)
-	blend := smooth(math.Mod(t, 24) / 8)
+	section := int(t / 18)
+	blend := smooth(math.Mod(t, 18) / 6)
 	for voice := range 4 {
 		for side := range 2 {
 			midi := chords[(section+side)%len(chords)][voice]
@@ -82,8 +92,23 @@ func (s *score) next() (float64, float64) {
 			}
 		}
 	}
-	// A quiet, steady D underneath the shifting chords anchors the piece.
-	bass := 0.045 * math.Sin(2*math.Pi*frequency(38)*t)
+	// The bass follows the harmony instead of holding a D for the whole piece.
+	// A quieter suspended line moves independently every nine seconds. Fading
+	// fixed-pitch oscillators preserves clear pitches without a siren-like glide.
+	bass := 0.045 * ((1-blend)*math.Sin(2*math.Pi*frequency(bassNotes[section%len(bassNotes)])*t) +
+		blend*math.Sin(2*math.Pi*frequency(bassNotes[(section+1)%len(bassNotes)])*t))
+	upperSection := int(t / 9)
+	upperBlend := smooth(math.Mod(t, 9) / 4)
+	for channel := range 2 {
+		for side := range 2 {
+			weight := 1 - upperBlend
+			if side == 1 {
+				weight = upperBlend
+			}
+			f := frequency(suspendedNotes[(upperSection+side)%len(suspendedNotes)]) * (1 + float64(channel)*0.0007)
+			dry[channel] += 0.02 * weight * math.Sin(2*math.Pi*f*t)
+		}
+	}
 	for i := range s.strings {
 		p := &s.strings[i]
 		value := p.next()
@@ -115,8 +140,8 @@ func (s *score) next() (float64, float64) {
 
 func (s *score) scheduleNote() {
 	phrase, step := s.noteIndex/len(noteOffsets), s.noteIndex%len(noteOffsets)
-	// Leave every fourth phrase open; its first note is an octave lower.
-	if phrase%4 != 3 || step == 0 {
+	// Leave space in every fourth phrase, but retain its opening leap and reply.
+	if phrase%4 != 3 || step < 2 || step == len(noteOffsets)-1 {
 		midi := motifs[phrase%len(motifs)][step]
 		if phrase%4 == 3 {
 			midi -= 12
