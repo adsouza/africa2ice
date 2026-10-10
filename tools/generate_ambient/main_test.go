@@ -30,7 +30,8 @@ func TestScoreHasHeadroomStereoAndSilentEdges(t *testing.T) {
 			previous[channel] = value
 		}
 		difference += (left - right) * (left - right)
-		if len(s.strings) > 4 {
+		// Denser melody and occasional accompaniment share three-second tails.
+		if len(s.strings) > 6 {
 			t.Fatalf("unbounded voices at %d: %d", i, len(s.strings))
 		}
 	}

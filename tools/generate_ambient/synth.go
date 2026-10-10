@@ -19,31 +19,30 @@ type score struct {
 	room      [2][4]comb
 }
 
-// Eight open voicings and moving bass roots travel around D natural minor.
-// The upper voice changes register as well as pitch to keep the bed moving.
-var chords = [8][4]float64{
-	{50, 57, 64, 65}, {53, 60, 64, 69},
-	{45, 55, 60, 76}, {48, 55, 62, 67},
-	{46, 53, 57, 74}, {43, 50, 58, 69},
-	{50, 57, 62, 77}, {45, 52, 60, 67},
+// Question-and-answer phrases bring the melody forward. The opening theme
+// returns with a changed ending; small runs connect its wider leaps.
+var motifs = [8][10]float64{
+	{62, 69, 65, 64, 62, 69, 67, 65, 64, 62},
+	{65, 69, 72, 69, 67, 65, 64, 62, 60, 65},
+	{67, 72, 76, 74, 72, 67, 69, 72, 67, 64},
+	{62, 69, 65, 64, 62, 74, 72, 69, 65, 62},
+	{65, 70, 74, 72, 70, 69, 65, 62, 65, 70},
+	{67, 74, 70, 69, 67, 62, 65, 69, 67, 62},
+	{69, 76, 72, 70, 69, 67, 65, 64, 62, 64},
+	{74, 69, 65, 64, 62, 65, 67, 69, 65, 62},
 }
 
-var bassNotes = [8]float64{38, 41, 33, 36, 34, 31, 38, 33}
-var suspendedNotes = [8]float64{69, 72, 65, 74, 67, 77, 72, 76}
+var bassNotes = [8]float64{50, 53, 48, 50, 46, 43, 45, 50}
+var noteOffsets = [10]float64{0, 1, 2, 2.5, 3.5, 5, 6, 7, 8, 9.5}
 
-// Wide leaps alternate with nearer replies and change direction within a
-// phrase. Steps, thirds, fourths, fifths, sixths, sevenths, and octaves occur.
-var motifs = [8][5]float64{
-	{62, 69, 77, 76, 72}, {65, 72, 62, 64, 69},
-	{69, 60, 67, 76, 72}, {67, 74, 65, 72, 62},
-	{70, 62, 77, 74, 65}, {67, 58, 74, 72, 69},
-	{74, 65, 72, 62, 69}, {69, 77, 67, 74, 62},
-}
-
-var noteOffsets = [5]float64{0, 2.75, 5.5, 8.5, 11}
+const (
+	melodyStart   = 2.5
+	phraseSeconds = 12
+	stringFrames  = 3 * sampleRate
+)
 
 func newScore(frames int, seed uint64) *score {
-	s := &score{random: rand.NewPCG(seed, seed^0x9e3779b97f4a7c15), frames: frames, nextNote: 8 * sampleRate}
+	s := &score{random: rand.NewPCG(seed, seed^0x9e3779b97f4a7c15), frames: frames, nextNote: int(melodyStart * sampleRate)}
 	for channel := range s.room {
 		for i, seconds := range [4]float64{0.071, 0.089, 0.113, 0.137} {
 			s.room[channel][i].buffer = make([]float64, int((seconds+float64(channel)*0.0037)*sampleRate))
@@ -73,42 +72,6 @@ func (s *score) next() (float64, float64) {
 		s.scheduleNote()
 	}
 	var dry [2]float64
-	// Crossfade entire sustained voicings over six seconds. Each oscillator's
-	// phase is a function of sample time, so chord changes never reset a phase.
-	section := int(t / 18)
-	blend := smooth(math.Mod(t, 18) / 6)
-	for voice := range 4 {
-		for side := range 2 {
-			midi := chords[(section+side)%len(chords)][voice]
-			weight := 1 - blend
-			if side == 1 {
-				weight = blend
-			}
-			for channel := range 2 {
-				f := frequency(midi) * (1 + float64(channel)*0.0009)
-				phase := 2 * math.Pi * f * t
-				breath := 0.8 + 0.2*math.Sin(2*math.Pi*t/17+float64(voice))
-				dry[channel] += weight * breath * 0.037 * (math.Sin(phase) + 0.17*math.Sin(2*phase))
-			}
-		}
-	}
-	// The bass follows the harmony instead of holding a D for the whole piece.
-	// A quieter suspended line moves independently every nine seconds. Fading
-	// fixed-pitch oscillators preserves clear pitches without a siren-like glide.
-	bass := 0.045 * ((1-blend)*math.Sin(2*math.Pi*frequency(bassNotes[section%len(bassNotes)])*t) +
-		blend*math.Sin(2*math.Pi*frequency(bassNotes[(section+1)%len(bassNotes)])*t))
-	upperSection := int(t / 9)
-	upperBlend := smooth(math.Mod(t, 9) / 4)
-	for channel := range 2 {
-		for side := range 2 {
-			weight := 1 - upperBlend
-			if side == 1 {
-				weight = upperBlend
-			}
-			f := frequency(suspendedNotes[(upperSection+side)%len(suspendedNotes)]) * (1 + float64(channel)*0.0007)
-			dry[channel] += 0.02 * weight * math.Sin(2*math.Pi*f*t)
-		}
-	}
 	for i := range s.strings {
 		p := &s.strings[i]
 		value := p.next()
@@ -117,7 +80,7 @@ func (s *score) next() (float64, float64) {
 	}
 	live := s.strings[:0]
 	for _, p := range s.strings {
-		if p.age < 8*sampleRate {
+		if p.age < stringFrames {
 			live = append(live, p)
 		}
 	}
@@ -131,8 +94,8 @@ func (s *score) next() (float64, float64) {
 		}
 		// Headroom, gentle saturation, and long edge fades make a standalone
 		// preview safe to audition. The fade includes the reverb tail.
-		fade := smooth(t/6) * smooth(float64(s.frames-1-s.frame)/sampleRate/10)
-		out[channel] = 0.8 * math.Tanh(1.5*(dry[channel]+bass+0.45*wet)) * fade
+		fade := smooth(t/2) * smooth(float64(s.frames-1-s.frame)/sampleRate/8)
+		out[channel] = 0.8 * math.Tanh(1.5*(dry[channel]+0.25*wet)) * fade
 	}
 	s.frame++
 	return out[0], out[1]
@@ -140,17 +103,30 @@ func (s *score) next() (float64, float64) {
 
 func (s *score) scheduleNote() {
 	phrase, step := s.noteIndex/len(noteOffsets), s.noteIndex%len(noteOffsets)
-	// Leave space in every fourth phrase, but retain its opening leap and reply.
-	if phrase%4 != 3 || step < 2 || step == len(noteOffsets)-1 {
-		midi := motifs[phrase%len(motifs)][step]
-		if phrase%4 == 3 {
-			midi -= 12
+	lead := s.newPluck(motifs[phrase%len(motifs)][step])
+	// Keep the tune near the centre and give each phrase a natural accent.
+	lead.pan = 0.45 + 0.1*s.randomUnit()
+	lead.gain = 0.9
+	if step == 0 || step == 5 {
+		lead.gain = 1.05
+	}
+	s.strings = append(s.strings, lead)
+	// Two quiet, decaying accompaniment notes per phrase replace the drone.
+	if step == 0 || step == 5 {
+		midi := bassNotes[phrase%len(bassNotes)]
+		pan := 0.25
+		if step == 5 {
+			midi += 7
+			pan = 0.75
 		}
-		s.strings = append(s.strings, s.newPluck(midi))
+		accompaniment := s.newPluck(midi)
+		accompaniment.gain = 0.22
+		accompaniment.pan = pan
+		s.strings = append(s.strings, accompaniment)
 	}
 	s.noteIndex++
 	phrase, step = s.noteIndex/len(noteOffsets), s.noteIndex%len(noteOffsets)
-	s.nextNote = int((8 + float64(phrase)*14 + noteOffsets[step]) * sampleRate)
+	s.nextNote = int((melodyStart + float64(phrase)*phraseSeconds + noteOffsets[step]) * sampleRate)
 }
 
 type pluck struct {
@@ -159,15 +135,19 @@ type pluck struct {
 	age      int
 	pan      float64
 	filtered float64
+	gain     float64
 }
 
-// Karplus-Strong: a noise excitation circulates around a damped delay line.
+// Karplus-Strong: a pitched excitation circulates around a damped delay line.
 // Averaging costs half a sample of delay, accounted for in the string tuning.
 func (s *score) newPluck(midi float64) pluck {
-	p := pluck{buffer: make([]float64, int(float64(sampleRate)/frequency(midi)-0.5)), pan: 0.2 + 0.6*s.randomUnit()}
+	p := pluck{buffer: make([]float64, int(float64(sampleRate)/frequency(midi)-0.5)), pan: 0.2 + 0.6*s.randomUnit(), gain: 1}
 	var mean float64
 	for i := range p.buffer {
-		p.buffer[i] = (2*s.randomUnit() - 1) * 0.4
+		phase := 2 * math.Pi * float64(i) / float64(len(p.buffer))
+		// A pitched excitation makes the fundamental reliable. A little noise
+		// retains the wooden string attack and seed-dependent texture.
+		p.buffer[i] = 0.28*math.Sin(phase) + 0.09*math.Sin(2*phase) + 0.05*(2*s.randomUnit()-1)
 		mean += p.buffer[i] / float64(len(p.buffer))
 	}
 	for i := range p.buffer {
@@ -189,9 +169,9 @@ func (p *pluck) next() float64 {
 	p.position = next
 	p.filtered += 0.3 * (value - p.filtered)
 	attack := smooth(float64(p.age) / sampleRate / 0.012)
-	release := smooth(float64(8*sampleRate-1-p.age) / sampleRate)
+	release := smooth(float64(stringFrames-1-p.age) / sampleRate / 0.5)
 	p.age++
-	return p.filtered * attack * release * 0.7
+	return p.filtered * attack * release * 0.7 * p.gain
 }
 
 type comb struct {
@@ -203,7 +183,7 @@ type comb struct {
 func (c *comb) next(input float64) float64 {
 	value := c.buffer[c.position]
 	c.filtered += 0.22 * (value - c.filtered)
-	c.buffer[c.position] = input + 0.84*c.filtered
+	c.buffer[c.position] = input + 0.72*c.filtered
 	c.position = (c.position + 1) % len(c.buffer)
 	return value
 }

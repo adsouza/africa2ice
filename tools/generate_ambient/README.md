@@ -8,13 +8,15 @@ mkdir -p dist
 go run ./tools/generate_ambient -out dist/ambient-prototype.wav
 ```
 
-The stereo 44.1 kHz, 16-bit WAV contains softly detuned drones, moving bass roots,
-Karplus-Strong plucked strings, and damped stereo reverb. Eight open chord
-voicings change over 18-second sections, with an independent upper drone line
-changing notes every nine seconds. Eight melodies span D natural minor across
-several registers, mixing small steps, thirds through sevenths, octave leaps, and changing
-contours over 14-second phrases, with deliberate gaps. Six-second opening and ten-second
-closing fades include the reverb. This is a finite piece, not a seamless loop.
+The stereo 44.1 kHz, 16-bit WAV features a plucked melody in D natural minor.
+Eight ten-note phrases last twelve seconds each, with a returning theme,
+question-and-answer contours, small runs, and wider leaps. Two quieter bass and
+fifth notes per phrase provide intermittent accompaniment. There are no sustained
+drone oscillators. Karplus-Strong strings use a pitched excitation with a little
+noise for a clear fundamental and wooden attack; notes have three-second tails.
+Restrained stereo reverb adds space without dominating the tune. Two-second
+opening and eight-second closing fades include the reverb. This is a finite
+piece, not a seamless loop; the melody begins at 2.5 seconds.
 
 Use `-seed 42` to vary the string excitations and stereo placement while keeping
 the composition. Use `-duration 45s` for a shorter audition (1s to 30m accepted).
