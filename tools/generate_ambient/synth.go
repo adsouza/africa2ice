@@ -10,17 +10,21 @@ const sampleRate = 44_100
 // This listening prototype deliberately lives outside the game graph. Its
 // private PCG never consumes campaign randomness and it opens no audio device.
 type score struct {
-	random     *rand.PCG
-	frame      int
-	frames     int
-	nextNote   int
-	noteIndex  int
-	strings    []pluck
-	nextBeat   int
-	beatIndex  int
-	hits       []percussionHit
-	percussion [3][]float64
-	room       [2][4]comb
+	random      *rand.PCG
+	frame       int
+	frames      int
+	nextNote    int
+	noteIndex   int
+	strings     []pluck
+	nextBeat    int
+	beatIndex   int
+	hits        []percussionHit
+	percussion  [3][]float64
+	nextFlute   int
+	fluteIndex  int
+	flute       *fluteVoice
+	fluteRandom *rand.PCG
+	room        [2][4]comb
 }
 
 // Question-and-answer phrases bring the melody forward. The opening theme
@@ -40,14 +44,16 @@ var bassNotes = [8]float64{50, 53, 48, 50, 46, 43, 45, 50}
 var noteOffsets = [10]float64{0, 1, 2, 2.5, 3.5, 5, 6, 7, 8, 9.5}
 
 const (
-	melodyStart   = 2.5
-	phraseSeconds = 12
-	stringFrames  = 3 * sampleRate
+	melodyStart  = 2.5
+	phraseBeats  = 12
+	stringFrames = 3 * sampleRate
 )
 
 func newScore(frames int, seed uint64) *score {
 	s := &score{random: rand.NewPCG(seed, seed^0x9e3779b97f4a7c15), frames: frames, nextNote: int(melodyStart * sampleRate)}
-	s.nextBeat = int((melodyStart + phraseSeconds) * sampleRate)
+	s.nextBeat = int(scoreTime(phraseBeats) * sampleRate)
+	s.nextFlute = int(scoreTime(phraseBeats+10.25) * sampleRate)
+	s.fluteRandom = rand.NewPCG(seed^0x243f6a8885a308d3, seed^0x13198a2e03707344)
 	s.percussion = synthPercussion(seed)
 	for channel := range s.room {
 		for i, seconds := range [4]float64{0.071, 0.089, 0.113, 0.137} {
@@ -70,6 +76,15 @@ func smooth(value float64) float64 {
 	return value * value * (3 - 2*value)
 }
 
+// One beat clock drives melody, percussion, and flute. Beat length eases from
+// 70 BPM to 60 BPM across the first 36 beats, then stays at one second.
+func scoreTime(beat float64) float64 {
+	const openingBeat = 60.0 / 70
+	const transitionBeats = 36
+	opening := min(beat, transitionBeats)
+	return melodyStart + openingBeat*opening + (1-openingBeat)*opening*opening/(2*transitionBeats) + max(0, beat-transitionBeats)
+}
+
 // next produces one stereo frame with a fixed amount of reverb memory. The
 // score clock advances by samples rather than wall time or rendering chunks.
 func (s *score) next() (float64, float64) {
@@ -79,6 +94,9 @@ func (s *score) next() (float64, float64) {
 	}
 	if s.frame == s.nextBeat {
 		s.scheduleBeat()
+	}
+	if s.frame == s.nextFlute {
+		s.scheduleFlute()
 	}
 	var dry [2]float64
 	for i := range s.strings {
@@ -96,7 +114,7 @@ func (s *score) next() (float64, float64) {
 	clear(s.strings[len(live):])
 	s.strings = live
 	// The rhythm enters after the opening phrase, below the lead in level.
-	percussionFade := smooth((t - melodyStart - phraseSeconds) / 4)
+	percussionFade := smooth((t - scoreTime(phraseBeats)) / 4)
 	liveHits := s.hits[:0]
 	for _, hit := range s.hits {
 		value := s.percussion[hit.kind][hit.position] * hit.gain * percussionFade
@@ -109,6 +127,14 @@ func (s *score) next() (float64, float64) {
 	}
 	clear(s.hits[len(liveHits):])
 	s.hits = liveHits
+	if s.flute != nil {
+		value := s.flute.next(s.fluteRandom)
+		dry[0] += value * math.Cos(0.36*math.Pi/2)
+		dry[1] += value * math.Sin(0.36*math.Pi/2)
+		if s.flute.age == s.flute.frames {
+			s.flute = nil
+		}
+	}
 	var out [2]float64
 	for channel := range 2 {
 		var wet float64
@@ -124,7 +150,7 @@ func (s *score) next() (float64, float64) {
 	return out[0], out[1]
 }
 
-// A sparse 60 BPM hand-drum pattern fits the melody's half-second grid.
+// A sparse hand-drum pattern follows the melody's shared half-beat grid.
 // Offbeat shaker accents add movement; every fourth phrase leaves more space.
 func (s *score) scheduleBeat() {
 	step := s.beatIndex % 8
@@ -148,7 +174,7 @@ func (s *score) scheduleBeat() {
 		}
 	}
 	s.beatIndex++
-	s.nextBeat = int((melodyStart + phraseSeconds + float64(s.beatIndex)*0.5) * sampleRate)
+	s.nextBeat = int(scoreTime(phraseBeats+float64(s.beatIndex)*0.5) * sampleRate)
 }
 
 func (s *score) scheduleNote() {
@@ -176,7 +202,7 @@ func (s *score) scheduleNote() {
 	}
 	s.noteIndex++
 	phrase, step = s.noteIndex/len(noteOffsets), s.noteIndex%len(noteOffsets)
-	s.nextNote = int((melodyStart + float64(phrase)*phraseSeconds + noteOffsets[step]) * sampleRate)
+	s.nextNote = int(scoreTime(float64(phrase)*phraseBeats+noteOffsets[step]) * sampleRate)
 }
 
 type pluck struct {

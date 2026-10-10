@@ -9,7 +9,7 @@ go run ./tools/generate_ambient -out dist/ambient-prototype.wav
 ```
 
 The stereo 44.1 kHz, 16-bit WAV features a plucked melody in D natural minor.
-Eight ten-note phrases last twelve seconds each, with a returning theme,
+Eight ten-note phrases span twelve beats each, with a returning theme,
 question-and-answer contours, small runs, and wider leaps. Two quieter bass and
 fifth notes per phrase provide intermittent accompaniment. There are no sustained
 drone oscillators. Karplus-Strong strings use a pitched excitation with a little
@@ -18,10 +18,16 @@ Restrained stereo reverb adds space without dominating the tune. Two-second
 opening and eight-second closing fades include the reverb. This is a finite
 piece, not a seamless loop; the melody begins at 2.5 seconds.
 
-A quiet 60 BPM hand-drum pulse and offbeat shaker accents enter after the first
+A quiet hand-drum pulse and offbeat shaker accents enter after the first
 phrase, fading in over four seconds. Every fourth phrase thins the percussion.
 Both drum tones and shaker noise are synthesized in Go. Their separate random
 stream preserves the melody's existing string texture and stereo placement.
+
+The opening runs at 70 BPM and gradually eases to 60 across 36 beats (about 35
+seconds from the start of the recording). One beat clock keeps all instruments
+together. A softly synthesized breathy flute answers every second phrase with
+two short notes in the closing gap, beginning around 23 seconds. Its separate
+random stream leaves the other instruments' texture unchanged.
 
 Use `-seed 42` to vary the string excitations and stereo placement while keeping
 the composition. Use `-duration 45s` for a shorter audition (1s to 30m accepted).
