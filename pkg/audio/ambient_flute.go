@@ -1,4 +1,4 @@
-package main
+package audio
 
 import (
 	"math"
@@ -16,11 +16,11 @@ func fluteBeat(index int) float64 {
 
 func (s *score) scheduleFlute() {
 	beat := fluteBeat(s.fluteIndex)
-	frames := int(scoreTime(beat+0.75)*sampleRate) - s.frame
+	frames := int(int64(scoreTime(beat+0.75)*sampleRate) - s.frame)
 	midi := fluteReplies[(s.fluteIndex/2)%len(fluteReplies)][s.fluteIndex%2]
 	s.flute = &fluteVoice{frequency: frequency(midi), frames: frames}
 	s.fluteIndex++
-	s.nextFlute = int(scoreTime(fluteBeat(s.fluteIndex)) * sampleRate)
+	s.nextFlute = int64(scoreTime(fluteBeat(s.fluteIndex)) * sampleRate)
 }
 
 type fluteVoice struct {

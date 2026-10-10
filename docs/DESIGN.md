@@ -354,6 +354,7 @@ internal/adapters/logging/ OUTER OBSERVABILITY ADAPTER — stdlib + application/
 
 pkg/audio/               stdlib + oto only (never Ebitengine's audio package: see §11)
   synth.go               PCM tone generation (enveloped sine/square)
+  ambient*.go            version 5's continuous plucked melody, percussion, flute, and PCM stream
   manager.go             SoundManager, lazily constructed, degrades to silence on device failure
 
 pkg/render/              DRAWING ADAPTER — gameapi + Ebitengine; no domain/application/ui/hud
@@ -8326,7 +8327,7 @@ state, operation FIFO ordering, and deletion interrupted between tombstone publi
   and hit areas.
 - **Audio autoplay.** Browsers refuse to start an audio context before a user gesture, so
   `pkg/app` starts the asynchronous `UISettings` read at boot, but constructs and resumes
-  `SoundManager` only on the first click. If the read has completed, the manager receives those
+  `SoundManager` only on the first mouse, key, or touch gesture. If the read has completed, the manager receives those
   settings before accepting a sound request. If it is still pending, the manager starts at effective
   zero gain and retains only the first requested sound in one optional `PendingFirstSound` slot;
   later requests before settlement are dropped, so a stalled read cannot grow a queue. A successful
@@ -8415,10 +8416,22 @@ stops playback, alters the event feed's seen-key set, nor requests a sound of it
 presentation-only in the §8 sense: they consume no `WorldRNG` draw, never reach `SaveState`, slot
 metadata, or campaign hashes, and cannot change a simulation outcome.
 
-Future ambient audio may use this same master gain and mute flag without changing the v1
-`UISettings` shape. A later requirement for an independently adjustable ambient channel would be a
-new preference and would still require the ordinary settings-version migration; this design does not
-reserve an unnamed per-channel field.
+Version 5's ambient music uses the same master gain and mute flag without changing the v1
+`UISettings` shape. `pkg/audio.Ambient` streams interleaved stereo float32 PCM from synthesized
+plucked strings, hand drums, shaker, and flute replies. Its private instrument RNGs never consume
+campaign randomness. The opening eases from 70 to 60 BPM once; the eight-phrase arrangement then
+repeats every 96 beats at 60 BPM. Instrument state and reverb continue across each boundary, with
+no end fade, reset, or gap. Excitation texture varies between repetitions. The fixed music mix is
+70% of the shared master gain, leaving room for short UI effects.
+
+The host unlocks the lazy device on a mouse press, key press, or touch gesture, independently of
+whether the action requests an effect. No music player starts until preferences have settled and
+mute is off. Unmuting after a gesture can start the music without requesting an effect. There is
+one retained music player per session, separate from effect pruning. Mute sets its gain to zero
+without rewinding; focus loss pauses it, and focus return resumes the same position. The composed
+host stops all players before releasing audio on close; borrowed ports remain caller-owned.
+A later requirement for an independently adjustable ambient channel would be a new preference
+and would require the ordinary settings-version migration.
 
 The `-dumpmap`, `-headless`, and `-screenshot` verification modes need no audio and open no audio
 context. The first two finish before constructing the interactive host; the screenshot path uses
@@ -8448,10 +8461,10 @@ separate them. Each of those three is the only reader
 some player has. `-no-sound` skips construction entirely for a machine known to lack a usable
 device.
 
-Driving `oto` directly costs one behaviour and keeps another. Lost: Ebitengine no longer suspends
-and resumes the context on focus change, because that was wired through the same `audio` package
-hooks. This is deliberate and harmless here — every sound is a 120ms blip requested by a click, so a
-window without focus requests none. Kept: the browser gesture requirement, which `oto`'s own js
+Driving `oto` directly requires explicit music focus handling. The host polls focus on desktop
+and listens for `visibilitychange`, `blur`, and `focus` in browsers, where a hidden tab may stop
+`Game.Update` entirely. Losing focus pauses the music player; closing removes the browser
+listeners. The browser gesture requirement remains, which `oto`'s own js
 driver enforces by resuming the `AudioContext` from `touchend`/`keyup`/`mouseup` listeners it
 registers itself, so §10's autoplay ordering does not depend on Ebitengine's audio package.
 
@@ -9798,8 +9811,8 @@ would express, any coupling between the seven Greenland Interstadial pulses and 
 wet/dry season, a non-monotonic MIS 4 moisture excursion, a seventh transitional biome between
 savanna and semi-arid desert (`BaselineKCurve(V)` now covers that gradient within each band), any domain rule that branches on `ClimateEpoch`,
 permanent ecological scarring or land-restoration technology, the full
-~30-technology graph (DAG), continental North America beyond western Alaska, streaming
-ambient audio beds, remote log collection or upload, a crash-reporting service, a player-facing log
+~30-technology graph (DAG), continental North America beyond western Alaska,
+remote log collection or upload, a crash-reporting service, a player-facing log
 viewer, user-configurable log levels, temporary line-of-sight/espionage fog, randomized scouting,
 textured and sprite art, glTF assets or model loading, native installers, code signing/notarization,
 package-manager feeds, and automatic

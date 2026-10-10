@@ -1,26 +1,24 @@
-package main
+package audio
 
 import (
 	"math"
 	"math/rand/v2"
 )
 
-const sampleRate = 44_100
-
-// This listening prototype deliberately lives outside the game graph. Its
-// private PCG never consumes campaign randomness and it opens no audio device.
+// The score owns its randomness and opens no audio device. Its clock and
+// instrument state continue across eight-phrase cycles, preserving all tails.
 type score struct {
 	random      *rand.PCG
-	frame       int
-	frames      int
-	nextNote    int
+	frame       int64
+	frames      int64
+	nextNote    int64
 	noteIndex   int
 	strings     []pluck
-	nextBeat    int
+	nextBeat    int64
 	beatIndex   int
 	hits        []percussionHit
 	percussion  [3][]float64
-	nextFlute   int
+	nextFlute   int64
 	fluteIndex  int
 	flute       *fluteVoice
 	fluteRandom *rand.PCG
@@ -50,9 +48,9 @@ const (
 )
 
 func newScore(frames int, seed uint64) *score {
-	s := &score{random: rand.NewPCG(seed, seed^0x9e3779b97f4a7c15), frames: frames, nextNote: int(melodyStart * sampleRate)}
-	s.nextBeat = int(scoreTime(phraseBeats) * sampleRate)
-	s.nextFlute = int(scoreTime(phraseBeats+10.25) * sampleRate)
+	s := &score{random: rand.NewPCG(seed, seed^0x9e3779b97f4a7c15), frames: int64(frames), nextNote: int64(melodyStart * sampleRate)}
+	s.nextBeat = int64(scoreTime(phraseBeats) * sampleRate)
+	s.nextFlute = int64(scoreTime(phraseBeats+10.25) * sampleRate)
 	s.fluteRandom = rand.NewPCG(seed^0x243f6a8885a308d3, seed^0x13198a2e03707344)
 	s.percussion = synthPercussion(seed)
 	for channel := range s.room {
@@ -143,7 +141,10 @@ func (s *score) next() (float64, float64) {
 		}
 		// Headroom, gentle saturation, and long edge fades make a standalone
 		// preview safe to audition. The fade includes the reverb tail.
-		fade := smooth(t/2) * smooth(float64(s.frames-1-s.frame)/sampleRate/8)
+		fade := smooth(t / 2)
+		if s.frames > 0 {
+			fade *= smooth(float64(s.frames-1-s.frame) / sampleRate / 8)
+		}
 		out[channel] = 0.8 * math.Tanh(1.5*(dry[channel]+0.25*wet)) * fade
 	}
 	s.frame++
@@ -174,7 +175,7 @@ func (s *score) scheduleBeat() {
 		}
 	}
 	s.beatIndex++
-	s.nextBeat = int(scoreTime(phraseBeats+float64(s.beatIndex)*0.5) * sampleRate)
+	s.nextBeat = int64(scoreTime(phraseBeats+float64(s.beatIndex)*0.5) * sampleRate)
 }
 
 func (s *score) scheduleNote() {
@@ -202,7 +203,7 @@ func (s *score) scheduleNote() {
 	}
 	s.noteIndex++
 	phrase, step = s.noteIndex/len(noteOffsets), s.noteIndex%len(noteOffsets)
-	s.nextNote = int(scoreTime(float64(phrase)*phraseBeats+noteOffsets[step]) * sampleRate)
+	s.nextNote = int64(scoreTime(float64(phrase)*phraseBeats+noteOffsets[step]) * sampleRate)
 }
 
 type pluck struct {

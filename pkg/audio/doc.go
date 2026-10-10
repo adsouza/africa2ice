@@ -1,2 +1,2 @@
-// Package audio synthesizes and plays short game sounds.
+// Package audio synthesizes sound effects and continuous ambient music.
 package audio

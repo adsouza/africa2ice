@@ -10,6 +10,8 @@ import (
 	"math"
 	"os"
 	"time"
+
+	"github.com/adsouza/africa2ice/pkg/audio"
 )
 
 func main() {
@@ -32,7 +34,7 @@ func run(path string, duration time.Duration, seed uint64) error {
 	if err != nil {
 		return err
 	}
-	writeErr := writeWAV(file, int(duration.Seconds()*sampleRate), seed)
+	writeErr := writeWAV(file, int(duration.Seconds()*audio.SampleRate), seed)
 	closeErr := file.Close()
 	if writeErr != nil {
 		return writeErr
@@ -48,8 +50,8 @@ func writeWAV(writer io.Writer, frames int, seed uint64) error {
 	binary.LittleEndian.PutUint32(header[16:], 16)
 	binary.LittleEndian.PutUint16(header[20:], 1)
 	binary.LittleEndian.PutUint16(header[22:], 2)
-	binary.LittleEndian.PutUint32(header[24:], sampleRate)
-	binary.LittleEndian.PutUint32(header[28:], sampleRate*4)
+	binary.LittleEndian.PutUint32(header[24:], audio.SampleRate)
+	binary.LittleEndian.PutUint32(header[28:], audio.SampleRate*4)
 	binary.LittleEndian.PutUint16(header[32:], 4)
 	binary.LittleEndian.PutUint16(header[34:], 16)
 	copy(header[36:], "data")
@@ -57,14 +59,22 @@ func writeWAV(writer io.Writer, frames int, seed uint64) error {
 	if err := writeAll(writer, header[:]); err != nil {
 		return err
 	}
-	s := newScore(frames, seed)
+	s := audio.NewAmbient(seed)
 	var buffer [4096]byte
+	var input [8192]byte
 	for remaining := frames; remaining > 0; {
 		count := min(remaining, len(buffer)/4)
+		if _, err := io.ReadFull(s, input[:count*8]); err != nil {
+			return err
+		}
 		for i := range count {
-			left, right := s.next()
-			binary.LittleEndian.PutUint16(buffer[4*i:], uint16(int16(math.Round(left*32767))))
-			binary.LittleEndian.PutUint16(buffer[4*i+2:], uint16(int16(math.Round(right*32767))))
+			// Only the finite audition fades out. In-game synthesis continues.
+			progress := min(1, float64(remaining-1-i)/audio.SampleRate/8)
+			fade := progress * progress * (3 - 2*progress)
+			for channel := range 2 {
+				value := float64(math.Float32frombits(binary.LittleEndian.Uint32(input[i*8+channel*4:])))
+				binary.LittleEndian.PutUint16(buffer[4*i+channel*2:], uint16(int16(math.Round(value*fade*32767))))
+			}
 		}
 		if err := writeAll(writer, buffer[:count*4]); err != nil {
 			return err

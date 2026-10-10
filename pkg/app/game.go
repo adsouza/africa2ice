@@ -173,7 +173,7 @@ func composeHostedGame(seed uint64, session *logging.Session, enableSound bool,
 	if err != nil {
 		return nil, err
 	}
-	// game is assigned below; the reporter only ever fires from a later Play.
+	// game is assigned below; the reporter only fires from a later gesture or poll.
 	var game *Game
 	var sound gameaudio.SoundManager = gameaudio.NoopManager{}
 	if enableSound {
@@ -195,7 +195,14 @@ func composeHostedGame(seed uint64, session *logging.Session, enableSound bool,
 	if resume {
 		game.beginStartupResume()
 	}
-	game.closeResources = sync.OnceValue(repository.Close)
+	stopFocus := game.observeAudioFocus()
+	game.closeResources = sync.OnceValue(func() error {
+		stopFocus()
+		if audio, ok := sound.(interface{ Stop() }); ok {
+			audio.Stop()
+		}
+		return repository.Close()
+	})
 	transferred = true
 	return game, nil
 }

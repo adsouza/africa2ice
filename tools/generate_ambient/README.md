@@ -1,7 +1,7 @@
 # Ambient music listening prototype
 
-Generate a two-minute instrumental piece with no recordings, dependencies, or
-audio device:
+Generate a two-minute instrumental preview without recordings or an audio
+device:
 
 ```sh
 mkdir -p dist
@@ -34,7 +34,12 @@ the composition. Use `-duration 45s` for a shorter audition (1s to 30m accepted)
 The generator streams to disk with bounded instrument and delay memory. Its
 private random generator is independent of campaign state.
 
-The tool is a listening prototype outside the game dependency graph. Audition
-and tune it before moving synthesis into `pkg/audio`; continuous in-game music
-will also need gesture-gated startup, preference settlement, focus handling,
-and playback lifecycle support in the existing audio manager.
+The tool now renders the game's shared `pkg/audio.Ambient` stream. Only this
+finite WAV export adds a closing fade. In the game the eight-phrase melody
+cycles continuously every 96 seconds after the faster opening, with instrument
+and reverb tails preserved across each boundary. Noise excitation varies
+between repetitions; the arrangement repeats without an audible restart.
+
+In-game music starts after a user gesture and preference settlement, uses the
+existing master volume and mute, pauses when focus is lost, and stops on close.
+Its fixed mix level is 70% of the master gain to leave space for UI effects.

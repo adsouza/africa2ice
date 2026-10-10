@@ -6,6 +6,8 @@ import (
 
 	"github.com/adsouza/africa2ice/internal/adapters/logging"
 	gameaudio "github.com/adsouza/africa2ice/pkg/audio"
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
 // audioUnavailableNotice matches the wording of the preferences fallback: a
@@ -35,7 +37,20 @@ func audioReporter(session *logging.Session, console io.Writer, notify func(stri
 // the synth without an API change, so this is an optional interface rather
 // than a third method every implementation would have to carry.
 func (g *Game) pollAudio() {
+	g.setAudioActive(audioFocused())
 	if poller, ok := g.sound.(interface{ Poll() }); ok {
 		poller.Poll()
+	}
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) ||
+		len(inpututil.AppendJustPressedKeys(nil)) > 0 || len(inpututil.AppendJustPressedTouchIDs(nil)) > 0 {
+		if unlocker, ok := g.sound.(interface{ Unlock() }); ok {
+			unlocker.Unlock()
+		}
+	}
+}
+
+func (g *Game) setAudioActive(active bool) {
+	if focus, ok := g.sound.(interface{ SetActive(bool) }); ok {
+		focus.SetActive(active)
 	}
 }

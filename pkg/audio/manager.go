@@ -2,6 +2,7 @@ package audio
 
 import (
 	"bytes"
+	"io"
 	"sync"
 
 	"github.com/ebitengine/oto/v3"
@@ -44,10 +45,14 @@ func (NoopManager) SetMaster(float64, bool) {}
 // A sound device is presentation-only, so its failure is reported here and
 // degrades to silence instead.
 type Manager struct {
-	context *oto.Context
-	players []*oto.Player
-	volume  float64
-	muted   bool
+	context   *oto.Context
+	players   []soundPlayer
+	newPlayer func(io.Reader) soundPlayer
+	music     soundPlayer
+	active    bool
+	stopped   bool
+	volume    float64
+	muted     bool
 
 	// opened is written once by the goroutine watching oto's ready channel
 	// and read from the game loop, so it needs the mutex.
@@ -57,6 +62,17 @@ type Manager struct {
 	// panicGuard is deferred by the device-watching goroutine; never nil.
 	panicGuard func()
 }
+
+// A narrow seam keeps gain, focus, and lifetime checks independent of hardware.
+type soundPlayer interface {
+	Play()
+	Pause()
+	IsPlaying() bool
+	SetVolume(float64)
+}
+
+const musicGain = 0.7
+const musicSeed = 20261010
 
 // NewManager opens the sound device. The open runs on oto's own goroutine, so
 // a device that cannot be opened surfaces through Err() a few frames later
@@ -75,7 +91,8 @@ func NewManager(panicGuard func()) (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
-	manager := &Manager{context: context, volume: 0.5, panicGuard: orNoGuard(panicGuard)}
+	manager := &Manager{context: context, volume: 0.5, active: true, panicGuard: orNoGuard(panicGuard),
+		newPlayer: func(reader io.Reader) soundPlayer { return context.NewPlayer(reader) }}
 	// oto stores a setup error before it closes ready, so the error is already
 	// final here: a clean ready means the device genuinely came up, and any
 	// error after this point is a working device that later stopped.
@@ -118,11 +135,12 @@ func (manager *Manager) Opened() bool {
 }
 
 func (manager *Manager) Play(sound Sound) {
-	if manager == nil || sound >= soundCount {
+	if manager == nil || manager.stopped || sound >= soundCount {
 		return
 	}
 	manager.prunePlayers()
-	player := manager.context.NewPlayer(bytes.NewReader(synthPCM(sound)))
+	manager.StartMusic()
+	player := manager.newPlayer(bytes.NewReader(synthPCM(sound)))
 	player.SetVolume(manager.effectiveVolume())
 	player.Play()
 	manager.players = append(manager.players, player)
@@ -137,6 +155,52 @@ func (manager *Manager) SetMaster(volume float64, muted bool) {
 	for _, player := range manager.players {
 		player.SetVolume(manager.effectiveVolume())
 	}
+	if manager.music != nil {
+		manager.music.SetVolume(musicGain * manager.effectiveVolume())
+	}
+}
+
+// StartMusic is idempotent. LazyManager calls it only after a user gesture and
+// preference settlement; this long-lived player is separate from effects.
+func (manager *Manager) StartMusic() {
+	if manager == nil || manager.stopped || manager.music != nil || manager.Err() != nil {
+		return
+	}
+	manager.music = manager.newPlayer(NewAmbient(musicSeed))
+	manager.music.SetVolume(musicGain * manager.effectiveVolume())
+	if manager.active {
+		manager.music.Play()
+	}
+}
+
+func (manager *Manager) SetActive(active bool) {
+	if manager == nil || manager.stopped || manager.active == active {
+		return
+	}
+	manager.active = active
+	if manager.music != nil {
+		if active {
+			manager.music.Play()
+		} else {
+			manager.music.Pause()
+		}
+	}
+}
+
+// Stop pauses players before releasing them: oto.Player.Close is a no-op.
+func (manager *Manager) Stop() {
+	if manager == nil || manager.stopped {
+		return
+	}
+	manager.stopped = true
+	if manager.music != nil {
+		manager.music.Pause()
+		manager.music = nil
+	}
+	for _, player := range manager.players {
+		player.Pause()
+	}
+	manager.players = nil
 }
 
 func (manager *Manager) effectiveVolume() float64 {
@@ -173,32 +237,48 @@ func clampVolume(value float64) float64 {
 	return value
 }
 
-// LazyManager delays audio-context construction until the first accepted
-// sound request. This keeps browser autoplay policy tied to a user gesture and
+// LazyManager delays audio-context construction until the first user gesture
+// or accepted sound request. This keeps browser autoplay tied to that gesture and
 // leaves startup, headless, map-dump, and screenshot paths device-independent.
 type LazyManager struct {
-	manager SoundManager
-	create  func() (SoundManager, error)
-	report  Reporter
-	volume  float64
-	muted   bool
-	settled bool
-	failed  bool
-	pending *Sound
+	// Browser focus callbacks can overlap game-loop controls when a player
+	// operation yields. Serialize the complete lifecycle, including construction.
+	controlMutex sync.Mutex
+	manager      SoundManager
+	create       func() (SoundManager, error)
+	report       Reporter
+	volume       float64
+	muted        bool
+	settled      bool
+	failed       bool
+	pending      *Sound
+	active       bool
+	stopped      bool
 }
 
-// NewLazyManager defers opening the device to the first sound. panicGuard is
+// NewLazyManager defers opening the device to the first gesture. panicGuard is
 // the session's panic hook, passed on to the device's goroutine; nil means none.
 func NewLazyManager(report Reporter, panicGuard func()) *LazyManager {
 	return newLazyManager(func() (SoundManager, error) { return NewManager(panicGuard) }, report)
 }
 
 func newLazyManager(create func() (SoundManager, error), report Reporter) *LazyManager {
-	return &LazyManager{create: create, report: report, volume: 0.5}
+	return &LazyManager{create: create, report: report, volume: 0.5, active: true}
 }
 
-func (manager *LazyManager) Play(sound Sound) {
-	if manager == nil || manager.failed {
+// Unlock is called only for a user gesture. Opening silently before settings
+// settle permits browser autoplay without letting music bypass persisted mute.
+func (manager *LazyManager) Unlock() {
+	if manager == nil {
+		return
+	}
+	manager.controlMutex.Lock()
+	defer manager.controlMutex.Unlock()
+	manager.unlock()
+}
+
+func (manager *LazyManager) unlock() {
+	if manager.failed || manager.stopped {
 		return
 	}
 	if manager.manager == nil {
@@ -208,11 +288,39 @@ func (manager *LazyManager) Play(sound Sound) {
 			return
 		}
 		manager.manager = created
+		if focus, ok := created.(interface{ SetActive(bool) }); ok {
+			focus.SetActive(manager.active)
+		}
 		if manager.settled {
 			manager.manager.SetMaster(manager.volume, manager.muted)
 		} else {
 			manager.manager.SetMaster(0, true)
 		}
+	}
+	manager.startMusic()
+}
+
+func (manager *LazyManager) startMusic() {
+	if !manager.settled || manager.muted {
+		return
+	}
+	if music, ok := manager.manager.(interface{ StartMusic() }); ok {
+		music.StartMusic()
+	}
+}
+
+func (manager *LazyManager) Play(sound Sound) {
+	if manager == nil {
+		return
+	}
+	manager.controlMutex.Lock()
+	defer manager.controlMutex.Unlock()
+	if manager.failed || manager.stopped || sound >= soundCount {
+		return
+	}
+	manager.unlock()
+	if manager.failed {
+		return
 	}
 	if !manager.settled {
 		if manager.pending == nil {
@@ -232,6 +340,7 @@ func (manager *LazyManager) Play(sound Sound) {
 // that could not be opened will not open on the next click, so retrying per
 // click would only repeat the log record.
 func (manager *LazyManager) fail(stage string, err error) {
+	manager.stopBackend()
 	manager.failed = true
 	manager.manager = nil
 	manager.pending = nil
@@ -244,7 +353,12 @@ func (manager *LazyManager) fail(stage string, err error) {
 // failure asynchronously, several frames after the sound that triggered it, so
 // the host ticks this rather than waiting for the next sound request.
 func (manager *LazyManager) Poll() {
-	if manager == nil || manager.failed || manager.manager == nil {
+	if manager == nil {
+		return
+	}
+	manager.controlMutex.Lock()
+	defer manager.controlMutex.Unlock()
+	if manager.failed || manager.stopped || manager.manager == nil {
 		return
 	}
 	manager.checkHealth()
@@ -268,14 +382,17 @@ func (manager *LazyManager) SetMaster(volume float64, muted bool) {
 	if manager == nil {
 		return
 	}
+	manager.controlMutex.Lock()
+	defer manager.controlMutex.Unlock()
 	manager.volume = clampVolume(volume)
 	manager.muted = muted
 	manager.settled = true
-	if manager.failed {
+	if manager.failed || manager.stopped {
 		return
 	}
 	if manager.manager != nil {
 		manager.manager.SetMaster(manager.volume, muted)
+		manager.startMusic()
 		if manager.pending != nil && !muted {
 			manager.manager.Play(*manager.pending)
 			manager.pending = nil
@@ -283,5 +400,41 @@ func (manager *LazyManager) SetMaster(volume float64, muted bool) {
 			return
 		}
 	}
+	manager.pending = nil
+}
+
+func (manager *LazyManager) SetActive(active bool) {
+	if manager == nil {
+		return
+	}
+	manager.controlMutex.Lock()
+	defer manager.controlMutex.Unlock()
+	if manager.failed || manager.stopped {
+		return
+	}
+	manager.active = active
+	if focus, ok := manager.manager.(interface{ SetActive(bool) }); ok {
+		focus.SetActive(active)
+	}
+}
+
+func (manager *LazyManager) stopBackend() {
+	if backend, ok := manager.manager.(interface{ Stop() }); ok {
+		backend.Stop()
+	}
+}
+
+func (manager *LazyManager) Stop() {
+	if manager == nil {
+		return
+	}
+	manager.controlMutex.Lock()
+	defer manager.controlMutex.Unlock()
+	if manager.stopped {
+		return
+	}
+	manager.stopBackend()
+	manager.stopped = true
+	manager.manager = nil
 	manager.pending = nil
 }

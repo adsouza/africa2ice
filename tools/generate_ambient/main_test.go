@@ -5,48 +5,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"math"
 	"testing"
 	"time"
+
+	"github.com/adsouza/africa2ice/pkg/audio"
 )
 
-func TestScoreHasHeadroomStereoAndSilentEdges(t *testing.T) {
-	const frames = 60 * sampleRate
-	s := newScore(frames, 42)
-	var energy, difference, peak, jump float64
-	var previous [2]float64
-	for i := range frames {
-		left, right := s.next()
-		for channel, value := range [2]float64{left, right} {
-			if math.IsNaN(value) || math.IsInf(value, 0) || math.Abs(value) >= 0.8 {
-				t.Fatalf("invalid or clipped sample at %d: %v", i, value)
-			}
-			if (i == 0 || i == frames-1) && value != 0 {
-				t.Fatalf("edge at %d is audible: %v", i, value)
-			}
-			energy += value * value
-			peak = max(peak, math.Abs(value))
-			jump = max(jump, math.Abs(value-previous[channel]))
-			previous[channel] = value
-		}
-		difference += (left - right) * (left - right)
-		// Denser melody and occasional accompaniment share three-second tails.
-		if len(s.strings) > 6 {
-			t.Fatalf("unbounded voices at %d: %d", i, len(s.strings))
-		}
-		if len(s.hits) > 3 {
-			t.Fatalf("unbounded percussion at %d: %d", i, len(s.hits))
-		}
-	}
-	rms := math.Sqrt(energy / (frames * 2))
-	if rms < 0.03 || rms > 0.2 || difference/energy < 0.01 || peak < 0.1 || jump > 0.1 {
-		t.Fatalf("unexpected sound: RMS %.4f, peak %.4f, stereo ratio %.4f, maximum step %.4f", rms, peak, difference/energy, jump)
-	}
-	t.Logf("RMS %.4f, peak %.4f, stereo ratio %.4f, maximum step %.4f", rms, peak, difference/energy, jump)
-}
-
 func TestWAVIsReproducibleAndSeedVariesTheStrings(t *testing.T) {
-	const frames = 12 * sampleRate
+	const frames = 12 * audio.SampleRate
 	var first, repeated, other bytes.Buffer
 	for _, render := range []struct {
 		target *bytes.Buffer
@@ -63,7 +29,7 @@ func TestWAVIsReproducibleAndSeedVariesTheStrings(t *testing.T) {
 	if len(data) != 44+frames*4 || string(data[:4]) != "RIFF" || string(data[8:16]) != "WAVEfmt " || string(data[36:40]) != "data" {
 		t.Fatal("invalid WAV layout")
 	}
-	if binary.LittleEndian.Uint32(data[4:]) != uint32(len(data)-8) || binary.LittleEndian.Uint32(data[40:]) != frames*4 || binary.LittleEndian.Uint32(data[24:]) != sampleRate || binary.LittleEndian.Uint16(data[22:]) != 2 || binary.LittleEndian.Uint16(data[34:]) != 16 {
+	if binary.LittleEndian.Uint32(data[4:]) != uint32(len(data)-8) || binary.LittleEndian.Uint32(data[40:]) != frames*4 || binary.LittleEndian.Uint32(data[24:]) != audio.SampleRate || binary.LittleEndian.Uint16(data[22:]) != 2 || binary.LittleEndian.Uint16(data[34:]) != 16 {
 		t.Fatal("WAV header does not describe its PCM payload")
 	}
 }
@@ -91,7 +57,7 @@ func TestWAVPropagatesHeaderAndPayloadWriteFailures(t *testing.T) {
 			if want == nil {
 				want = io.ErrShortWrite
 			}
-			if err := writeWAV(writer, sampleRate, 42); !errors.Is(err, want) {
+			if err := writeWAV(writer, audio.SampleRate, 42); !errors.Is(err, want) {
 				t.Fatalf("write %d: got %v, want %v", failAt, err, want)
 			}
 		}

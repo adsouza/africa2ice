@@ -6,7 +6,9 @@ import (
 )
 
 const (
-	sampleRate       = 44_100
+	// SampleRate is the common PCM rate of music and sound effects.
+	SampleRate       = 44_100
+	sampleRate       = SampleRate
 	channelCount     = 2
 	bytesPerSample   = 4
 	soundDurationSec = 0.12

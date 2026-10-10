@@ -28,6 +28,7 @@ func TestManualDevicePlayback(t *testing.T) {
 		t.Fatalf("NewManager() = %v", err)
 	}
 	manager.SetMaster(0.5, false)
+	defer manager.Stop()
 
 	manager.Play(SFXChoiceClick)
 	if len(manager.players) != 1 {
@@ -65,5 +66,28 @@ func TestManualDevicePlayback(t *testing.T) {
 	time.Sleep(250 * time.Millisecond)
 	if err := manager.Err(); err != nil {
 		t.Fatalf("device error after the second sound: %v", err)
+	}
+	if manager.music == nil || !manager.music.IsPlaying() {
+		t.Fatal("music did not continue after the short effects retired")
+	}
+	// Let the 2.5-second introduction reach the speaker for a real audition.
+	time.Sleep(3 * time.Second)
+	manager.SetActive(false)
+	if manager.music.IsPlaying() {
+		t.Fatal("real music player did not pause on focus loss")
+	}
+	manager.SetMaster(0.3, true)
+	volume := manager.music.(interface{ Volume() float64 }).Volume()
+	if volume != 0 {
+		t.Fatalf("real music player is not muted: %v", volume)
+	}
+	manager.SetMaster(0.3, false)
+	manager.SetActive(true)
+	if !manager.music.IsPlaying() {
+		t.Fatal("real music player did not resume")
+	}
+	volume = manager.music.(interface{ Volume() float64 }).Volume()
+	if volume < 0.2099 || volume > 0.2101 {
+		t.Fatalf("real music gain did not follow master: %v", volume)
 	}
 }

@@ -79,6 +79,10 @@ Current controls:
   there only.
   The browser lists Manual 1–3, Quick Save, and rolling Auto 1–3 together.
 
+Ambient instrumental music begins after your first interaction and follows the
+same volume and mute controls. It pauses when the game loses focus and resumes
+when you return.
+
 Victory, extinction, and turn-400 dispersal failure open a campaign epilogue with final
 population, destination, and geographic-breadth results. The dialog is a true modal window that
 blocks every click to the chrome beneath it — the band chips, checklist rows, and drawer — not just
@@ -184,6 +188,11 @@ npm --prefix tools/web-e2e test
 ./tools/check_release_readiness.sh
 ./tools/release_test.sh
 ```
+
+For a real audio-device check, run
+`A2I_AUDIO_MANUAL=1 go test ./pkg/audio -run TestManualDevicePlayback -v`.
+The web suite checks actual mixed PCM for music controls and drives pause/resume
+with a visibility fixture in headless Chromium.
 
 Useful display-free diagnostics are:
 
