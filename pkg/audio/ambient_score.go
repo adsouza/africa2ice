@@ -99,7 +99,8 @@ func (s *score) next() (float64, float64) {
 	var dry [2]float64
 	for i := range s.strings {
 		p := &s.strings[i]
-		value := p.next()
+		// Give the percussion more room without changing the phrase accents.
+		value := p.next() * 0.7
 		dry[0] += value * math.Cos(p.pan*math.Pi/2)
 		dry[1] += value * math.Sin(p.pan*math.Pi/2)
 	}
