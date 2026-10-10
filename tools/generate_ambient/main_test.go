@@ -34,6 +34,9 @@ func TestScoreHasHeadroomStereoAndSilentEdges(t *testing.T) {
 		if len(s.strings) > 6 {
 			t.Fatalf("unbounded voices at %d: %d", i, len(s.strings))
 		}
+		if len(s.hits) > 3 {
+			t.Fatalf("unbounded percussion at %d: %d", i, len(s.hits))
+		}
 	}
 	rms := math.Sqrt(energy / (frames * 2))
 	if rms < 0.03 || rms > 0.2 || difference/energy < 0.01 || peak < 0.1 || jump > 0.1 {

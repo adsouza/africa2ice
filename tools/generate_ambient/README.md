@@ -18,6 +18,11 @@ Restrained stereo reverb adds space without dominating the tune. Two-second
 opening and eight-second closing fades include the reverb. This is a finite
 piece, not a seamless loop; the melody begins at 2.5 seconds.
 
+A quiet 60 BPM hand-drum pulse and offbeat shaker accents enter after the first
+phrase, fading in over four seconds. Every fourth phrase thins the percussion.
+Both drum tones and shaker noise are synthesized in Go. Their separate random
+stream preserves the melody's existing string texture and stereo placement.
+
 Use `-seed 42` to vary the string excitations and stereo placement while keeping
 the composition. Use `-duration 45s` for a shorter audition (1s to 30m accepted).
 The generator streams to disk with bounded instrument and delay memory. Its

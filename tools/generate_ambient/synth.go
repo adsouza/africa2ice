@@ -10,13 +10,17 @@ const sampleRate = 44_100
 // This listening prototype deliberately lives outside the game graph. Its
 // private PCG never consumes campaign randomness and it opens no audio device.
 type score struct {
-	random    *rand.PCG
-	frame     int
-	frames    int
-	nextNote  int
-	noteIndex int
-	strings   []pluck
-	room      [2][4]comb
+	random     *rand.PCG
+	frame      int
+	frames     int
+	nextNote   int
+	noteIndex  int
+	strings    []pluck
+	nextBeat   int
+	beatIndex  int
+	hits       []percussionHit
+	percussion [3][]float64
+	room       [2][4]comb
 }
 
 // Question-and-answer phrases bring the melody forward. The opening theme
@@ -43,6 +47,8 @@ const (
 
 func newScore(frames int, seed uint64) *score {
 	s := &score{random: rand.NewPCG(seed, seed^0x9e3779b97f4a7c15), frames: frames, nextNote: int(melodyStart * sampleRate)}
+	s.nextBeat = int((melodyStart + phraseSeconds) * sampleRate)
+	s.percussion = synthPercussion(seed)
 	for channel := range s.room {
 		for i, seconds := range [4]float64{0.071, 0.089, 0.113, 0.137} {
 			s.room[channel][i].buffer = make([]float64, int((seconds+float64(channel)*0.0037)*sampleRate))
@@ -71,6 +77,9 @@ func (s *score) next() (float64, float64) {
 	if s.frame == s.nextNote {
 		s.scheduleNote()
 	}
+	if s.frame == s.nextBeat {
+		s.scheduleBeat()
+	}
 	var dry [2]float64
 	for i := range s.strings {
 		p := &s.strings[i]
@@ -86,6 +95,20 @@ func (s *score) next() (float64, float64) {
 	}
 	clear(s.strings[len(live):])
 	s.strings = live
+	// The rhythm enters after the opening phrase, below the lead in level.
+	percussionFade := smooth((t - melodyStart - phraseSeconds) / 4)
+	liveHits := s.hits[:0]
+	for _, hit := range s.hits {
+		value := s.percussion[hit.kind][hit.position] * hit.gain * percussionFade
+		dry[0] += value * math.Cos(hit.pan*math.Pi/2)
+		dry[1] += value * math.Sin(hit.pan*math.Pi/2)
+		hit.position++
+		if hit.position < len(s.percussion[hit.kind]) {
+			liveHits = append(liveHits, hit)
+		}
+	}
+	clear(s.hits[len(liveHits):])
+	s.hits = liveHits
 	var out [2]float64
 	for channel := range 2 {
 		var wet float64
@@ -99,6 +122,33 @@ func (s *score) next() (float64, float64) {
 	}
 	s.frame++
 	return out[0], out[1]
+}
+
+// A sparse 60 BPM hand-drum pattern fits the melody's half-second grid.
+// Offbeat shaker accents add movement; every fourth phrase leaves more space.
+func (s *score) scheduleBeat() {
+	step := s.beatIndex % 8
+	sparse := (s.beatIndex/24+1)%4 == 3
+	if step == 0 {
+		s.hits = append(s.hits, percussionHit{kind: 0, gain: 0.10, pan: 0.45})
+	}
+	if !sparse {
+		switch step {
+		case 3, 4:
+			s.hits = append(s.hits, percussionHit{kind: 1, gain: 0.055, pan: 0.62})
+		case 6:
+			s.hits = append(s.hits, percussionHit{kind: 0, gain: 0.045, pan: 0.45})
+		}
+		if step%2 == 1 {
+			gain := 0.022
+			if step == 3 || step == 7 {
+				gain = 0.028
+			}
+			s.hits = append(s.hits, percussionHit{kind: 2, gain: gain, pan: 0.72})
+		}
+	}
+	s.beatIndex++
+	s.nextBeat = int((melodyStart + phraseSeconds + float64(s.beatIndex)*0.5) * sampleRate)
 }
 
 func (s *score) scheduleNote() {
