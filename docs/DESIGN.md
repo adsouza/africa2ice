@@ -7713,6 +7713,10 @@ One walking figure represents each band member up to the camp's cap of 20; an em
 none. Up to twelve walkers occupy the foreground and up to eight are staggered behind them.
 Walking gestures, carried hide bundles, and drift through the strip suggest departure without
 depicting arrival or revealing destination geography.
+For destinations west of the origin (including northwest and southwest), the walkers and
+underfoot drift are mirrored horizontally so the procession moves left. Eastward and purely
+north/south moves keep the right-facing presentation. Daylight scenery and map arrows retain
+their orientation; **Reduced motion** uses the same facing rule for its still pose.
 
 The scenery is translucent with softly fading edges; figures have stronger opacity. The selected
 origin marker and migration arrows remain above the artwork. Map picking and all planning

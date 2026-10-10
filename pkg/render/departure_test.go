@@ -59,7 +59,7 @@ func TestDepartureMotionRestoresMapAndKeepsTheCache(t *testing.T) {
 		draw := func() bool { return scene.Draw(screen, frame, 7, MigrationPreview{}, "", EndScene{}, false) }
 		draw()
 		baseline := departurePixels(screen)
-		scene.StartDeparture(frame.Bands[0], frame.Tiles[frame.Bands[0].TileID], frame.Turn)
+		scene.StartDeparture(frame.Bands[0], frame.Tiles[frame.Bands[0].TileID], frame.Tiles[frame.Bands[0].QueuedMigration], frame.Turn)
 		draw()
 		initial := departurePixels(screen)
 		if bytes.Equal(initial, baseline) {
@@ -115,7 +115,7 @@ func TestDepartureReducedMotionFreezesThenExpires(t *testing.T) {
 	draw := func() { scene.Draw(screen, frame, 7, MigrationPreview{}, "", EndScene{}, false) }
 	draw()
 	baseline := departurePixels(screen)
-	scene.StartDeparture(frame.Bands[0], frame.Tiles[frame.Bands[0].TileID], frame.Turn)
+	scene.StartDeparture(frame.Bands[0], frame.Tiles[frame.Bands[0].TileID], frame.Tiles[frame.Bands[0].QueuedMigration], frame.Turn)
 	draw()
 	frozen := departurePixels(screen)
 	if bytes.Equal(frozen, baseline) {
@@ -143,7 +143,7 @@ func TestDeparturePlacementRoutesAndObscuredLayers(t *testing.T) {
 	draw := func() { scene.Draw(screen, frame, 7, MigrationPreview{}, "", EndScene{}, false) }
 	draw()
 	baseline := departurePixels(screen)
-	scene.StartDeparture(frame.Bands[0], frame.Tiles[frame.Bands[0].TileID], frame.Turn)
+	scene.StartDeparture(frame.Bands[0], frame.Tiles[frame.Bands[0].TileID], frame.Tiles[frame.Bands[0].QueuedMigration], frame.Turn)
 	draw()
 	// This arrow crosses the vignette. Its centre stays exactly the route's red.
 	x, y := scene.geometry(frame).TilePoint(frame.Tiles[frame.Bands[0].TileID+1])
@@ -171,12 +171,12 @@ func TestDeparturePlacementRoutesAndObscuredLayers(t *testing.T) {
 	}
 	scene.ClearDeparture()
 	draw()
-	scene.StartDeparture(frame.Bands[0], frame.Tiles[frame.Bands[0].TileID], frame.Turn)
+	scene.StartDeparture(frame.Bands[0], frame.Tiles[frame.Bands[0].TileID], frame.Tiles[frame.Bands[0].QueuedMigration], frame.Turn)
 	scene.Draw(screen, frame, 999, MigrationPreview{}, "", EndScene{}, false)
 	if scene.DepartureActive() {
 		t.Fatal("changing bands kept the old departure")
 	}
-	scene.StartDeparture(frame.Bands[0], frame.Tiles[frame.Bands[0].TileID], frame.Turn)
+	scene.StartDeparture(frame.Bands[0], frame.Tiles[frame.Bands[0].TileID], frame.Tiles[frame.Bands[0].QueuedMigration], frame.Turn)
 	copyFrame := *frame
 	copyFrame.Turn++
 	scene.Draw(screen, &copyFrame, 7, MigrationPreview{}, "", EndScene{}, false)
@@ -204,6 +204,80 @@ func TestDepartureLandscapeIsDaylitAndSoftEdged(t *testing.T) {
 			if alpha != 0 {
 				t.Fatal("departure scenery has a hard opaque edge")
 			}
+		}
+	}
+}
+
+func TestDepartureFacingFollowsTheDestinationColumn(t *testing.T) {
+	for _, move := range []struct {
+		name     string
+		dx, dy   int
+		westward bool
+	}{
+		{"east", 1, 0, false}, {"northeast", 1, -1, false}, {"southeast", 1, 1, false},
+		{"north", 0, -1, false}, {"south", 0, 1, false},
+		{"west", -1, 0, true}, {"northwest", -1, -1, true}, {"southwest", -1, 1, true},
+		{"westward passage", -3, 2, true},
+	} {
+		t.Run(move.name, func(t *testing.T) {
+			origin := gameapi.Tile{X: 80, Y: 20}
+			destination := gameapi.Tile{X: origin.X + move.dx, Y: origin.Y + move.dy}
+			scene := NewMapScene()
+			scene.StartDeparture(gameapi.Band{}, origin, destination, 0)
+			if scene.departure.westward != move.westward {
+				t.Fatalf("%s: westward=%t", move.name, scene.departure.westward)
+			}
+		})
+	}
+}
+
+func TestWestwardDepartureMirrorsTheWalkersWithoutFlippingScenery(t *testing.T) {
+	for _, reducedMotion := range []bool{false, true} {
+		frame := departureFrame()
+		frame.Bands[0].HasQueuedMigration = false
+		scene := NewMapScene()
+		scene.SetReducedMotion(reducedMotion)
+		// Keep the origin marker outside the vignette so it cannot obscure the
+		// walkers when checking their actual composited pixels.
+		scene.SetCamera(Camera{}, 286)
+		origin := frame.Tiles[frame.Bands[0].TileID]
+		destination := frame.Tiles[frame.Bands[0].TileID-1]
+		scene.StartDeparture(frame.Bands[0], origin, destination, frame.Turn)
+		screen := ebiten.NewImage(1280, 720)
+		defer screen.Deallocate()
+		for _, ticks := range []int{0, 60, 120} {
+			for scene.departure.tick < ticks {
+				scene.Update()
+			}
+			scene.Draw(screen, frame, 7, MigrationPreview{}, "", EndScene{}, false)
+			d := &scene.departure
+			// Build an independent reference by reversing each raster row of the
+			// walking layer, while leaving the background in its original order.
+			pixels := departurePixels(d.people)
+			mirrored := make([]byte, len(pixels))
+			for y := range departureHeight {
+				for x := range departureWidth {
+					from := (y*departureWidth + x) * 4
+					to := (y*departureWidth + departureWidth - 1 - x) * 4
+					copy(mirrored[to:to+4], pixels[from:from+4])
+				}
+			}
+			walkers := ebiten.NewImage(departureWidth, departureHeight)
+			walkers.WritePixels(mirrored)
+			expected := ebiten.NewImage(1280, 720)
+			expected.DrawImage(scene.frameImage, nil)
+			options := &ebiten.DrawImageOptions{Filter: ebiten.FilterLinear}
+			options.GeoM.Translate(float64(d.paintKey.bounds.Min.X), float64(d.paintKey.bounds.Min.Y))
+			options.ColorScale.ScaleAlpha(.34 * d.opacity(reducedMotion))
+			expected.DrawImage(d.background, options)
+			options.ColorScale.Reset()
+			options.ColorScale.ScaleAlpha(.94 * d.opacity(reducedMotion))
+			expected.DrawImage(walkers, options)
+			if !bytes.Equal(departurePixels(screen), departurePixels(expected)) {
+				t.Fatalf("westward composite at tick %d, reducedMotion=%t did not mirror only the walking layer", ticks, reducedMotion)
+			}
+			walkers.Deallocate()
+			expected.Deallocate()
 		}
 	}
 }

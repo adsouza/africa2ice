@@ -23,6 +23,7 @@ type departureScene struct {
 	turn                     int
 	tick                     int
 	active                   bool
+	westward                 bool
 	background, people, mask *ebiten.Image
 	backgroundCached         bool
 	peoplePhase              int
@@ -40,8 +41,10 @@ type departurePaintKey struct {
 
 // StartDeparture is called only after a migration command succeeds. The band
 // and tile describe departure, before any end-turn movement has resolved.
-func (scene *MapScene) StartDeparture(band gameapi.Band, tile gameapi.Tile, turn int) {
+func (scene *MapScene) StartDeparture(band gameapi.Band, tile, destination gameapi.Tile, turn int) {
 	scene.departure.band, scene.departure.tile = band, tile
+	// Grid columns increase eastward, including the unwrapped Beringian tiles.
+	scene.departure.westward = destination.X < tile.X
 	scene.departure.turn, scene.departure.tick, scene.departure.active = turn, 0, true
 	scene.departure.backgroundCached, scene.departure.peopleCached = false, false
 	scene.departure.painted = false
@@ -158,6 +161,13 @@ func (scene *MapScene) drawDeparture(screen *ebiten.Image, frame *gameapi.Frame,
 			options.GeoM.Translate(transform.OffsetX+float64(key.bounds.Min.X)*transform.Scale, transform.OffsetY+float64(key.bounds.Min.Y)*transform.Scale)
 			options.ColorScale.ScaleAlpha(.34 * d.opacity(scene.reducedMotion))
 			target.DrawImage(d.background, options)
+			if d.westward {
+				// Mirror walkers and underfoot drift within the fixed strip. The
+				// daylight landscape and map route retain their original orientation.
+				options.GeoM.Reset()
+				options.GeoM.Scale(-transform.Scale, transform.Scale)
+				options.GeoM.Translate(transform.OffsetX+float64(key.bounds.Max.X)*transform.Scale, transform.OffsetY+float64(key.bounds.Min.Y)*transform.Scale)
+			}
 			options.ColorScale.Reset()
 			options.ColorScale.ScaleAlpha(.94 * d.opacity(scene.reducedMotion))
 			target.DrawImage(d.people, options)

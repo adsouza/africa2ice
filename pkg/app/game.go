@@ -1037,8 +1037,9 @@ func (g *Game) tryQueueMigration(band *gameapi.Band, tileID gameapi.TileID) bool
 	if diagnostic.Reason == ui.MigrationAllowed {
 		// Preserve the departure facts before Apply publishes the queued frame.
 		originBand, originTile, turn := *band, g.frame.Tiles[band.TileID], g.frame.Turn
+		destinationTile := g.frame.Tiles[tileID]
 		if g.apply(gameapi.QueueMigration{BandID: band.ID, TileID: tileID}) {
-			g.scene.StartDeparture(originBand, originTile, turn)
+			g.scene.StartDeparture(originBand, originTile, destinationTile, turn)
 			g.advanceOpenRow()
 			return true
 		}
