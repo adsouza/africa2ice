@@ -324,14 +324,16 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// window closing) even though the map itself did not.
 	g.scene.SetChromeRevision(maphash.Comparable(chromeRevisionSeed, g.panel.PresentationKey()))
 	g.scene.SetViewport(g.viewport)
+	g.scene.SetDepartureVisible(g.scenes.Current() == ui.SceneGameplay && g.panel.AllowsMapAnimation() && (!g.viewportInitialized || g.viewport.SupportsGameplay()))
 	displayFrame := g.displayFrame()
 	painted := g.scene.Draw(screen, displayFrame, g.selectedBand, g.preview, g.notice, g.endScene(displayFrame), g.viewportInitialized && !g.viewport.SupportsGameplay())
 	// The chrome draws over the map image rather than into it, so the two
 	// layers must paint together for structural changes: painting the
 	// panel alone over a stale map (or vice versa) leaves stale pixels
 	// exactly like the bug this replaces. The too-small overlay can only
-	// stay the topmost thing if the panel yields. The bounded, opaque camp
-	// animation below can replace its own pixels independently on cache hits.
+	// stay the topmost thing if the panel yields. The map restores and composites
+	// its bounded departure strip on cache hits; the opaque Workforce camp below
+	// replaces its own pixels independently.
 	if painted && (!g.viewportInitialized || g.viewport.SupportsGameplay()) {
 		g.panel.Draw(screen)
 	} else if !g.viewportInitialized || g.viewport.SupportsGameplay() {
@@ -358,6 +360,7 @@ type technologyDiscovery struct {
 }
 
 func (g *Game) acceptCompletedTurn(frame *gameapi.Frame) {
+	g.scene.ClearDeparture()
 	previous := g.frame
 	g.pendingLakeNotes = append(g.pendingLakeNotes, ui.NearbyLakeHistoryNotes(previous, frame)...)
 	discoveries := newTechnologyDiscoveries(previous, frame, g.selectedBand)
@@ -802,10 +805,12 @@ func (g *Game) selectSapiens(offset int) {
 		}
 	}
 	if len(bandIDs) == 0 {
+		g.scene.ClearDeparture()
 		g.selectedBand = 0
 		return
 	}
 	if selectedIndex < 0 {
+		g.scene.ClearDeparture()
 		g.selectedBand = bandIDs[0]
 		g.syncAssignmentDraft(true)
 		g.refreshBandFieldNote()
@@ -813,6 +818,9 @@ func (g *Game) selectSapiens(offset int) {
 		return
 	}
 	selectedIndex = (selectedIndex + offset + len(bandIDs)) % len(bandIDs)
+	if g.selectedBand != bandIDs[selectedIndex] {
+		g.scene.ClearDeparture()
+	}
 	g.selectedBand = bandIDs[selectedIndex]
 	g.syncAssignmentDraft(true)
 	g.refreshBandFieldNote()
@@ -936,6 +944,7 @@ func (g *Game) selectBandAtTile(tileID gameapi.TileID) bool {
 		return true
 	}
 	g.selectedBand = bandIDs[next]
+	g.scene.ClearDeparture()
 	g.clearMigrationPreview()
 	g.syncAssignmentDraft(true)
 	g.refreshBandFieldNote()
@@ -1026,7 +1035,10 @@ func (g *Game) confirmMigrationPreview() {
 func (g *Game) tryQueueMigration(band *gameapi.Band, tileID gameapi.TileID) bool {
 	diagnostic := ui.DiagnoseMigration(g.frame, band, tileID)
 	if diagnostic.Reason == ui.MigrationAllowed {
+		// Preserve the departure facts before Apply publishes the queued frame.
+		originBand, originTile, turn := *band, g.frame.Tiles[band.TileID], g.frame.Turn
 		if g.apply(gameapi.QueueMigration{BandID: band.ID, TileID: tileID}) {
+			g.scene.StartDeparture(originBand, originTile, turn)
 			g.advanceOpenRow()
 			return true
 		}
@@ -1122,6 +1134,7 @@ func (g *Game) startNewCampaign() {
 		g.showNotice("Could not start a new campaign: " + ui.ErrorMessage(err))
 		return
 	}
+	g.scene.ClearDeparture()
 	g.frame = frame
 	g.publishFrame()
 	g.selectedBand = 0

@@ -183,6 +183,7 @@ func (g *Game) pollStorageAvailability() {
 }
 
 func (g *Game) installStoredFrame(frame *gameapi.Frame, startup bool) {
+	g.scene.ClearDeparture()
 	g.frame = frame
 	g.syncEasyMode()
 	g.publishFrame()

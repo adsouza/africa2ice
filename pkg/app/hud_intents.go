@@ -260,6 +260,7 @@ func (g *Game) selectBandByID(id gameapi.BandID) {
 			continue
 		}
 		g.selectedBand = id
+		g.scene.ClearDeparture()
 		g.clearMigrationPreview()
 		g.syncAssignmentDraft(true)
 		g.refreshBandFieldNote()

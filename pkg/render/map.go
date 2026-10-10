@@ -98,9 +98,12 @@ type MapScene struct {
 	shimmerTick     int
 	// reducedMotion freezes the halo at its ring target instead of animating
 	// the shimmer. SetReducedMotion below is the setter; drawHalo reads it.
-	reducedMotion bool
-	// Paints counts every Draw call that actually painted the screen (i.e.
-	// returned true). It exists for pkg/app's tests: unlike pkg/render's own
+	reducedMotion       bool
+	departure           departureScene
+	departureHidden     bool
+	departureForeground *ebiten.Image
+	// Paints counts full map repaints (Draw returns true). Bounded departure
+	// composites leave this count unchanged. It exists for pkg/app's tests: unlike pkg/render's own
 	// package, pkg/app has no TestMain running inside an ebiten game loop, so
 	// (*ebiten.Image).At — the screen-sentinel technique this package's own
 	// skip test uses — panics there. Exported so it stays outside
@@ -169,10 +172,11 @@ func NewMapScene() *MapScene {
 	return &MapScene{faceSource: source, biomeGlyphs: painters}
 }
 
-// Update advances the fog halo's shimmer clock. It is the scene's only
-// per-tick state; everything else the map draws comes from the accepted frame
-// or from an explicit setter.
-func (scene *MapScene) Update() { scene.shimmerTick++ }
+// Update advances presentation clocks independently of campaign turns.
+func (scene *MapScene) Update() {
+	scene.shimmerTick++
+	scene.departure.update()
+}
 
 // shimmerPhase is the current phase step, or zero when nothing would move:
 // a frame with no fringe has no halo to animate, and holding the step at zero
@@ -239,13 +243,15 @@ func (scene *MapScene) geometry(frame *gameapi.Frame) MapGeometry {
 }
 
 // Draw renders the map, its overlays, and the terminal scene, returning
-// whether it painted the screen this call. Every piece of interactive
+// whether it repainted the full map this call. Departure motion restores and
+// composites only its bounded strip on cache hits, without requesting a HUD
+// repaint. Every piece of interactive
 // chrome now belongs to pkg/hud, which draws over this image — so the
 // screen must be repainted whenever the map's own key changed OR the
 // chrome changed (SetChromeRevision, folded into frameKey), and skipped
 // only when neither did. Production disables Ebitengine's automatic screen
 // clear (SetScreenClearedEveryFrame(false)) precisely so that skip is safe:
-// an idle frame does nothing, which is the performance floor (DESIGN.md
+// an idle frame without decoration does nothing, which is the performance floor (DESIGN.md
 // §8). Repainting on a chrome-only change matters because pkg/hud draws
 // over this image; when chrome shrinks or closes (details collapsing, the
 // drawer compacting, a settings window closing) the vacated region needs
@@ -266,6 +272,7 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 	}
 	width, height := screen.Bounds().Dx(), screen.Bounds().Dy()
 	if scene.frameCached && scene.frameKey == key && scene.frameWidth == width && scene.frameHeight == height {
+		scene.drawDeparture(screen, frame, selectedBand, false)
 		return false
 	}
 	if scene.frameImage != nil {
@@ -285,10 +292,12 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 	scene.frameHeight = height
 	scene.frameScale = transform.Scale
 	scene.frameCached = true
+	scene.prepareDepartureForeground(frame, selectedBand, preview, notice)
 	screen.Fill(color.RGBA{R: 6, G: 11, B: 15, A: 255})
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(transform.OffsetX, transform.OffsetY)
 	screen.DrawImage(scene.frameImage, op)
+	scene.drawDeparture(screen, frame, selectedBand, true)
 	scene.Paints++
 	return true
 }
@@ -391,6 +400,10 @@ func (scene *MapScene) drawFrame(screen logicalCanvas, frame *gameapi.Frame, sel
 	scene.drawQueuedMigrations(mapCanvas, geometry, frame)
 	scene.drawMigrationPreview(mapCanvas, geometry, frame, preview)
 	scene.drawEndScene(screen, ending)
+	scene.drawNotice(screen, notice)
+}
+
+func (scene *MapScene) drawNotice(screen logicalCanvas, notice string) {
 	if notice != "" {
 		// Long diagnostics wrap and grow the box downward over the map rather
 		// than running past its right edge.

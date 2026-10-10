@@ -257,6 +257,12 @@ func (p *Panel) Draw(screen *ebiten.Image) {
 // can yield. Valid after Update.
 func (p *Panel) Hovered() bool { return input.UIHovered }
 
+// AllowsMapAnimation prevents bounded map repaints from painting over a HUD
+// window or tooltip on frames where the HUD itself does not need redrawing.
+func (p *Panel) AllowsMapAnimation() bool {
+	return p.last.Overlay.Scene == ui.SceneGameplay && !p.last.ShortcutsOpen && !p.last.BandListOpen && !p.last.Ending.Visible && !p.tooltipShown
+}
+
 // PresentationKey is a comparable snapshot of everything that can change what
 // this Panel draws. pkg/app hashes it into an opaque uint64 (pkg/render must
 // not learn about pkg/hud or ebitenui) and feeds it to the map scene as its

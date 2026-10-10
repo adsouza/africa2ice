@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, stat } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 import { chromium } from "playwright";
 
@@ -150,6 +150,56 @@ const openGame = async (context, page) => {
 };
 
 try {
+  // Departure must appear in the map's fixed strip, animate without another
+  // campaign publication, and let planning continue while it is visible.
+  for (const deviceScaleFactor of [1, 2]) {
+    for (const reducedMotion of [false, true]) {
+      const departureContext = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor });
+      const departurePage = await departureContext.newPage();
+      const departureFailures = await openGame(departureContext, departurePage);
+      if (reducedMotion) {
+        await pressGameKey(departurePage, "Escape");
+        await pressGameKey(departurePage, "o");
+        await departurePage.mouse.click(430, 355, { delay: 100 });
+        await waitForRecord(departurePage, "departure reduced motion toggle", record => record.msg === "ui.intent" && record.kind === "toggle-reduced-motion");
+        await pressGameKey(departurePage, "Escape");
+        await pressGameKey(departurePage, "Escape");
+      }
+      await departurePage.mouse.move(50, 600);
+      await departurePage.waitForTimeout(300);
+      const initial = await departurePage.locator("html").getAttribute("data-africa2ice-summary");
+      await pressGameKey(departurePage, "b");
+      await departurePage.waitForFunction(previous => document.documentElement.dataset.africa2iceSummary !== previous, initial, { timeout: 5_000 });
+      await waitForRecord(departurePage, "departure migration", record => record.msg === "action.dispatch" && record.command === "queue_migration");
+      const queued = await departurePage.locator("html").getAttribute("data-africa2ice-summary");
+      const departureClip = { x: 92, y: 156, width: 720, height: 176 };
+      const first = await departurePage.screenshot({ clip: departureClip });
+      if (process.env.AFRICA2ICE_DEPARTURE_PREVIEW_DIR && deviceScaleFactor === 1 && !reducedMotion) {
+        await mkdir(process.env.AFRICA2ICE_DEPARTURE_PREVIEW_DIR, { recursive: true });
+        await departurePage.screenshot({ path: resolve(process.env.AFRICA2ICE_DEPARTURE_PREVIEW_DIR, "departure.png") });
+      }
+      await departurePage.waitForTimeout(600);
+      const second = await departurePage.screenshot({ clip: departureClip });
+      if (first.equals(second) !== reducedMotion) throw new Error(`DPR ${deviceScaleFactor}: departure motion did not follow Reduced motion=${reducedMotion}`);
+      if (await departurePage.locator("html").getAttribute("data-africa2ice-summary") !== queued) throw new Error("departure animation published a campaign change");
+      if (reducedMotion) {
+        await departurePage.waitForTimeout(3_600);
+        const expired = await departurePage.screenshot({ clip: departureClip });
+        if (second.equals(expired)) throw new Error("reduced-motion departure did not expire");
+        await departurePage.waitForTimeout(300);
+        if (!expired.equals(await departurePage.screenshot({ clip: departureClip }))) throw new Error("departure expiry left moving or stale pixels");
+      } else {
+        // Field Notes and End turn remain usable while the procession walks.
+        await pressGameKey(departurePage, "f");
+        if (await departurePage.locator("html").getAttribute("data-africa2ice-summary") !== queued) throw new Error("changing departure placement altered the campaign");
+        await pressGameKey(departurePage, "Space");
+        await waitForTurn(departurePage, 1, "departure blocked End turn");
+      }
+      if (departureFailures.length) throw new Error(departureFailures.join("\n"));
+      await departureContext.close();
+    }
+  }
+
   // Camp must animate at both backing scales without publishing a campaign
   // change, then freeze under reduced motion and return via its mouse control.
   for (const deviceScaleFactor of [1, 2]) {
@@ -336,7 +386,7 @@ try {
     await waitForTurn(gatePage, 1, `${label}: gameplay did not resume at 1280x720`);
     await gateContext.close();
   }
-  process.stdout.write("browser smoke passed: camp animation, reduced motion, camp return/resize at DPR 1/2, boot, migration, turn, quick-save/reload, manual save/load, console logs, DPR 1/1.25/1.5/2/3 hits and backing, touch, resize, 200% zoom and portrait gating\n");
+  process.stdout.write("browser smoke passed: departure animation, frozen pose/expiry and live planning at DPR 1/2, camp animation, reduced motion, camp return/resize at DPR 1/2, boot, migration, turn, quick-save/reload, manual save/load, console logs, DPR 1/1.25/1.5/2/3 hits and backing, touch, resize, 200% zoom and portrait gating\n");
 } finally {
   await browser.close();
   await new Promise(resolveClose => server.close(resolveClose));

@@ -7699,6 +7699,34 @@ vertical scrolling and is clipped to that viewport. On map cache hits, animation
 the visible, opaque miniature, preserving the map cache and the existing slider widgets. Offscreen
 miniatures, modals, and tooltips pause its animation; **Reduced motion** holds the fixed pose.
 
+### Departure vignette
+
+An accepted migration starts a daytime, side-on procession in a fixed 720 × 176 DIP strip near
+the bottom of the visible map, above the Field Notes body and tab and left of the task panel.
+Destination clicks, keyboard confirmation, **Move here**, and **Best tile** share the same
+acceptance path. Hover, an unconfirmed keyboard preview, and rejected destinations do not start
+the vignette. It depicts setting out; actual relocation still resolves at End turn.
+
+The departure uses the camp's procedural illustration style with a daylight sky and terrain
+informed by the accepted departure tile's biome, elevation, vegetation, water, and temperature.
+One walking figure represents each band member up to the camp's cap of 20; an empty band shows
+none. Up to twelve walkers occupy the foreground and up to eight are staggered behind them.
+Walking gestures, carried hide bundles, and drift through the strip suggest departure without
+depicting arrival or revealing destination geography.
+
+The scenery is translucent with softly fading edges; figures have stronger opacity. The selected
+origin marker and migration arrows remain above the artwork. Map picking and all planning
+controls remain usable. The four-second presentation lifetime belongs only to the renderer;
+it advances no campaign time, consumes no campaign randomness, and enters no frame or save.
+Changing bands, completing a turn, loading, and starting a new campaign clear it. HUD windows
+and tooltips hide the vignette while its lifetime continues.
+
+Motion composites at 20 Hz with a fade during the final 0.8 seconds. Static scenery is cached;
+animation-only draws restore the bounded strip from the cached map before compositing, preventing
+translucent trails and leaving HUD pixels and the map cache intact. Placement follows the drawer's
+visible map boundary and uses the map's exact aspect-fit transform at every backing scale.
+**Reduced motion** shows a reproducible, unfading departure pose, then clears it after four seconds.
+
 ### Grid picking
 
 After the viewport's exact inverse presentation transform, map picking uses the same constants as

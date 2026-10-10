@@ -26,6 +26,9 @@ Current controls:
   clickable);
 - a red arrow marks the keyboard-selected or queued migration until it is cleared or the next turn
   resolves it;
+- accepting a migration briefly overlays a daytime, side-on departure procession above Field Notes.
+  It shows one walker per band member up to 20, fades after four seconds, and leaves map controls
+  usable; Reduced motion shows a still departure for the same duration;
 - the fixed top-down map keeps every tile aligned with its grid location; biome color, fog, reachable
   outlines, band markers, migration arrows, and ochre impassable-escarpment edges share that one
   unambiguous surface, and clicking any other tile explains why it is not currently reachable;
