@@ -59,6 +59,35 @@ was "generous enough that it would pass without ever constraining anything."
 The ratchet's `50_000` quantum prevents small toolchain and compression drift from churning the
 checked-in ceiling. A target computed to the exact byte would turn harmless variation into failures.
 
+### Outline-font size recovery (2026-10-18)
+
+The Ebitengine 2.10.5 upgrade exceeded the unchanged `3_600_000` ceiling in CI
+(`3_777_218` Brotli bytes). The game's embedded Go Regular and monochrome biome fonts need
+outline rasterization and pair kerning, but do not use complex-script shaping or color/SVG glyphs.
+The HUD, map text, and biome pictographs now use `text/v2.GoXFace` with
+`golang.org/x/image/font/opentype`, allowing the linker to discard unused `GoTextFace` render code.
+`pkg/render.OutlineFont` reuses faces by physical pixel size to retain their glyph caches, with a
+bounded size cache for repeated window resizes. The fonts and dependency versions are unchanged.
+
+Local cross-check on darwin/arm64 with Go **1.26.4**, no `GOEXPERIMENT` overrides, and Binaryen
+**132**, using the same stripped, trimmed, `wasm-opt -O3` release flags:
+
+| build | raw | `brotli -q 11` | `gzip -9` |
+| --- | ---: | ---: | ---: |
+| before outline-font change | 21,739,344 | 3,781,790 | 5,271,985 |
+| with cached outline faces | 17,680,137 | 3,164,773 | 4,365,101 |
+
+This reclaims **617,017 Brotli bytes** locally and leaves **435,227 bytes** below the ceiling.
+The existing size gate passes against trusted base `2d013c8769438d00ff22416e7dad80c35417e392`;
+the ceiling, headroom, quantum, optimizer flags, and CI measurement policy are unchanged.
+These local measurements are a cross-check; CI still records the Linux release artifact's size.
+
+Validation passed: all Go tests, native and WASM lint, `go vet`, native builds, matching
+native/optimized-browser checkpoints, staged-browser smoke, and audio checks. The pinned Chromium
+`151.0.7922.34` profile also passed both DPR configurations locally on Apple M4 / darwin 27.0.0:
+DPR 1/2 median FPS `67.57`/`86.21`, p95 frame gaps `26.2`/`26.3` ms, and maximum turn latencies
+`100.4`/`337.0` ms. These are local checks, not a replacement for the CI reference measurements.
+
 ## Frame rate
 
 The checked-in `testdata/performance_profile_save.json` is a valid schema-v1 turn-300 save with all

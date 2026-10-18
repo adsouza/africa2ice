@@ -595,7 +595,7 @@ func TestNoticeWrapsToBoxWidthByMeasuredPixels(t *testing.T) {
 	if len(lines) < 2 || strings.Join(lines, " ") != long {
 		t.Fatalf("long notice wrapped to %#v", lines)
 	}
-	face := &text.GoTextFace{Source: scene.faceSource, Size: noticeFontSize}
+	face := scene.faceSource.Face(noticeFontSize)
 	for _, line := range lines {
 		if width, _ := text.Measure(line, face, 0); width > noticeTextMaxWidth {
 			t.Fatalf("line %q measures %.1f px, wider than the %d px notice box", line, width, noticeTextMaxWidth)

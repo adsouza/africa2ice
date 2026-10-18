@@ -1,7 +1,6 @@
 package render
 
 import (
-	"bytes"
 	_ "embed"
 	"image/color"
 
@@ -115,7 +114,7 @@ func glyphAlpha(cell float32) float64 {
 
 // runeGlyph paints a single rune from the embedded subset.
 type runeGlyph struct {
-	source *text.GoTextFaceSource
+	source *OutlineFont
 	value  string
 }
 
@@ -134,7 +133,7 @@ func (glyph *runeGlyph) paint(destination logicalCanvas, centreX, centreY, sizeD
 	// glyphs all sit in y [-340, 1740] of a 2048 em, whose centre is 700 units
 	// above the baseline, exactly the (HAscent-HDescent)/2 that text/v2 offsets
 	// the baseline by. What moves the ink is the baseline's own quantization:
-	// ebiten floors it to a whole physical pixel (text/v2 gotext.go,
+	// ebiten floors it to a whole physical pixel (text/v2 gox.go,
 	// `origin.Y &^= (1<<6)-1`), so every glyph is biased *up* by the fractional
 	// part -- a full 1 DIP for the legend swatch at DPR 1, which is what pushed
 	// its glyph over the swatch's top edge. Half a pixel turns that floor into
@@ -144,7 +143,7 @@ func (glyph *runeGlyph) paint(destination logicalCanvas, centreX, centreY, sizeD
 	options.ColorScale.ScaleAlpha(float32(alpha))
 	options.PrimaryAlign = text.AlignCenter
 	options.SecondaryAlign = text.AlignCenter
-	face := &text.GoTextFace{Source: glyph.source, Size: float64(sizeDIP) * scale}
+	face := glyph.source.Face(float64(sizeDIP) * scale)
 	text.Draw(destination.image, glyph.value, face, options)
 }
 
@@ -152,7 +151,7 @@ func (glyph *runeGlyph) paint(destination logicalCanvas, centreX, centreY, sizeD
 // biomeGlyphOverrides last so a hand-drawn replacement wins.
 func newBiomeGlyphs() ([gameapi.BiomeCount]glyphPainter, error) {
 	var painters [gameapi.BiomeCount]glyphPainter
-	source, err := text.NewGoTextFaceSource(bytes.NewReader(biomeGlyphFont))
+	source, err := NewOutlineFont(biomeGlyphFont)
 	if err != nil {
 		return painters, err
 	}

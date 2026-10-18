@@ -1,7 +1,6 @@
 package render
 
 import (
-	"bytes"
 	"fmt"
 	"image"
 	"image/color"
@@ -68,7 +67,7 @@ var (
 )
 
 type MapScene struct {
-	faceSource      *text.GoTextFaceSource
+	faceSource      *OutlineFont
 	biomeGlyphs     [gameapi.BiomeCount]glyphPainter
 	glyphDraws      uint64
 	terrainImage    *ebiten.Image
@@ -161,7 +160,7 @@ type FieldNote struct {
 }
 
 func NewMapScene() *MapScene {
-	source, err := text.NewGoTextFaceSource(bytes.NewReader(goregular.TTF))
+	source, err := NewOutlineFont(goregular.TTF)
 	if err != nil {
 		panic(err)
 	}
@@ -305,7 +304,7 @@ func (scene *MapScene) Draw(screen *ebiten.Image, frame *gameapi.Frame, selected
 func (scene *MapScene) drawResizeOverlay(screen logicalCanvas) {
 	vector.FillRect(screen, 0, 0, PresentationWidth, PresentationHeight, color.RGBA{R: 6, G: 11, B: 15, A: 238}, false)
 	drawCentered := func(value string, y, size float32, textColor color.Color) {
-		width, _ := text.Measure(value, &text.GoTextFace{Source: scene.faceSource, Size: float64(size)}, float64(size)*textLineSpacing)
+		width, _ := text.Measure(value, scene.faceSource.Face(float64(size)), float64(size)*textLineSpacing)
 		scene.drawText(screen, value, float32((PresentationWidth-width)/2), y, size, textColor)
 	}
 	drawCentered("Window too small", 220, 84, color.RGBA{R: 239, G: 220, B: 178, A: 255})
@@ -971,7 +970,7 @@ func (scene *MapScene) drawMapLegend(screen logicalCanvas, aridity float64) {
 // wrapTextToWidth wraps at measured pixel widths for the given font size, so
 // proportional glyphs cannot push a line past its box the way a rune count can.
 func (scene *MapScene) wrapTextToWidth(value string, size, maxWidth float32) []string {
-	face := &text.GoTextFace{Source: scene.faceSource, Size: float64(size)}
+	face := scene.faceSource.Face(float64(size))
 	return wrapWords(value, func(line string) bool {
 		width, _ := text.Measure(line, face, 0)
 		return float32(width) <= maxWidth
@@ -1023,7 +1022,7 @@ func (scene *MapScene) drawText(destination logicalCanvas, value string, x, y, s
 	options.GeoM.Translate(float64(x)*scale, float64(y)*scale)
 	options.ColorScale.ScaleWithColor(textColor)
 	options.LineSpacing = float64(size) * textLineSpacing * scale
-	text.Draw(destination.image, value, &text.GoTextFace{Source: scene.faceSource, Size: float64(size) * scale}, options)
+	text.Draw(destination.image, value, scene.faceSource.Face(float64(size)*scale), options)
 }
 
 func climateBiomeColor(biome gameapi.Biome, _ float64) color.RGBA {

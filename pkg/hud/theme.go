@@ -1,11 +1,11 @@
 package hud
 
 import (
-	"bytes"
 	gimage "image"
 	"image/color"
 	"time"
 
+	"github.com/adsouza/africa2ice/pkg/render"
 	"github.com/ebitenui/ebitenui/image"
 	"github.com/ebitenui/ebitenui/widget"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -48,7 +48,7 @@ var (
 // and inset the panel uses goes through px() or face(), so a viewport change
 // only needs a rebuild with a new scale.
 type theme struct {
-	source  *text.GoTextFaceSource
+	source  *render.OutlineFont
 	scale   float64
 	faces   map[float64]*text.Face
 	solids  map[color.RGBA]*image.NineSlice
@@ -64,7 +64,7 @@ type borderKey struct {
 }
 
 func newTheme() *theme {
-	source, err := text.NewGoTextFaceSource(bytes.NewReader(goregular.TTF))
+	source, err := render.NewOutlineFont(goregular.TTF)
 	if err != nil {
 		panic(err)
 	}
@@ -97,7 +97,7 @@ func (t *theme) face(sizeDIP float64) *text.Face {
 	if face, ok := t.faces[sizeDIP]; ok {
 		return face
 	}
-	var face text.Face = &text.GoTextFace{Source: t.source, Size: sizeDIP * t.scale}
+	face := t.source.Face(sizeDIP * t.scale)
 	t.faces[sizeDIP] = &face
 	return &face
 }
