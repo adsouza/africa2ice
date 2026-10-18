@@ -158,6 +158,10 @@ func (c *closeRecorder) Close() error { c.closes++; return c.err }
 func TestRunRoutesTheGameThroughTheLifetimeSeam(t *testing.T) {
 	previousNew, previousLoop, previousRun := newGameWithSound, runGameLoop, runGame
 	t.Cleanup(func() { newGameWithSound, runGameLoop, runGame = previousNew, previousLoop, previousRun })
+	previousWindow := configureWindow
+	t.Cleanup(func() { configureWindow = previousWindow })
+	configured := 0
+	configureWindow = func() { configured++ }
 
 	// The entry-point wiring test needs identity, not persisted campaign state.
 	built := app.NewWalkingSkeleton()
@@ -177,6 +181,9 @@ func TestRunRoutesTheGameThroughTheLifetimeSeam(t *testing.T) {
 	}
 	if routed != 1 || looped != 1 {
 		t.Fatalf("run() invoked the lifetime seam %d times", routed)
+	}
+	if configured != 1 {
+		t.Fatalf("run() configured the window %d times, want 1", configured)
 	}
 }
 
@@ -215,6 +222,9 @@ func TestDefaultRunGameLoopAlwaysCloses(t *testing.T) {
 func TestRunRecordsEntryPointFailuresInTheSessionLog(t *testing.T) {
 	previousNew, previousLoop := newGameWithSound, runGameLoop
 	t.Cleanup(func() { newGameWithSound, runGameLoop = previousNew, previousLoop })
+	previousWindow := configureWindow
+	t.Cleanup(func() { configureWindow = previousWindow })
+	configureWindow = func() {}
 	for _, tc := range []struct {
 		event string
 		setup func()
@@ -240,7 +250,7 @@ func TestRunRecordsEntryPointFailuresInTheSessionLog(t *testing.T) {
 				t.Fatalf("read announced session log %q: %v", path, err)
 			}
 			found := false
-			for _, line := range strings.Split(strings.TrimSpace(string(contents)), "\n") {
+			for line := range strings.SplitSeq(strings.TrimSpace(string(contents)), "\n") {
 				var record map[string]any
 				if json.Unmarshal([]byte(line), &record) == nil && record["msg"] == tc.event && record["error"] == "boom" {
 					found = true

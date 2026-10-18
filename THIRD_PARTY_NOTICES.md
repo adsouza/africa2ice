@@ -16,42 +16,43 @@ text. This audit is an attribution and release-review record, not legal advice.
 | Ecosystem | Component | Version | License | Current scope | Upstream record |
 | --- | --- | --- | --- | --- | --- |
 | Go | `github.com/davecgh/go-spew` | `v1.1.1` | ISC | Complete Go build list only | [source](https://pkg.go.dev/github.com/davecgh/go-spew@v1.1.1?tab=licenses) |
-| Go | `github.com/ebitengine/debugui` | `v0.2.0` | Apache-2.0 | Complete Go build list only | [source](https://pkg.go.dev/github.com/ebitengine/debugui@v0.2.0?tab=licenses) |
-| Go | `github.com/ebitengine/gomobile` | `v0.0.0-20250923094054-ea854a63cce1` | BSD-3-Clause | Complete Go build list only | [source](https://github.com/ebitengine/gomobile/blob/ea854a63cce1/LICENSE) |
+| Go | `github.com/ebitengine/debugui` | `v0.3.0` | Apache-2.0 | Complete Go build list only | [source](https://pkg.go.dev/github.com/ebitengine/debugui@v0.3.0?tab=licenses) |
+| Go | `github.com/ebitengine/gomobile` | `v0.0.0-20260820040257-d11f821a26a6` | BSD-3-Clause | Complete Go build list only | [source](https://github.com/ebitengine/gomobile/blob/d11f821a26a6/LICENSE) |
 | Go | `github.com/ebitengine/hideconsole` | `v1.0.0` | Apache-2.0 | Release import graph | [source](https://pkg.go.dev/github.com/ebitengine/hideconsole@v1.0.0?tab=licenses) |
-| Go | `github.com/ebitengine/oto/v3` | `v3.4.1` | Apache-2.0 | Release import graph | [source](https://pkg.go.dev/github.com/ebitengine/oto/v3@v3.4.1?tab=licenses) |
-| Go | `github.com/ebitengine/purego` | `v0.9.1` | Apache-2.0 | Release import graph | [source](https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1?tab=licenses) |
+| Go | `github.com/ebitengine/oto/v3` | `v3.5.1` | Apache-2.0 | Release import graph | [source](https://pkg.go.dev/github.com/ebitengine/oto/v3@v3.5.1?tab=licenses) |
+| Go | `github.com/ebitengine/purego` | `v0.11.2` | Apache-2.0 | Release import graph | [source](https://pkg.go.dev/github.com/ebitengine/purego@v0.11.2?tab=licenses) |
 | Go | `github.com/ebitenui/ebitenui` | `v0.7.3` | MIT | Release import graph | [source](https://pkg.go.dev/github.com/ebitenui/ebitenui@v0.7.3?tab=licenses) |
 | Go | `github.com/frustra/bbcode` | `v0.0.0-20201127003707-6ef347fbe1c8` | MIT | Release import graph | [source](https://github.com/frustra/bbcode/blob/6ef347fbe1c8/LICENSE) |
-| Go | `github.com/gen2brain/mpeg` | `v0.5.0` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/gen2brain/mpeg@v0.5.0?tab=licenses) |
-| Go | `github.com/go-text/typesetting` | `v0.3.0` | Unlicense OR BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/github.com/go-text/typesetting@v0.3.0?tab=licenses) |
-| Go | `github.com/go-text/typesetting-utils` | `v0.0.0-20241103174707-87a29e9e6066` | Unlicense OR BSD-3-Clause | Complete Go build list only | [source](https://github.com/go-text/typesetting-utils/blob/87a29e9e6066/LICENSE) |
+| Go | `github.com/gen2brain/mpeg` | `v0.6.2` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/gen2brain/mpeg@v0.6.2?tab=licenses) |
+| Go | `github.com/go-text/typesetting` | `v0.3.5` | Unlicense OR BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/github.com/go-text/typesetting@v0.3.5?tab=licenses) |
+| Go | `github.com/go-text/typesetting-utils` | `v0.0.0-20260419141703-4ffe8874dabc` | Unlicense OR BSD-3-Clause | Complete Go build list only | [source](https://github.com/go-text/typesetting-utils/blob/4ffe8874dabc/LICENSE) |
 | Go | `github.com/google/go-cmp` | `v0.6.0` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/github.com/google/go-cmp@v0.6.0?tab=licenses) |
-| Go | `github.com/hajimehoshi/bitmapfont/v4` | `v4.1.0` | Apache-2.0 | Complete Go build list only | [source](https://pkg.go.dev/github.com/hajimehoshi/bitmapfont/v4@v4.1.0?tab=licenses) |
-| Go | `github.com/hajimehoshi/ebiten/v2` | `v2.9.10` | Apache-2.0 | Release import graph | [source](https://pkg.go.dev/github.com/hajimehoshi/ebiten/v2@v2.9.10?tab=licenses) |
+| Go | `github.com/hajimehoshi/bitmapfont/v4` | `v4.2.0` | Apache-2.0 | Complete Go build list only | [source](https://pkg.go.dev/github.com/hajimehoshi/bitmapfont/v4@v4.2.0?tab=licenses) |
+| Go | `github.com/hajimehoshi/ebiten/v2` | `v2.10.5` | Apache-2.0 | Release import graph | [source](https://pkg.go.dev/github.com/hajimehoshi/ebiten/v2@v2.10.5?tab=licenses) |
 | Go | `github.com/hajimehoshi/go-mp3` | `v0.3.4` | Apache-2.0 | Complete Go build list only | [source](https://pkg.go.dev/github.com/hajimehoshi/go-mp3@v0.3.4?tab=licenses) |
-| Go | `github.com/jakecoffman/cp/v2` | `v2.3.0` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/jakecoffman/cp/v2@v2.3.0?tab=licenses) |
-| Go | `github.com/jezek/xgb` | `v1.2.0` | BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/github.com/jezek/xgb@v1.2.0?tab=licenses) |
+| Go | `github.com/jakecoffman/cp/v2` | `v2.4.0` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/jakecoffman/cp/v2@v2.4.0?tab=licenses) |
+| Go | `github.com/jezek/xgb` | `v1.1.1` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/github.com/jezek/xgb@v1.1.1?tab=licenses) |
 | Go | `github.com/jfreymuth/oggvorbis` | `v1.0.5` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/jfreymuth/oggvorbis@v1.0.5?tab=licenses) |
+| Go | `github.com/jfreymuth/pulse` | `v0.1.3` | MIT | Release import graph | [source](https://pkg.go.dev/github.com/jfreymuth/pulse@v0.1.3?tab=licenses) |
 | Go | `github.com/jfreymuth/vorbis` | `v1.0.2` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/jfreymuth/vorbis@v1.0.2?tab=licenses) |
-| Go | `github.com/kisielk/errcheck` | `v1.9.0` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/kisielk/errcheck@v1.9.0?tab=licenses) |
+| Go | `github.com/kisielk/errcheck` | `v1.20.0` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/kisielk/errcheck@v1.20.0?tab=licenses) |
 | Go | `github.com/kr/pretty` | `v0.3.1` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/kr/pretty@v0.3.1?tab=licenses) |
 | Go | `github.com/matryer/is` | `v1.4.1` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/matryer/is@v1.4.1?tab=licenses) |
-| Go | `github.com/pierrec/lz4/v4` | `v4.1.22` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/github.com/pierrec/lz4/v4@v4.1.22?tab=licenses) |
+| Go | `github.com/pierrec/lz4/v4` | `v4.1.29` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/github.com/pierrec/lz4/v4@v4.1.29?tab=licenses) |
 | Go | `github.com/pmezard/go-difflib` | `v1.0.0` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/github.com/pmezard/go-difflib@v1.0.0?tab=licenses) |
-| Go | `github.com/rivo/uniseg` | `v0.4.7` | MIT | Release import graph | [source](https://pkg.go.dev/github.com/rivo/uniseg@v0.4.7?tab=licenses) |
+| Go | `github.com/srwiley/rasterx` | `v0.0.0-20220730225603-2ab79fcdd4ef` | BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/github.com/srwiley/rasterx@v0.0.0-20220730225603-2ab79fcdd4ef?tab=licenses) |
 | Go | `github.com/stretchr/objx` | `v0.5.2` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/stretchr/objx@v0.5.2?tab=licenses) |
 | Go | `github.com/stretchr/testify` | `v1.10.0` | MIT | Complete Go build list only | [source](https://pkg.go.dev/github.com/stretchr/testify@v1.10.0?tab=licenses) |
 | Go | `golang.design/x/clipboard` | `v0.7.0` | MIT | Complete Go build list only | [source](https://pkg.go.dev/golang.design/x/clipboard@v0.7.0?tab=licenses) |
-| Go | `golang.org/x/exp` | `v0.0.0-20250305212735-054e65f0b394` | BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/golang.org/x/exp@v0.0.0-20250305212735-054e65f0b394?tab=licenses) |
+| Go | `golang.org/x/exp` | `v0.0.0-20261014143641-f0251eb4aa3e` | BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/golang.org/x/exp@v0.0.0-20261014143641-f0251eb4aa3e?tab=licenses) |
 | Go | `golang.org/x/exp/shiny` | `v0.0.0-20250305212735-054e65f0b394` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/golang.org/x/exp/shiny@v0.0.0-20250305212735-054e65f0b394?tab=licenses) |
-| Go | `golang.org/x/image` | `v0.43.0` | BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/golang.org/x/image@v0.43.0?tab=licenses) |
+| Go | `golang.org/x/image` | `v0.47.0` | BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/golang.org/x/image@v0.47.0?tab=licenses) |
 | Go | `golang.org/x/mobile` | `v0.0.0-20231127183840-76ac6878050a` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/golang.org/x/mobile@v0.0.0-20231127183840-76ac6878050a?tab=licenses) |
-| Go | `golang.org/x/mod` | `v0.36.0` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/golang.org/x/mod@v0.36.0?tab=licenses) |
-| Go | `golang.org/x/sync` | `v0.21.0` | BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/golang.org/x/sync@v0.21.0?tab=licenses) |
-| Go | `golang.org/x/sys` | `v0.44.0` | BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/golang.org/x/sys@v0.44.0?tab=licenses) |
-| Go | `golang.org/x/text` | `v0.38.0` | BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/golang.org/x/text@v0.38.0?tab=licenses) |
-| Go | `golang.org/x/tools` | `v0.45.0` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/golang.org/x/tools@v0.45.0?tab=licenses) |
+| Go | `golang.org/x/mod` | `v0.42.0` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/golang.org/x/mod@v0.42.0?tab=licenses) |
+| Go | `golang.org/x/sync` | `v0.24.0` | BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/golang.org/x/sync@v0.24.0?tab=licenses) |
+| Go | `golang.org/x/sys` | `v0.49.0` | BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/golang.org/x/sys@v0.49.0?tab=licenses) |
+| Go | `golang.org/x/text` | `v0.43.0` | BSD-3-Clause | Release import graph | [source](https://pkg.go.dev/golang.org/x/text@v0.43.0?tab=licenses) |
+| Go | `golang.org/x/tools` | `v0.52.0` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/golang.org/x/tools@v0.52.0?tab=licenses) |
 | Go | `golang.org/x/tools/go/expect` | `v0.1.1-deprecated` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/golang.org/x/tools/go/expect@v0.1.1-deprecated?tab=licenses) |
 | Go | `golang.org/x/tools/go/packages/packagestest` | `v0.1.1-deprecated` | BSD-3-Clause | Complete Go build list only | [source](https://pkg.go.dev/golang.org/x/tools/go/packages/packagestest@v0.1.1-deprecated?tab=licenses) |
 | Go | `gopkg.in/check.v1` | `v1.0.0-20201130134442-10cb98267c6c` | BSD-2-Clause | Complete Go build list only | [source](https://pkg.go.dev/gopkg.in/check.v1@v1.0.0-20201130134442-10cb98267c6c?tab=licenses) |
@@ -62,8 +63,9 @@ text. This audit is an attribution and release-review record, not legal advice.
 ### Apache License 2.0
 
 This text applies to `github.com/ebitengine/hideconsole`, `github.com/ebitengine/oto/v3`,
-`github.com/ebitengine/purego`, and `github.com/hajimehoshi/ebiten/v2`. None of those exact module
-versions contains an additional top-level `NOTICE` file.
+`github.com/ebitengine/purego`, and `github.com/hajimehoshi/ebiten/v2`. None of the exact module
+versions of hideconsole, oto, or purego contains an additional top-level `NOTICE` file.
+Ebitengine ships `NOTICE.md`; its bundled-library notices are reproduced below.
 
 ```text
                                  Apache License
@@ -269,6 +271,178 @@ versions contains an additional top-level `NOTICE` file.
    limitations under the License.
 ```
 
+### Ebitengine bundled libraries
+
+From `github.com/hajimehoshi/ebiten/v2` at `v2.10.5`, `NOTICE.md`:
+
+Ebitengine bundles the following third-party libraries. Their licenses are reproduced below.
+
+#### GLFW
+
+https://github.com/glfw/glfw
+
+
+```
+Copyright (c) 2002-2006 Marcus Geelnard
+
+Copyright (c) 2006-2019 Camilla Löwy
+
+This software is provided 'as-is', without any express or implied
+warranty. In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software
+   in a product, an acknowledgment in the product documentation would
+   be appreciated but is not required.
+
+2. Altered source versions must be plainly marked as such, and must not
+   be misrepresented as being the original software.
+
+3. This notice may not be removed or altered from any source
+   distribution.
+```
+
+#### Go
+
+https://cs.opensource.google/go/go
+
+
+```
+Copyright (c) 2009 The Go Authors. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google Inc. nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+#### go-gl/gl
+
+https://github.com/go-gl/gl
+
+
+```
+The MIT License (MIT)
+
+Copyright (c) 2014 Eric Woroshow
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+#### go-gl/glfw
+
+https://github.com/go-gl/glfw
+
+
+```
+Copyright (c) 2012 The glfw3-go Authors. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google Inc. nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+#### oksvg
+
+https://github.com/srwiley/oksvg
+
+
+```
+BSD 3-Clause License
+
+Copyright (c) 2018, Steven R Wiley
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of the copyright holder nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
 ### MIT License
 
 This text applies to `github.com/ebitenui/ebitenui` (Copyright 2020 Maik Schreiber) and
@@ -299,12 +473,12 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### `github.com/rivo/uniseg` — MIT License
+### `github.com/jfreymuth/pulse` — MIT License
 
 ```text
 MIT License
 
-Copyright (c) 2019 Oliver Kuederle
+Copyright (c) 2019 Johann Freymuth
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -325,56 +499,44 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### `github.com/jezek/xgb` — BSD-3-Clause with patent grant
+### `github.com/srwiley/rasterx` — BSD-3-Clause
 
 ```text
-Copyright (c) 2009 The XGB Authors. All rights reserved.
+BSD 3-Clause License
+
+Copyright (c) 2018, Steven R Wiley
+All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
 
-   * Redistributions of source code must retain the above copyright
-notice, this list of conditions and the following disclaimer.
-   * Redistributions in binary form must reproduce the above
-copyright notice, this list of conditions and the following disclaimer
-in the documentation and/or other materials provided with the
-distribution.
-   * Neither the name of Google Inc. nor the names of its
-contributors may be used to endorse or promote products derived from
-this software without specific prior written permission.
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of the copyright holder nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-Subject to the terms and conditions of this License, Google hereby
-grants to You a perpetual, worldwide, non-exclusive, no-charge,
-royalty-free, irrevocable (except as stated in this section) patent
-license to make, have made, use, offer to sell, sell, import, and
-otherwise transfer this implementation of XGB, where such license
-applies only to those patent claims licensable by Google that are
-necessarily infringed by use of this implementation of XGB. If You
-institute patent litigation against any entity (including a
-cross-claim or counterclaim in a lawsuit) alleging that this
-implementation of XGB or a Contribution incorporated within this
-implementation of XGB constitutes direct or contributory patent
-infringement, then any patent licenses granted to You under this
-License for this implementation of XGB shall terminate as of the date
-such litigation is filed.
 ```
 
 ### `golang.org/x/image`, `x/sync`, `x/sys`, and `x/text` — BSD-3-Clause
 
 This text also applies to `golang.org/x/exp`, whose LICENSE at
-`v0.0.0-20250305212735-054e65f0b394` is byte-for-byte identical.
+`v0.0.0-20261014143641-f0251eb4aa3e` is byte-for-byte identical.
 
 ```text
 Copyright 2009 The Go Authors.
@@ -469,7 +631,7 @@ For more information, please refer to <https://unlicense.org/>
 ## Bundled Go Regular font
 
 The UI embeds Go Regular from `golang.org/x/image/font/gofont/goregular`. Its complete license is
-reproduced below from `golang.org/x/image/font/gofont/ttfs/README` at `v0.43.0`.
+reproduced below from `golang.org/x/image/font/gofont/ttfs/README` at `v0.47.0`.
 
 ```text
 These fonts were created by the Bigelow & Holmes foundry specifically for the

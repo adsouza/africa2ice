@@ -83,8 +83,9 @@ func noticeRequirements(goModules map[string]string) []noticeRequirement {
 	}
 	for _, section := range [...]string{
 		"### Apache License 2.0",
-		"### `github.com/rivo/uniseg` — MIT License",
-		"### `github.com/jezek/xgb` — BSD-3-Clause with patent grant",
+		"### Ebitengine bundled libraries",
+		"### `github.com/jfreymuth/pulse` — MIT License",
+		"### `github.com/srwiley/rasterx` — BSD-3-Clause",
 		"### `golang.org/x/image`, `x/sync`, `x/sys`, and `x/text` — BSD-3-Clause",
 		"### `github.com/go-text/typesetting` — Unlicense OR BSD-3-Clause",
 		"### Noto Emoji — SIL Open Font License 1.1",

@@ -36,10 +36,12 @@ type desktopOptions struct {
 	noSound          bool
 }
 
-// Injection points for the entry-point lifetime test; production values only.
+// Injection points keep entry-point tests independent of native windowing and
+// audio. Production calls window setup and the game loop from the main thread.
 var (
 	newGameWithSound    = app.NewGame
 	newGameWithoutSound = app.NewGameWithoutSound
+	configureWindow     = configureDesktopWindow
 	runGame             = ebiten.RunGame
 )
 
@@ -64,16 +66,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if options.screenshot != "" {
 		return runScreenshot(options, session, stderr)
 	}
-	windowWidth, windowHeight := initialDesktopWindowSize(0, 0)
-	if monitor := ebiten.Monitor(); monitor != nil {
-		windowWidth, windowHeight = initialDesktopWindowSize(monitor.Size())
-	}
-	ebiten.SetWindowSizeLimits(app.LogicalWidth, app.LogicalHeight, -1, -1)
-	ebiten.SetWindowSize(windowWidth, windowHeight)
-	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
-	ebiten.SetWindowClosingHandled(true)
-	ebiten.SetScreenClearedEveryFrame(false)
-	ebiten.SetWindowTitle("Africa 2 Ice: Paleolithic Dispersal")
+	configureWindow()
 	newGame := newGameWithSound
 	if options.noSound {
 		newGame = newGameWithoutSound
@@ -90,6 +83,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// configureDesktopWindow must run on the main thread: Monitor lazily initializes
+// GLFW before RunGame starts.
+func configureDesktopWindow() {
+	windowWidth, windowHeight := initialDesktopWindowSize(0, 0)
+	if monitor := ebiten.Monitor(); monitor != nil {
+		windowWidth, windowHeight = initialDesktopWindowSize(monitor.Size())
+	}
+	ebiten.SetWindowSizeLimits(app.LogicalWidth, app.LogicalHeight, -1, -1)
+	ebiten.SetWindowSize(windowWidth, windowHeight)
+	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+	ebiten.SetWindowClosingHandled(true)
+	ebiten.SetScreenClearedEveryFrame(false)
+	ebiten.SetWindowTitle("Africa 2 Ice: Paleolithic Dispersal")
 }
 
 func parseDesktopOptions(args []string, stderr io.Writer) (desktopOptions, error) {
