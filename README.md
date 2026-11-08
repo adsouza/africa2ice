@@ -1,5 +1,7 @@
 # Africa 2 Ice: Paleolithic Dispersal
 
+![Africa 2 Ice: Paleolithic Dispersal — a band of travelers journeys from African savanna toward icy mountains](docs/assets/github-social-preview.jpg)
+
 A turn-based eco-strategy game about the dispersal of *Homo sapiens* from East Africa between 80,000 and 20,000 years before present.
 
 The repository contains the deterministic Go simulation, Ebitengine desktop/WebAssembly host,

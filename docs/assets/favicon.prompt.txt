@@ -1,0 +1,10 @@
+Generator: built-in image_gen tool
+Source: favicon-source.png
+Original acacia-only design. Current web exports use the mountain revision;
+see favicon-mountains.prompt.txt. This source is retained for comparison.
+
+Use case: logo-brand
+Asset type: web-app favicon for Africa 2 Ice: Paleolithic Dispersal, an ecological strategy game about Paleolithic migration from Africa into the Ice Age.
+Create one extremely simple square icon: a single solid warm ivory (#F3E4C4) silhouette of an East African umbrella acacia tree, centered on a completely solid deep navy blue (#162C40) background, full bleed, no border, no rounded outer corners.
+The tree has an iconic broad flat-topped umbrella canopy, gently uneven lobed upper edge, one strong slightly bent trunk and just two strong forks that connect visibly to the canopy. Compact, bold, balanced proportions, canopy about 74 percent of image width, whole tree about 64 percent of image height. Thick connected shapes, strong readable negative spaces, trunk grounded on a tiny shallow ivory ground mound. No isolated tiny twigs or leaves.
+Style: clean flat two-color vector-like logo, crisp edges, no textures, no gradients, no shadows, no photographic detail. Must read instantly at 16x16 pixels and evoke the acacia from the game's savanna artwork. No text, no letters, no numbers, no watermarks, no additional elements. Exactly one icon, not a presentation or grid. Square 1024 by 1024.

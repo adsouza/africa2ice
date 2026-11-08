@@ -1,0 +1,12 @@
+Generator: built-in image_gen tool (edit)
+Reference: favicon-source.png (original acacia retained)
+Source: favicon-mountains-source.png
+Current exports: web/favicon.ico (16, 32, 48 px), web/favicon.png (32 px), web/apple-touch-icon.png (180 px).
+Exports are resized copies of the generated source.
+
+Use case: precise-object-edit
+Asset type: revised web-app favicon for Africa 2 Ice: Paleolithic Dispersal.
+Input image: current ivory acacia on deep navy favicon, used as the edit target and style reference.
+Modify this icon to incorporate a very simple icy mountain ridge behind the acacia. Keep the same warm ivory acacia identity and deep navy square full-bleed background, crisp bold silhouette style, no text, no border, no rounded outer frame. Keep the acacia's umbrella canopy and branching bent trunk, while scaling and repositioning it as needed for this new balanced composition.
+Composition: a warm ivory umbrella acacia in the foreground slightly left of center, with a compact ridge of two angular glacial mountain peaks in pale icy blue behind it toward the upper right. Tallest peak is clearly visible ABOVE and to the RIGHT of the tree canopy. The mountains and tree should be two unmistakable bold shapes, with navy negative space separating the recognizable silhouettes where necessary. Give the mountains just one broad ivory snowcap cut per peak, no fine lines or landscape detail. Tree must retain a broad low umbrella canopy and connected trunk. Tree and mountain together occupy most of central 80 percent of square, with generous even outer margins. Small low grounding base.
+Make this an extremely simplified favicon, legible at 16x16 as a spreading tree plus triangular peaks. Use only navy, warm ivory, icy blue as broad solid color areas. No gradients, textures, shadows, tiny branches, individual leaves, clouds, sun, labels, letters, additional objects, or watermarks. One icon, not multiple variations or a mockup. Square 1024 by 1024.

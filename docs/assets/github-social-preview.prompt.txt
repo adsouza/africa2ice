@@ -1,0 +1,13 @@
+Generator: built-in image_gen tool
+Output: github-social-preview.jpg (1280 x 640, JPEG)
+The generated image was resized and converted to JPEG for GitHub upload.
+
+Use case: ads-marketing
+Asset type: GitHub repository social preview for the indie game Africa 2 Ice: Paleolithic Dispersal.
+Create a polished, memorable illustrated game cover in a wide 2:1 landscape composition, target 1280 by 640 pixels.
+Concept: humanity's long journey from East African savanna into the Ice Age, for a turn-based ecological strategy game set 80,000–20,000 years before present.
+Scene: one coherent sweeping landscape that transforms naturally from sunlit warm ochre East African grasslands and a sparse acacia tree on the left, through muted sage and slate foothills in the center, into majestic cold blue glacial mountains and snowfields on the right. A winding path connects the biomes, hinting at migration and exploration. In the lower middle, a small mixed-age band of anatomically modern human hunter-gatherers walks toward the distant icy frontier, carrying simple wooden spears and hide bundles, wearing plausible simple hide garments; human, resilient, cooperative. Figures are small but readable silhouettes integrated into the landscape. No combat.
+Style: premium indie strategy-game key art, sophisticated flat-shape and painterly illustration, strong graphic silhouettes, layered terrain, subtle paper grain, restrained detail, atmospheric perspective. Evoke exploration, survival, deep time, and ecological change. Muted earth colors transition to cool glacial blues, dark navy shadows, warm cream lettering. Art should remain clear at thumbnail size.
+Composition: upper central sky provides calm dark slate-blue negative space for exceptionally legible title typography; sweeping terrain and travelers occupy the lower half. All essential title and subjects comfortably within central 85 percent with generous edge safety margins. Full bleed solid background.
+Text, verbatim, only two lines: large title "AFRICA 2 ICE", then smaller widely spaced subtitle "PALEOLITHIC DISPERSAL". Elegant bold subtly weathered serif title in warm ivory, high contrast, integrated professional typography, excellent kerning. Make the title the strongest thumbnail element. Do not add a tagline or other text.
+Avoid: modern objects, medieval costumes, armor, dinosaurs, fantasy, cities, flags, guns, UI panels, screenshots, hex grids, logos, watermark, cheesy lens flares, heavy borders, photorealism, exaggerated caveman features.
